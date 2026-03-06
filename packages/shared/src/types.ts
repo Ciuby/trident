@@ -1,0 +1,97 @@
+export type NodeID = string;
+export type EntityID = string;
+export type MaterialID = string;
+export type AssetID = string;
+export type LayerID = string;
+export type FaceID = string;
+
+export type Vec3 = {
+  x: number;
+  y: number;
+  z: number;
+};
+
+export type Transform = {
+  position: Vec3;
+  rotation: Vec3;
+  scale: Vec3;
+};
+
+export type Plane = {
+  normal: Vec3;
+  distance: number;
+};
+
+export type Face = {
+  id: FaceID;
+  plane: Plane;
+  vertexIds: string[];
+  materialId?: MaterialID;
+};
+
+export type Brush = {
+  planes: Plane[];
+  faces: Face[];
+  previewSize: Vec3;
+};
+
+export type EditableMesh = {
+  vertices: Array<{ id: string; position: Vec3 }>;
+  halfEdges: Array<{ id: string; vertex: string; twin?: string; next?: string; face?: string }>;
+  faces: Array<{ id: FaceID; halfEdge: string }>;
+};
+
+export type ModelReference = {
+  assetId: AssetID;
+  path: string;
+};
+
+export type GeometryNodeBase = {
+  id: NodeID;
+  name: string;
+  transform: Transform;
+};
+
+export type BrushNode = GeometryNodeBase & {
+  kind: "brush";
+  data: Brush;
+};
+
+export type MeshNode = GeometryNodeBase & {
+  kind: "mesh";
+  data: EditableMesh;
+};
+
+export type ModelNode = GeometryNodeBase & {
+  kind: "model";
+  data: ModelReference;
+};
+
+export type GeometryNode = BrushNode | MeshNode | ModelNode;
+
+export type Asset = {
+  id: AssetID;
+  type: "model" | "material" | "prefab";
+  path: string;
+  metadata: Record<string, string | number | boolean>;
+};
+
+export type Material = {
+  id: MaterialID;
+  name: string;
+  path?: string;
+};
+
+export type Layer = {
+  id: LayerID;
+  name: string;
+  visible: boolean;
+  locked: boolean;
+};
+
+export type Entity = {
+  id: EntityID;
+  type: string;
+  transform: Transform;
+  properties: Record<string, string | number | boolean>;
+};

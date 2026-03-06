@@ -1,0 +1,11 @@
+{
+  "name": "@web-hammer/editor-core",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@web-hammer/shared": "workspace:*"
+  }
+}

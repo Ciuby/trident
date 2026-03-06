@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@web-hammer/shared": ["packages/shared/src/index.ts"],
+      "@web-hammer/editor-core": ["packages/editor-core/src/index.ts"],
+      "@web-hammer/geometry-kernel": ["packages/geometry-kernel/src/index.ts"],
+      "@web-hammer/render-pipeline": ["packages/render-pipeline/src/index.ts"],
+      "@web-hammer/tool-system": ["packages/tool-system/src/index.ts"],
+      "@web-hammer/workers": ["packages/workers/src/index.ts"]
+    }
+  }
+}
