@@ -23,6 +23,8 @@ Last updated: 2026-03-06
 - Started Phase 6 with a transform tool baseline: snap-aware translation, duplication, mirror-by-axis, tool switching, and undo/redo shortcuts on top of the command stack.
 - Started Phase 7 and Phase 8 baselines: center-split clip for axis-aligned brushes, object-level brush extrusion, mesh inflate/top-offset edits, and grid-based asset placement.
 - Started Phase 9 with asset/material panels, brush material assignment, entity authoring actions, asset-driven placement, and a visible worker job queue for async editor tasks.
+- Expanded Phase 9 so selected assets drive model placement, selected materials can be assigned to brushes with visible viewport color changes, and export/persistence jobs execute in a real Web Worker.
+- Started Phase 10 with `.whmap` scene save/load plus baseline glTF and engine-scene export flows running through the worker pipeline.
 
 ## Next
 
@@ -35,8 +37,9 @@ Last updated: 2026-03-06
 - Phase 8: add mesh editing tools such as extrude, bevel, split edge, loop cut, and merge vertices.
   Current gap: real topology-editing operations are still missing; current mesh edit is object-level deformation only.
 - Phase 9: add materials, assets, entity authoring, and worker-backed async jobs.
-  Current gap: richer asset catalogs, direct entity selection/editing, real Web Worker execution, and asset/material persistence workflows are still missing.
+  Current gap: richer asset catalogs, direct entity selection/editing, and real worker-backed geometry/nav rebuild jobs are still missing; only export/persistence currently runs in a real Web Worker.
 - Phase 10: implement `.whmap` persistence plus GLTF and engine export flows.
+  Current gap: `.whmap` is a baseline full-scene snapshot format, glTF export is JSON-only with embedded buffers and placeholder model geometry, and engine export is still a simple scene interchange format rather than a packaged runtime build.
 
 ## Notes
 

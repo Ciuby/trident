@@ -12,13 +12,16 @@
   "dependencies": {
     "@react-three/drei": "^10.7.6",
     "@react-three/fiber": "^9.4.0",
+    "@tailwindcss/vite": "^4.2.1",
     "@web-hammer/editor-core": "workspace:*",
+    "@web-hammer/geometry-kernel": "workspace:*",
     "@web-hammer/render-pipeline": "workspace:*",
     "@web-hammer/shared": "workspace:*",
     "@web-hammer/tool-system": "workspace:*",
     "@web-hammer/workers": "workspace:*",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "tailwindcss": "^4.2.1",
     "three": "^0.181.1",
     "valtio": "^2.2.0"
   },

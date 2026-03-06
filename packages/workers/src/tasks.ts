@@ -6,4 +6,4 @@ export type WorkerTask =
   | { worker: "geometryWorker"; task: "brush-rebuild" | "clip" | "triangulation" }
   | { worker: "meshWorker"; task: "triangulation" | "loop-cut" | "bevel" }
   | { worker: "navWorker"; task: "navmesh" }
-  | { worker: "exportWorker"; task: "gltf" | "engine-format" | "usd" };
+  | { worker: "exportWorker"; task: "engine-format" | "gltf" | "usd" | "whmap-load" | "whmap-save" };

@@ -1,5 +1,11 @@
 import { createCommandStack, type CommandStack } from "../commands/command-stack";
-import { createSceneDocument, type SceneDocument } from "../document/scene-document";
+import {
+  createSceneDocument,
+  createSceneDocumentSnapshot,
+  loadSceneDocumentSnapshot,
+  type SceneDocument,
+  type SceneDocumentSnapshot
+} from "../document/scene-document";
 import { createEventBus, type EventBus } from "../events/event-bus";
 import {
   createSelectionState,
@@ -24,6 +30,8 @@ export type EditorCore = {
   removeNode: (nodeId: string, reason?: string) => void;
   addEntity: (entity: Parameters<SceneDocument["addEntity"]>[0], reason?: string) => void;
   removeEntity: (entityId: string, reason?: string) => void;
+  exportSnapshot: () => SceneDocumentSnapshot;
+  importSnapshot: (snapshot: SceneDocumentSnapshot, reason?: string) => void;
   select: (ids: Iterable<string>, mode?: SelectionMode) => void;
   clearSelection: () => void;
   execute: (command: Parameters<CommandStack["push"]>[0]) => void;
@@ -97,6 +105,15 @@ export function createEditorCore(scene = createSceneDocument()): EditorCore {
       }
 
       emitSceneChange(reason, [], [entityId]);
+    },
+    exportSnapshot() {
+      return createSceneDocumentSnapshot(scene);
+    },
+    importSnapshot(snapshot, reason = "scene:import") {
+      loadSceneDocumentSnapshot(scene, snapshot);
+      selection.clear();
+      emitSelectionChange();
+      emitSceneChange(reason);
     },
     select(ids, mode = selection.mode) {
       selection.set(ids, mode);

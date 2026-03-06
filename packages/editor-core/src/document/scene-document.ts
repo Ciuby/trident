@@ -35,6 +35,14 @@ export type SceneDocument = {
   touch: () => number;
 };
 
+export type SceneDocumentSnapshot = {
+  assets: Asset[];
+  entities: Entity[];
+  layers: Layer[];
+  materials: Material[];
+  nodes: GeometryNode[];
+};
+
 export function createSceneDocument(): SceneDocument {
   const nodes = new Map<NodeID, GeometryNode>();
   const entities = new Map<EntityID, Entity>();
@@ -106,6 +114,42 @@ export function createSceneDocument(): SceneDocument {
   };
 
   return document;
+}
+
+export function createSceneDocumentSnapshot(scene: SceneDocument): SceneDocumentSnapshot {
+  return {
+    assets: Array.from(scene.assets.values(), (asset) => structuredClone(asset)),
+    entities: Array.from(scene.entities.values(), (entity) => structuredClone(entity)),
+    layers: Array.from(scene.layers.values(), (layer) => structuredClone(layer)),
+    materials: Array.from(scene.materials.values(), (material) => structuredClone(material)),
+    nodes: Array.from(scene.nodes.values(), (node) => structuredClone(node))
+  };
+}
+
+export function loadSceneDocumentSnapshot(scene: SceneDocument, snapshot: SceneDocumentSnapshot) {
+  scene.nodes.clear();
+  scene.entities.clear();
+  scene.materials.clear();
+  scene.assets.clear();
+  scene.layers.clear();
+
+  snapshot.nodes.forEach((node) => {
+    scene.nodes.set(node.id, structuredClone(node));
+  });
+  snapshot.entities.forEach((entity) => {
+    scene.entities.set(entity.id, structuredClone(entity));
+  });
+  snapshot.materials.forEach((material) => {
+    scene.materials.set(material.id, structuredClone(material));
+  });
+  snapshot.assets.forEach((asset) => {
+    scene.assets.set(asset.id, structuredClone(asset));
+  });
+  snapshot.layers.forEach((layer) => {
+    scene.layers.set(layer.id, structuredClone(layer));
+  });
+
+  scene.touch();
 }
 
 export function createSeedSceneDocument(): SceneDocument {

@@ -20,13 +20,17 @@ type EditorShellProps = {
   onClipSelection: (axis: TransformAxis) => void;
   onDuplicateSelection: () => void;
   onClearSelection: () => void;
+  onExportEngine: () => void;
+  onExportGltf: () => void;
   onExtrudeSelection: (axis: TransformAxis, direction: -1 | 1) => void;
   onFocusNode: (nodeId: string) => void;
+  onLoadWhmap: () => void;
   onPlaceEntity: (type: "spawn" | "light") => void;
   onMeshInflate: (factor: number) => void;
   onMirrorSelection: (axis: TransformAxis) => void;
   onPlaceAsset: (position: { x: number; y: number; z: number }) => void;
   onRedo: () => void;
+  onSaveWhmap: () => void;
   onSelectAsset: (assetId: string) => void;
   onSelectMaterial: (materialId: string) => void;
   onSelectNodes: (nodeIds: string[]) => void;
@@ -57,13 +61,17 @@ export function EditorShell({
   onClipSelection,
   onDuplicateSelection,
   onClearSelection,
+  onExportEngine,
+  onExportGltf,
   onExtrudeSelection,
   onFocusNode,
+  onLoadWhmap,
   onPlaceEntity,
   onMeshInflate,
   onMirrorSelection,
   onPlaceAsset,
   onRedo,
+  onSaveWhmap,
   onSelectAsset,
   onSelectMaterial,
   onSelectNodes,
@@ -84,6 +92,8 @@ export function EditorShell({
   const entities = Array.from(editor.scene.entities.values());
   const assets = Array.from(editor.scene.assets.values());
   const materials = Array.from(editor.scene.materials.values());
+  const selectedAsset = assets.find((asset) => asset.id === selectedAssetId);
+  const selectedMaterial = materials.find((material) => material.id === selectedMaterialId);
   const selectedNodeId = editor.selection.ids[0];
   const selectedNode = selectedNodeId ? editor.scene.getNode(selectedNodeId) : undefined;
   const hasSelection = editor.selection.ids.length > 0;
@@ -106,6 +116,20 @@ export function EditorShell({
           <span>{jobs.length} jobs</span>
           <span>{toolCount} tools</span>
           <span>snap {viewport.grid.snapSize}</span>
+        </div>
+        <div className="toolbar-group">
+          <button className="chip-button" onClick={onSaveWhmap} type="button">
+            Save .whmap
+          </button>
+          <button className="chip-button" onClick={onLoadWhmap} type="button">
+            Load .whmap
+          </button>
+          <button className="chip-button" onClick={onExportGltf} type="button">
+            Export glTF
+          </button>
+          <button className="chip-button" onClick={onExportEngine} type="button">
+            Export Engine
+          </button>
         </div>
       </header>
 
@@ -285,9 +309,12 @@ export function EditorShell({
               </ul>
               <div className="toolbar-group">
                 <button className="chip-button" disabled={!selectedIsBrush} onClick={() => onAssignMaterial(selectedMaterialId)} type="button">
-                  Apply To Brush
+                  Apply {selectedMaterial?.name ?? "Material"}
                 </button>
               </div>
+              <p className="panel-hint">
+                Select a material here, then apply it to the current brush selection. Brush colors in the viewport should update immediately.
+              </p>
             </>
           ) : selectedNode ? (
             <div className="inspector-stack">
@@ -438,10 +465,12 @@ export function EditorShell({
                       }
                       type="button"
                     >
-                      Place Crate
+                      Place {selectedAsset?.id.split(":").slice(-1)[0] ?? "Asset"}
                     </button>
                   </div>
-                  <p className="panel-hint">`6` activates asset place mode. Click the ground grid to drop a crate prop snapped to the current grid size.</p>
+                  <p className="panel-hint">
+                    `6` activates asset place mode. Choose an asset in the left panel, then click the ground grid to place that asset snapped to the current grid size.
+                  </p>
                 </div>
               ) : null}
 

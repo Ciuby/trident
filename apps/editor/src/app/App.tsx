@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useSnapshot } from "valtio";
 import {
   axisDelta,
@@ -6,6 +6,7 @@ import {
   createExtrudeBrushNodesCommand,
   createDuplicateNodesCommand,
   createEditorCore,
+  type SceneDocumentSnapshot,
   createPlaceEntityCommand,
   createMeshInflateCommand,
   createMeshRaiseTopCommand,
@@ -19,16 +20,40 @@ import {
 import { deriveRenderScene, gridSnapValues } from "@web-hammer/render-pipeline";
 import { addVec3, isBrushNode, isMeshNode, makeTransform, snapVec3, subVec3, vec3, type Vec3 } from "@web-hammer/shared";
 import { createToolSession, defaultToolId, defaultTools, type ToolId } from "@web-hammer/tool-system";
-import { createWorkerTaskManager, type WorkerJob } from "@web-hammer/workers";
+import {
+  createWorkerTaskManager,
+  type WorkerJob,
+  type WorkerRequest,
+  type WorkerResponse
+} from "@web-hammer/workers";
 import { EditorShell } from "../components/EditorShell";
 import { uiStore } from "../state/ui-store";
+
+type ExportWorkerRequest = WorkerRequest extends infer Request
+  ? Request extends { id: string }
+    ? Omit<Request, "id">
+    : never
+  : never;
 
 export function App() {
   const [editor] = useState(() => createEditorCore(createSeedSceneDocument()));
   const [activeToolId, setActiveToolId] = useState<ToolId>(defaultToolId);
   const [workerManager] = useState(() => createWorkerTaskManager());
   const [workerJobs, setWorkerJobs] = useState<WorkerJob[]>([]);
+  const [exportJobs, setExportJobs] = useState<WorkerJob[]>([]);
   const [, setRevision] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const requestCounterRef = useRef(0);
+  const workerRef = useRef<Worker | null>(null);
+  const pendingRequestsRef = useRef(
+    new Map<
+      string,
+      {
+        reject: (reason?: unknown) => void;
+        resolve: (payload: string | SceneDocumentSnapshot) => void;
+      }
+    >()
+  );
   const ui = useSnapshot(uiStore);
   const toolSession = useMemo(() => createToolSession(activeToolId), [activeToolId]);
   const renderScene = deriveRenderScene(
@@ -61,6 +86,40 @@ export function App() {
   }, [editor]);
 
   useEffect(() => workerManager.subscribe(setWorkerJobs), [workerManager]);
+
+  useEffect(() => {
+    const worker = new Worker(new URL("../workers/editor.worker.ts", import.meta.url), { type: "module" });
+    workerRef.current = worker;
+
+    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+      const response = event.data;
+      const pending = pendingRequestsRef.current.get(response.id);
+
+      if (!pending) {
+        return;
+      }
+
+      pendingRequestsRef.current.delete(response.id);
+      setExportJobs((jobs) =>
+        jobs.map((job) => (job.id === response.id ? { ...job, status: response.ok ? "completed" : "completed" } : job))
+      );
+
+      window.setTimeout(() => {
+        setExportJobs((jobs) => jobs.filter((job) => job.id !== response.id));
+      }, 1200);
+
+      if (response.ok) {
+        pending.resolve(response.payload);
+      } else {
+        pending.reject(new Error(response.error));
+      }
+    };
+
+    return () => {
+      worker.terminate();
+      workerRef.current = null;
+    };
+  }, []);
 
   const handleSelectNodes = (nodeIds: string[]) => {
     editor.select(nodeIds, "object");
@@ -255,6 +314,119 @@ export function App() {
     enqueueWorkerJob("Entity authoring", { task: "navmesh", worker: "navWorker" }, 800);
   };
 
+  const runWorkerRequest = (request: ExportWorkerRequest, label: string): Promise<string | SceneDocumentSnapshot> => {
+    const id = `export:${requestCounterRef.current++}`;
+    const workerTask =
+      request.kind === "whmap-save"
+        ? { task: "whmap-save" as const, worker: "exportWorker" as const }
+        : request.kind === "whmap-load"
+          ? { task: "whmap-load" as const, worker: "exportWorker" as const }
+          : request.kind === "gltf-export"
+            ? { task: "gltf" as const, worker: "exportWorker" as const }
+            : { task: "engine-format" as const, worker: "exportWorker" as const };
+
+    setExportJobs((jobs) => [
+      ...jobs,
+      {
+        id,
+        label,
+        status: "running",
+        task: workerTask
+      }
+    ]);
+
+    return new Promise((resolve, reject) => {
+      if (!workerRef.current) {
+        reject(new Error("Export worker is unavailable."));
+        return;
+      }
+
+      pendingRequestsRef.current.set(id, { reject, resolve });
+      workerRef.current.postMessage({
+        ...request,
+        id
+      } satisfies WorkerRequest);
+    });
+  };
+
+  const downloadTextFile = (filename: string, content: string, type: string) => {
+    const url = URL.createObjectURL(new Blob([content], { type }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleSaveWhmap = async () => {
+    const payload = await runWorkerRequest(
+      {
+        kind: "whmap-save",
+        snapshot: editor.exportSnapshot()
+      },
+      "Save .whmap"
+    );
+
+    if (typeof payload === "string") {
+      downloadTextFile("scene.whmap", payload, "application/json");
+    }
+  };
+
+  const handleLoadWhmap = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleWhmapFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const text = await file.text();
+    const payload = await runWorkerRequest(
+      {
+        kind: "whmap-load",
+        text
+      },
+      "Load .whmap"
+    );
+
+    if (typeof payload !== "string") {
+      editor.importSnapshot(payload, "scene:load-whmap");
+    }
+
+    event.target.value = "";
+  };
+
+  const handleExportGltf = async () => {
+    const payload = await runWorkerRequest(
+      {
+        kind: "gltf-export",
+        snapshot: editor.exportSnapshot()
+      },
+      "Export glTF"
+    );
+
+    if (typeof payload === "string") {
+      downloadTextFile("scene.gltf", payload, "model/gltf+json");
+    }
+  };
+
+  const handleExportEngine = async () => {
+    const payload = await runWorkerRequest(
+      {
+        kind: "engine-export",
+        snapshot: editor.exportSnapshot()
+      },
+      "Export engine scene"
+    );
+
+    if (typeof payload === "string") {
+      downloadTextFile("scene.engine.json", payload, "application/json");
+    }
+  };
+
   const handleUndo = () => {
     editor.undo();
   };
@@ -357,41 +529,54 @@ export function App() {
   }, [activeToolId, editor]);
 
   return (
-    <EditorShell
-      activeLeftPanel={ui.leftPanel}
-      activeRightPanel={ui.rightPanel}
-      activeToolId={toolSession.toolId}
-      canRedo={editor.commands.canRedo()}
-      canUndo={editor.commands.canUndo()}
-      editor={editor}
-      gridSnapValues={gridSnapValues}
-      jobs={workerJobs}
-      onAssignMaterial={handleAssignMaterial}
-      onClipSelection={handleClipSelection}
-      onDuplicateSelection={handleDuplicateSelection}
-      onClearSelection={handleClearSelection}
-      onExtrudeSelection={handleExtrudeSelection}
-      onFocusNode={handleFocusNode}
-      onPlaceEntity={handlePlaceEntity}
-      onMeshInflate={handleMeshInflate}
-      onMirrorSelection={handleMirrorSelection}
-      onPlaceAsset={handlePlaceAsset}
-      onRedo={handleRedo}
-      onSelectAsset={handleSelectAsset}
-      onSelectMaterial={handleSelectMaterial}
-      onSelectNodes={handleSelectNodes}
-      onSetSnapSize={handleSetSnapSize}
-      onSetToolId={handleSetToolId}
-      onSetLeftPanel={handleSetLeftPanel}
-      onSetRightPanel={handleSetRightPanel}
-      onTranslateSelection={handleTranslateSelection}
-      onUndo={handleUndo}
-      renderScene={renderScene}
-      selectedAssetId={ui.selectedAssetId}
-      selectedMaterialId={ui.selectedMaterialId}
-      viewport={ui.viewport}
-      tools={defaultTools}
-      toolCount={defaultTools.length}
-    />
+    <>
+      <EditorShell
+        activeLeftPanel={ui.leftPanel}
+        activeRightPanel={ui.rightPanel}
+        activeToolId={toolSession.toolId}
+        canRedo={editor.commands.canRedo()}
+        canUndo={editor.commands.canUndo()}
+        editor={editor}
+        gridSnapValues={gridSnapValues}
+        jobs={[...workerJobs, ...exportJobs]}
+        onAssignMaterial={handleAssignMaterial}
+        onClipSelection={handleClipSelection}
+        onDuplicateSelection={handleDuplicateSelection}
+        onClearSelection={handleClearSelection}
+        onExportEngine={handleExportEngine}
+        onExportGltf={handleExportGltf}
+        onExtrudeSelection={handleExtrudeSelection}
+        onFocusNode={handleFocusNode}
+        onLoadWhmap={handleLoadWhmap}
+        onMeshInflate={handleMeshInflate}
+        onMirrorSelection={handleMirrorSelection}
+        onPlaceAsset={handlePlaceAsset}
+        onPlaceEntity={handlePlaceEntity}
+        onRedo={handleRedo}
+        onSaveWhmap={handleSaveWhmap}
+        onSelectAsset={handleSelectAsset}
+        onSelectMaterial={handleSelectMaterial}
+        onSelectNodes={handleSelectNodes}
+        onSetLeftPanel={handleSetLeftPanel}
+        onSetRightPanel={handleSetRightPanel}
+        onSetSnapSize={handleSetSnapSize}
+        onSetToolId={handleSetToolId}
+        onTranslateSelection={handleTranslateSelection}
+        onUndo={handleUndo}
+        renderScene={renderScene}
+        selectedAssetId={ui.selectedAssetId}
+        selectedMaterialId={ui.selectedMaterialId}
+        viewport={ui.viewport}
+        tools={defaultTools}
+        toolCount={defaultTools.length}
+      />
+      <input
+        accept=".whmap,.json"
+        hidden
+        onChange={handleWhmapFileChange}
+        ref={fileInputRef}
+        type="file"
+      />
+    </>
   );
 }
