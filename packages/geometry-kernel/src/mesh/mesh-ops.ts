@@ -28,6 +28,13 @@ type MeshPolygonData = {
 
 export type EdgeBevelProfile = "flat" | "round";
 
+type OrientedEditablePolygon = {
+  id: FaceID;
+  positions: Vec3[];
+  expectedNormal?: Vec3;
+  vertexIds?: VertexID[];
+};
+
 export function convertBrushToEditableMesh(brush: Brush): EditableMesh | undefined {
   const rebuilt = reconstructBrushFaces(brush);
 
@@ -245,6 +252,16 @@ export function bevelEditableMeshEdge(
     return undefined;
   }
 
+  const orientedEdgeStartId = firstFace.vertexIds[firstEdgeIndex];
+  const orientedEdgeEndId = firstFace.vertexIds[(firstEdgeIndex + 1) % firstFace.vertexIds.length];
+  const firstFaceOrientedEdge: [VertexID, VertexID] = [
+    orientedEdgeStartId,
+    orientedEdgeEndId
+  ];
+  const secondFaceOrientedEdge: [VertexID, VertexID] = [
+    secondFace.vertexIds[secondEdgeIndex],
+    secondFace.vertexIds[(secondEdgeIndex + 1) % secondFace.vertexIds.length]
+  ];
   const firstVertex = firstFace.positions[firstEdgeIndex];
   const secondVertex = firstFace.positions[(firstEdgeIndex + 1) % firstFace.positions.length];
   const axis = normalizeVec3(subVec3(secondVertex, firstVertex));
@@ -264,10 +281,11 @@ export function bevelEditableMeshEdge(
   );
   const firstOffset = scaleVec3(firstInsetDirection, signedWidth);
   const secondOffset = scaleVec3(secondInsetDirection, signedWidth);
+  const railCount = stepCount + 1;
   const rails =
     profile === "round" && Math.abs(angle) > epsilon
-      ? Array.from({ length: stepCount + 2 }, (_, index) => {
-          const t = index / (stepCount + 1);
+      ? Array.from({ length: railCount }, (_, index) => {
+          const t = railCount === 1 ? 0 : index / (railCount - 1);
           const direction = rotateAroundAxis(firstInsetDirection, axis, angle * t);
           const offset = scaleVec3(direction, signedWidth);
 
@@ -276,8 +294,8 @@ export function bevelEditableMeshEdge(
             addVec3(secondVertex, offset)
           ] as const;
         })
-      : Array.from({ length: stepCount + 2 }, (_, index) => {
-          const t = index / (stepCount + 1);
+      : Array.from({ length: railCount }, (_, index) => {
+          const t = railCount === 1 ? 0 : index / (railCount - 1);
           const offset = lerpVec3(firstOffset, secondOffset, t);
 
           return [
@@ -289,23 +307,32 @@ export function bevelEditableMeshEdge(
   const nextPolygons = polygons
     .filter((polygon) => polygon.id !== firstFace.id && polygon.id !== secondFace.id)
     .map((polygon) => ({
+      expectedNormal: polygon.normal,
       id: polygon.id,
       positions: polygon.positions.map((position) => vec3(position.x, position.y, position.z)),
       vertexIds: [...polygon.vertexIds]
     }));
 
-  const firstReplacement = replacePolygonEdge(firstFace, edge, rails[0][0], rails[0][1]);
-  const secondReplacement = replacePolygonEdge(secondFace, edge, rails[rails.length - 1][0], rails[rails.length - 1][1]);
+  const firstReplacement = replacePolygonEdge(firstFace, firstFaceOrientedEdge, rails[0][0], rails[0][1]);
+  const secondFaceMatchesFirstOrientation =
+    secondFaceOrientedEdge[0] === firstFaceOrientedEdge[0] &&
+    secondFaceOrientedEdge[1] === firstFaceOrientedEdge[1];
+  const secondReplacement = replacePolygonEdge(
+    secondFace,
+    secondFaceOrientedEdge,
+    secondFaceMatchesFirstOrientation ? rails[rails.length - 1][0] : rails[rails.length - 1][1],
+    secondFaceMatchesFirstOrientation ? rails[rails.length - 1][1] : rails[rails.length - 1][0]
+  );
 
   if (!firstReplacement || !secondReplacement) {
     return undefined;
   }
 
   const firstEndpointFaces = nextPolygons.map((polygon) =>
-    polygon.vertexIds.includes(edge[0])
+    polygon.vertexIds.includes(orientedEdgeStartId)
       ? replacePolygonVertexWithBevelPoints(
           polygon,
-          edge[0],
+          orientedEdgeStartId,
           firstFace,
           secondFace,
           rails[0][0],
@@ -314,10 +341,10 @@ export function bevelEditableMeshEdge(
       : polygon
   );
   const nextEndpointFaces = firstEndpointFaces.map((polygon) =>
-    polygon.vertexIds.includes(edge[1])
+    polygon.vertexIds.includes(orientedEdgeEndId)
       ? replacePolygonVertexWithBevelPoints(
           polygon,
-          edge[1],
+          orientedEdgeEndId,
           firstFace,
           secondFace,
           rails[0][1],
@@ -326,13 +353,22 @@ export function bevelEditableMeshEdge(
       : polygon
   );
 
-  const beveledPolygons: Array<{ id: FaceID; positions: Vec3[] }> = [
+  const beveledPolygons: OrientedEditablePolygon[] = [
     ...nextEndpointFaces.map((polygon) => ({
+      expectedNormal: polygon.expectedNormal,
       id: polygon.id,
       positions: polygon.positions
     })),
-    firstReplacement,
-    secondReplacement
+    {
+      expectedNormal: firstFace.normal,
+      id: firstReplacement.id,
+      positions: firstReplacement.positions
+    },
+    {
+      expectedNormal: secondFace.normal,
+      id: secondReplacement.id,
+      positions: secondReplacement.positions
+    }
   ];
 
   for (let index = 0; index < rails.length - 1; index += 1) {
@@ -343,6 +379,64 @@ export function bevelEditableMeshEdge(
   }
 
   return createEditableMeshFromPolygons(orientPolygonLoops(beveledPolygons));
+}
+
+export function extrudeEditableMeshFace(
+  mesh: EditableMesh,
+  faceId: FaceID,
+  amount: number,
+  epsilon = 0.0001
+): EditableMesh | undefined {
+  if (amount <= epsilon) {
+    return structuredClone(mesh);
+  }
+
+  const polygons = getMeshPolygons(mesh);
+  const target = polygons.find((polygon) => polygon.id === faceId);
+
+  if (!target) {
+    return undefined;
+  }
+
+  const offset = scaleVec3(normalizeVec3(target.normal), amount);
+  const capPositions = target.positions.map((position) => addVec3(position, offset));
+  const extrudedPolygons: OrientedEditablePolygon[] = polygons
+    .filter((polygon) => polygon.id !== target.id)
+    .map((polygon) => ({
+      expectedNormal: polygon.normal,
+      id: polygon.id,
+      positions: polygon.positions.map((position) => vec3(position.x, position.y, position.z))
+    }));
+
+  extrudedPolygons.push({
+    expectedNormal: target.normal,
+    id: `${target.id}:extrude:cap`,
+    positions: capPositions
+  });
+
+  target.positions.forEach((position, index) => {
+    const nextIndex = (index + 1) % target.positions.length;
+
+    extrudedPolygons.push({
+      id: `${target.id}:extrude:side:${index}`,
+      positions: [position, target.positions[nextIndex], capPositions[nextIndex], capPositions[index]]
+    });
+  });
+
+  return createEditableMeshFromPolygons(orientPolygonLoops(extrudedPolygons));
+}
+
+export function extrudeEditableMeshEdge(
+  mesh: EditableMesh,
+  edge: [VertexID, VertexID],
+  amount: number,
+  epsilon = 0.0001
+): EditableMesh | undefined {
+  if (amount <= epsilon) {
+    return structuredClone(mesh);
+  }
+
+  return undefined;
 }
 
 export function inflateEditableMesh(mesh: EditableMesh, factor: number): EditableMesh {
@@ -567,18 +661,22 @@ function insertPointOnPolygonEdge(
 }
 
 function replacePolygonVertexWithBevelPoints(
-  polygon: MeshPolygonData | (EditableMeshPolygon & { id: FaceID; vertexIds?: VertexID[] }),
+  polygon: MeshPolygonData | OrientedEditablePolygon,
   targetVertexId: VertexID,
   firstFace: MeshPolygonData,
   secondFace: MeshPolygonData,
   firstPoint: Vec3,
   secondPoint: Vec3
-): EditableMeshPolygon & { id: FaceID; vertexIds: VertexID[] } {
+): OrientedEditablePolygon & { vertexIds: VertexID[] } {
   const vertexIds = "vertexIds" in polygon && polygon.vertexIds ? [...polygon.vertexIds] : [];
+  const expectedNormal =
+    ("expectedNormal" in polygon ? polygon.expectedNormal : undefined) ??
+    ("normal" in polygon ? polygon.normal : undefined);
   const targetIndex = vertexIds.indexOf(targetVertexId);
 
   if (targetIndex < 0) {
     return {
+      expectedNormal,
       id: polygon.id,
       positions: polygon.positions.map((position) => vec3(position.x, position.y, position.z)),
       vertexIds
@@ -609,13 +707,14 @@ function replacePolygonVertexWithBevelPoints(
   });
 
   return {
+    expectedNormal,
     id: polygon.id,
     positions,
     vertexIds: nextVertexIds
   };
 }
 
-function orientPolygonLoops(polygons: Array<{ id: FaceID; positions: Vec3[] }>) {
+function orientPolygonLoops(polygons: OrientedEditablePolygon[]) {
   const allPoints = polygons.flatMap((polygon) => polygon.positions);
 
   if (allPoints.length === 0) {
@@ -626,6 +725,20 @@ function orientPolygonLoops(polygons: Array<{ id: FaceID; positions: Vec3[] }>) 
 
   return polygons.map((polygon) => {
     const normal = computePolygonNormal(polygon.positions);
+    const alignedWithExpected =
+      polygon.expectedNormal && dotVec3(normal, polygon.expectedNormal) >= 0;
+
+    if (alignedWithExpected) {
+      return polygon;
+    }
+
+    if (polygon.expectedNormal && dotVec3(normal, polygon.expectedNormal) < 0) {
+      return {
+        ...polygon,
+        positions: polygon.positions.slice().reverse()
+      };
+    }
+
     const polygonCenter = averageVec3(polygon.positions);
 
     return dotVec3(normal, subVec3(polygonCenter, center)) >= 0

@@ -1,6 +1,5 @@
 import {
   computePolygonNormal,
-  sortVerticesOnPlane,
   triangulatePolygon,
   triangulatePolygon3D
 } from "../polygon/polygon-utils";
@@ -56,7 +55,10 @@ export function createEditableMeshFromPolygons(
       return;
     }
 
-    const orderedVertices = sortVerticesOnPlane(orderedPositions, computePolygonNormal(orderedPositions));
+    // Preserve caller-provided winding. Topology ops already emit ordered loops,
+    // and re-sorting around the face center can corrupt concave or intentionally
+    // stitched polygons after cuts/bevels.
+    const orderedVertices = orderedPositions;
     const faceId = polygon.id ?? `face:mesh:${polygonIndex}`;
     const faceHalfEdges: EditableMeshHalfEdge[] = [];
 

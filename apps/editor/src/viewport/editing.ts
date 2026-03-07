@@ -41,6 +41,11 @@ export type BrushExtrudeHandle = BrushEditHandle & {
   kind: "edge" | "face";
 };
 
+export type MeshExtrudeHandle = MeshEditHandle & {
+  kind: "edge" | "face";
+  normal: Vec3;
+};
+
 type AxisKey = "x" | "y" | "z";
 
 type BrushFaceAxis = {
@@ -329,10 +334,21 @@ export function createBrushExtrudeHandles(brush: Brush): BrushExtrudeHandle[] {
   return [...faceHandles, ...edgeHandles];
 }
 
+export function createMeshExtrudeHandles(mesh: EditableMesh): MeshExtrudeHandle[] {
+  return createMeshEditHandles(mesh, "face")
+    .filter((handle): handle is MeshEditHandle & { normal: Vec3 } => Boolean(handle.normal))
+    .map((handle) => ({
+      ...handle,
+      kind: "face" as const,
+      normal: handle.normal
+    }));
+}
+
 export function extrudeBrushHandle(
   brush: Brush,
   handle: BrushExtrudeHandle,
   amount: number,
+  overrideNormal?: Vec3,
   epsilon = 0.0001
 ): Brush | undefined {
   if (amount <= epsilon) {
@@ -346,7 +362,7 @@ export function extrudeBrushHandle(
   }
 
   const topology = buildBrushTopology(rebuilt);
-  const extrusionNormal = handle.normal ?? computeBrushExtrusionNormal(rebuilt.faces, handle.faceIds);
+  const extrusionNormal = overrideNormal ?? handle.normal ?? computeBrushExtrusionNormal(rebuilt.faces, handle.faceIds);
 
   if (!extrusionNormal) {
     return undefined;

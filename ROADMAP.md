@@ -60,6 +60,19 @@ Last updated: 2026-03-07
 - Fixed edge bevel retopology for cube-style corner cases by rewriting the endpoint faces that share the beveled vertices, so adjacent cap faces no longer keep stale corner topology, and normalized the rebuilt polygon winding so bevel results stop mixing inward- and outward-facing normals.
 - Corrected bevel endpoint-face stitching to use actual local edge-to-face adjacency instead of the previous vertex-membership heuristic, which fixes vertical and horizontal cube-edge bevels connecting to the wrong side of the strip or leaving cap faces detached from the new bevel.
 - Suspended the normal mesh-edit gizmos during active bevel gestures and made the bevel cursor overlay non-blocking, so orbit controls recover immediately after bevel commit/cancel instead of staying frozen until the user leaves `Mesh Edit`.
+- Corrected the bevel strip segment count so `steps = 1` now produces a single bridge face instead of the previous over-segmented result that was corrupting even simple cube-edge bevel topology.
+- Removed manual disposal from the transient line overlay geometries used by mesh-edit face/edge previews, which stops the repeated WebGPU `LineBasicMaterial` vertex-buffer errors when entering or switching mesh-edit subobject modes.
+- Fixed another bevel topology bug where endpoint-face rewrites were keyed off the handle’s sorted edge ids instead of the owning face’s local edge order; bevel caps now use the oriented edge endpoints, which stops one-sided cube bevels from twisting into giant crossed polygons.
+- Tightened bevel face orientation by preserving expected normals for surviving planar faces during the rebuild instead of relying on a global-center winding heuristic for every polygon, which fixes the remaining intermittent inverted-face cases after bevel operations.
+- Extended the viewport extrude tool to work on editable meshes as well as convex brushes, with direct face and edge extrusion handles for mesh-authored geometry.
+- Stabilized brush and mesh extrude drags by freezing the active handle set during preview updates, preventing the first snapped preview step from unmounting the drag handle and handing control back to orbit mid-gesture.
+- Fixed the extrude-handle interaction regression by making the drag-freeze callback stable across rerenders, so brush and mesh extrude knobs can actually stay engaged after pointer-down instead of cancelling their own drag immediately.
+- Preserved caller-provided polygon winding in editable-mesh construction and corrected bevel edge replacement orientation for opposite-winding adjacent faces, fixing the cut-then-bevel case where neighboring faces could flip or collapse into bow-tie polygons.
+- Reworked mesh face extrusion into a valid manifold result by replacing the source face with a cap plus side walls, and temporarily limited mesh extrude handles to faces while edge-extrude retopology is still pending.
+- Hardened the WebGPU viewport render path for hot-updated topology edits by skipping mesh nodes with no renderable surface and avoiding manual disposal on frequently swapped scene/preview geometries.
+- Added direct face and edge picking in `Mesh Edit` for both brushes and editable meshes by layering transparent face polygons and thickened edge hit areas over the existing handles, so rapid subobject selection no longer depends on clicking only the small knobs.
+- Integrated extrusion into `Mesh Edit` as a shortcut-driven gesture: pressing `X` on the current face/edge selection now starts an in-place extrusion preview, mouse movement adjusts the depth, left click commits, and `Esc` cancels without relying on persistent extrude overlays.
+- Added axis-lock support to the shortcut-driven `Mesh Edit` extrusion gesture so edge extrusions can be constrained to world `X`, `Y`, or `Z` while active, with a colored axis guide ray shown for the current lock; face extrusions continue to follow their face normal.
 
 ## Next
 
