@@ -1,0 +1,72 @@
+import { reconstructBrushFaces, type ReconstructedBrushFace } from "@web-hammer/geometry-kernel";
+import { toTuple, vec3, type GeometryNode } from "@web-hammer/shared";
+import { useEffect, useMemo, useState } from "react";
+import { Vector3 } from "three";
+import { buildClipPreview } from "@/viewport/editing";
+import { FaceHitArea, PreviewLine } from "@/viewport/components/SelectionVisuals";
+import type { ViewportCanvasProps } from "@/viewport/types";
+import type { ViewportState } from "@web-hammer/render-pipeline";
+
+export function BrushClipOverlay({
+  node,
+  onSplitBrushAtCoordinate,
+  viewport
+}: {
+  node: Extract<GeometryNode, { kind: "brush" }>;
+  onSplitBrushAtCoordinate: ViewportCanvasProps["onSplitBrushAtCoordinate"];
+  viewport: ViewportState;
+}) {
+  const [preview, setPreview] = useState<{ faceId: string; line: ReturnType<typeof buildClipPreview> }>();
+  const rebuilt = useMemo(() => reconstructBrushFaces(node.data), [node.data]);
+
+  useEffect(() => {
+    setPreview(undefined);
+  }, [node.id, node.data, viewport.grid.snapSize]);
+
+  if (!rebuilt.valid) {
+    return null;
+  }
+
+  const handleFacePointer = (face: ReconstructedBrushFace, point: Vector3) => {
+    const line = buildClipPreview(face, vec3(point.x, point.y, point.z), viewport.grid.snapSize);
+
+    if (!line) {
+      setPreview(undefined);
+      return;
+    }
+
+    setPreview({
+      faceId: face.id,
+      line
+    });
+  };
+
+  return (
+    <group
+      position={toTuple(node.transform.position)}
+      rotation={toTuple(node.transform.rotation)}
+      scale={toTuple(node.transform.scale)}
+    >
+      {rebuilt.faces.map((face) => (
+        <FaceHitArea
+          face={face}
+          hovered={preview?.faceId === face.id}
+          key={face.id}
+          onClick={(localPoint) => {
+            const line = buildClipPreview(face, localPoint, viewport.grid.snapSize);
+
+            if (!line) {
+              return;
+            }
+
+            onSplitBrushAtCoordinate(node.id, line.axis, line.coordinate);
+          }}
+          onHover={handleFacePointer}
+          onHoverEnd={() => setPreview(undefined)}
+        />
+      ))}
+
+      {preview?.line ? <PreviewLine color="#7dd3fc" end={preview.line.end} start={preview.line.start} /> : null}
+    </group>
+  );
+}

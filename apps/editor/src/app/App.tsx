@@ -10,7 +10,6 @@ import {
   createReplaceNodesCommand,
   createSetBrushDataCommand,
   createSetMeshDataCommand,
-  type SceneDocumentSnapshot,
   createSetNodeTransformCommand,
   createPlaceEntityCommand,
   createMeshInflateCommand,
@@ -43,20 +42,15 @@ import {
 import { createToolSession, defaultToolId, defaultTools, type ToolId } from "@web-hammer/tool-system";
 import {
   createWorkerTaskManager,
-  type WorkerJob,
-  type WorkerRequest,
-  type WorkerResponse
+  type WorkerJob
 } from "@web-hammer/workers";
 import { EditorShell } from "@/components/EditorShell";
 import { uiStore } from "@/state/ui-store";
 import type { Transform } from "@web-hammer/shared";
 import type { MeshEditMode } from "@/viewport/editing";
-
-type ExportWorkerRequest = WorkerRequest extends infer Request
-  ? Request extends { id: string }
-    ? Omit<Request, "id">
-    : never
-  : never;
+import { useAppHotkeys } from "@/app/hooks/useAppHotkeys";
+import { useEditorSubscriptions } from "@/app/hooks/useEditorSubscriptions";
+import { useExportWorker } from "@/app/hooks/useExportWorker";
 
 export function App() {
   const [editor] = useState(() => createEditorCore(createSeedSceneDocument()));
@@ -65,22 +59,11 @@ export function App() {
   const [transformMode, setTransformMode] = useState<"rotate" | "scale" | "translate">("translate");
   const [workerManager] = useState(() => createWorkerTaskManager());
   const [workerJobs, setWorkerJobs] = useState<WorkerJob[]>([]);
-  const [exportJobs, setExportJobs] = useState<WorkerJob[]>([]);
   const [, setRevision] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const requestCounterRef = useRef(0);
-  const workerRef = useRef<Worker | null>(null);
-  const pendingRequestsRef = useRef(
-    new Map<
-      string,
-      {
-        reject: (reason?: unknown) => void;
-        resolve: (payload: string | SceneDocumentSnapshot) => void;
-      }
-    >()
-  );
   const ui = useSnapshot(uiStore);
   const toolSession = useMemo(() => createToolSession(activeToolId), [activeToolId]);
+  const { downloadTextFile, exportJobs, runWorkerRequest } = useExportWorker();
   const renderScene = deriveRenderScene(
     editor.scene.nodes.values(),
     editor.scene.entities.values(),
@@ -88,63 +71,9 @@ export function App() {
     editor.scene.assets.values()
   );
 
-  useEffect(() => {
-    const unsubscribeScene = editor.events.on("scene:changed", () => {
-      setRevision((revision) => revision + 1);
-    });
-    const unsubscribeSelection = editor.events.on("selection:changed", () => {
-      setRevision((revision) => revision + 1);
-    });
-
-    if (editor.selection.ids.length === 0) {
-      const firstNode = editor.scene.nodes.values().next().value;
-
-      if (firstNode) {
-        editor.select([firstNode.id], "object");
-      }
-    }
-
-    return () => {
-      unsubscribeScene();
-      unsubscribeSelection();
-    };
-  }, [editor]);
+  useEditorSubscriptions(editor, setRevision);
 
   useEffect(() => workerManager.subscribe(setWorkerJobs), [workerManager]);
-
-  useEffect(() => {
-    const worker = new Worker(new URL("../workers/editor.worker.ts", import.meta.url), { type: "module" });
-    workerRef.current = worker;
-
-    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
-      const response = event.data;
-      const pending = pendingRequestsRef.current.get(response.id);
-
-      if (!pending) {
-        return;
-      }
-
-      pendingRequestsRef.current.delete(response.id);
-      setExportJobs((jobs) =>
-        jobs.map((job) => (job.id === response.id ? { ...job, status: response.ok ? "completed" : "completed" } : job))
-      );
-
-      window.setTimeout(() => {
-        setExportJobs((jobs) => jobs.filter((job) => job.id !== response.id));
-      }, 1200);
-
-      if (response.ok) {
-        pending.resolve(response.payload);
-      } else {
-        pending.reject(new Error(response.error));
-      }
-    };
-
-    return () => {
-      worker.terminate();
-      workerRef.current = null;
-    };
-  }, []);
 
   const handleSelectNodes = (nodeIds: string[]) => {
     editor.select(nodeIds, "object");
@@ -520,50 +449,6 @@ export function App() {
     enqueueWorkerJob("Entity authoring", { task: "navmesh", worker: "navWorker" }, 800);
   };
 
-  const runWorkerRequest = (request: ExportWorkerRequest, label: string): Promise<string | SceneDocumentSnapshot> => {
-    const id = `export:${requestCounterRef.current++}`;
-    const workerTask =
-      request.kind === "whmap-save"
-        ? { task: "whmap-save" as const, worker: "exportWorker" as const }
-        : request.kind === "whmap-load"
-          ? { task: "whmap-load" as const, worker: "exportWorker" as const }
-          : request.kind === "gltf-export"
-            ? { task: "gltf" as const, worker: "exportWorker" as const }
-            : { task: "engine-format" as const, worker: "exportWorker" as const };
-
-    setExportJobs((jobs) => [
-      ...jobs,
-      {
-        id,
-        label,
-        status: "running",
-        task: workerTask
-      }
-    ]);
-
-    return new Promise((resolve, reject) => {
-      if (!workerRef.current) {
-        reject(new Error("Export worker is unavailable."));
-        return;
-      }
-
-      pendingRequestsRef.current.set(id, { reject, resolve });
-      workerRef.current.postMessage({
-        ...request,
-        id
-      } satisfies WorkerRequest);
-    });
-  };
-
-  const downloadTextFile = (filename: string, content: string, type: string) => {
-    const url = URL.createObjectURL(new Blob([content], { type }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  };
-
   const handleSaveWhmap = async () => {
     const payload = await runWorkerRequest(
       {
@@ -641,156 +526,19 @@ export function App() {
     editor.redo();
   };
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target;
-
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        (target instanceof HTMLElement && target.isContentEditable)
-      ) {
-        return;
-      }
-
-      const modifier = event.metaKey || event.ctrlKey;
-
-      if (modifier && event.key.toLowerCase() === "z") {
-        event.preventDefault();
-        if (event.shiftKey) {
-          handleRedo();
-        } else {
-          handleUndo();
-        }
-        return;
-      }
-
-      if (modifier && event.key.toLowerCase() === "d") {
-        event.preventDefault();
-        handleDuplicateSelection();
-        return;
-      }
-
-      if ((event.key === "Backspace" || event.key === "Delete") && activeToolId !== "mesh-edit") {
-        event.preventDefault();
-        handleDeleteSelection();
-        return;
-      }
-
-      if (event.key.toLowerCase() === "n" && activeToolId !== "mesh-edit") {
-        event.preventDefault();
-        handleInvertSelectionNormals();
-        return;
-      }
-
-      if (event.key === "1") {
-        handleSetToolId("select");
-        return;
-      }
-
-      if (event.key === "2") {
-        handleSetToolId("transform");
-        return;
-      }
-
-      if (event.key === "3") {
-        handleSetToolId("brush");
-        return;
-      }
-
-      if (event.key === "4") {
-        handleSetToolId("clip");
-        return;
-      }
-
-      if (event.key === "5") {
-        handleSetToolId("extrude");
-        return;
-      }
-
-      if (event.key === "6") {
-        handleSetToolId("mesh-edit");
-        return;
-      }
-
-      if (event.key === "7") {
-        handleSetToolId("asset-place");
-        return;
-      }
-
-      if (event.key.toLowerCase() === "b" && activeToolId !== "mesh-edit") {
-        handleSetToolId("brush");
-        return;
-      }
-
-      if (activeToolId !== "transform" && activeToolId !== "mesh-edit") {
-        return;
-      }
-
-      if (event.key.toLowerCase() === "g") {
-        event.preventDefault();
-        setTransformMode("translate");
-        return;
-      }
-
-      if (event.key.toLowerCase() === "r") {
-        event.preventDefault();
-        setTransformMode("rotate");
-        return;
-      }
-
-      if (event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        setTransformMode("scale");
-        return;
-      }
-
-      if (activeToolId === "mesh-edit" && event.key.toLowerCase() === "v") {
-        event.preventDefault();
-        setMeshEditMode("vertex");
-        return;
-      }
-
-      if (activeToolId === "mesh-edit" && event.key.toLowerCase() === "e") {
-        event.preventDefault();
-        setMeshEditMode("edge");
-        return;
-      }
-
-      if (activeToolId === "mesh-edit" && event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        setMeshEditMode("face");
-        return;
-      }
-
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        handleTranslateSelection("x", -1);
-      } else if (event.key === "ArrowRight") {
-        event.preventDefault();
-        handleTranslateSelection("x", 1);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        handleTranslateSelection("z", -1);
-      } else if (event.key === "ArrowDown") {
-        event.preventDefault();
-        handleTranslateSelection("z", 1);
-      } else if (event.key === "PageUp") {
-        event.preventDefault();
-        handleTranslateSelection("y", 1);
-      } else if (event.key === "PageDown") {
-        event.preventDefault();
-        handleTranslateSelection("y", -1);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [activeToolId, editor]);
+  useAppHotkeys({
+    activeToolId,
+    editor,
+    handleDeleteSelection,
+    handleDuplicateSelection,
+    handleInvertSelectionNormals,
+    handleRedo,
+    handleTranslateSelection,
+    handleUndo,
+    setActiveToolId: handleSetToolId,
+    setMeshEditMode,
+    setTransformMode
+  });
 
   return (
     <>

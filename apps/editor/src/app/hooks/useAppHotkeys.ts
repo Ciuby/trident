@@ -1,0 +1,195 @@
+import { useEffect } from "react";
+import type { EditorCore, TransformAxis } from "@web-hammer/editor-core";
+import type { MeshEditMode } from "@/viewport/editing";
+import type { ToolId } from "@web-hammer/tool-system";
+
+type UseAppHotkeysOptions = {
+  activeToolId: ToolId;
+  editor: EditorCore;
+  handleDeleteSelection: () => void;
+  handleDuplicateSelection: () => void;
+  handleInvertSelectionNormals: () => void;
+  handleRedo: () => void;
+  handleTranslateSelection: (axis: TransformAxis, direction: -1 | 1) => void;
+  handleUndo: () => void;
+  setActiveToolId: (toolId: ToolId) => void;
+  setMeshEditMode: (mode: MeshEditMode) => void;
+  setTransformMode: (mode: "rotate" | "scale" | "translate") => void;
+};
+
+export function useAppHotkeys({
+  activeToolId,
+  editor,
+  handleDeleteSelection,
+  handleDuplicateSelection,
+  handleInvertSelectionNormals,
+  handleRedo,
+  handleTranslateSelection,
+  handleUndo,
+  setActiveToolId,
+  setMeshEditMode,
+  setTransformMode
+}: UseAppHotkeysOptions) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const modifier = event.metaKey || event.ctrlKey;
+
+      if (modifier && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+        return;
+      }
+
+      if (modifier && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        handleDuplicateSelection();
+        return;
+      }
+
+      if ((event.key === "Backspace" || event.key === "Delete") && activeToolId !== "mesh-edit") {
+        event.preventDefault();
+        handleDeleteSelection();
+        return;
+      }
+
+      if (event.key.toLowerCase() === "n" && activeToolId !== "mesh-edit") {
+        event.preventDefault();
+        handleInvertSelectionNormals();
+        return;
+      }
+
+      if (event.key === "1") {
+        setActiveToolId("select");
+        return;
+      }
+
+      if (event.key === "2") {
+        setActiveToolId("transform");
+        return;
+      }
+
+      if (event.key === "3") {
+        setActiveToolId("brush");
+        return;
+      }
+
+      if (event.key === "4") {
+        setActiveToolId("clip");
+        return;
+      }
+
+      if (event.key === "5") {
+        setActiveToolId("extrude");
+        return;
+      }
+
+      if (event.key === "6") {
+        setActiveToolId("mesh-edit");
+        return;
+      }
+
+      if (event.key === "7") {
+        setActiveToolId("asset-place");
+        return;
+      }
+
+      if (event.key.toLowerCase() === "b" && activeToolId !== "mesh-edit") {
+        setActiveToolId("brush");
+        return;
+      }
+
+      if (activeToolId !== "transform" && activeToolId !== "mesh-edit") {
+        return;
+      }
+
+      if (event.key.toLowerCase() === "g") {
+        event.preventDefault();
+        setTransformMode("translate");
+        return;
+      }
+
+      if (event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        setTransformMode("rotate");
+        return;
+      }
+
+      if (event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        setTransformMode("scale");
+        return;
+      }
+
+      if (activeToolId === "mesh-edit" && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        setMeshEditMode("vertex");
+        return;
+      }
+
+      if (activeToolId === "mesh-edit" && event.key.toLowerCase() === "e") {
+        event.preventDefault();
+        setMeshEditMode("edge");
+        return;
+      }
+
+      if (activeToolId === "mesh-edit" && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setMeshEditMode("face");
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        handleTranslateSelection("x", -1);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        handleTranslateSelection("x", 1);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        handleTranslateSelection("z", -1);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        handleTranslateSelection("z", 1);
+      } else if (event.key === "PageUp") {
+        event.preventDefault();
+        handleTranslateSelection("y", 1);
+      } else if (event.key === "PageDown") {
+        event.preventDefault();
+        handleTranslateSelection("y", -1);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    activeToolId,
+    editor,
+    handleDeleteSelection,
+    handleDuplicateSelection,
+    handleInvertSelectionNormals,
+    handleRedo,
+    handleTranslateSelection,
+    handleUndo,
+    setActiveToolId,
+    setMeshEditMode,
+    setTransformMode
+  ]);
+}

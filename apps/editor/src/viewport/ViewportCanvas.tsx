@@ -1,1770 +1,75 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { OrbitControls, TransformControls } from "@react-three/drei";
-import { Canvas, type RootState, useThree } from "@react-three/fiber";
+import { Canvas, type RootState } from "@react-three/fiber";
 import { WebGPURenderer } from "three/webgpu";
 import {
   bevelEditableMeshEdge,
   convertBrushToEditableMesh,
-  createAxisAlignedBrushFromBounds,
   cutEditableMeshBetweenEdges,
   deleteEditableMeshFaces,
   extrudeEditableMeshEdge,
   extrudeEditableMeshFace,
   invertEditableMeshNormals,
-  mergeEditableMeshFaces,
-  reconstructBrushFaces,
-  triangulatePolygon3D,
-  triangulateEditableMesh,
-  type EdgeBevelProfile,
-  type ReconstructedBrushFace
+  mergeEditableMeshFaces
 } from "@web-hammer/geometry-kernel";
-import {
-  disableBvhRaycast,
-  enableBvhRaycast,
-  type DerivedRenderMesh,
-  type DerivedRenderScene,
-  type ViewportState
-} from "@web-hammer/render-pipeline";
 import {
   averageVec3,
   crossVec3,
-  dotVec3,
   isBrushNode,
   isMeshNode,
-  makeTransform,
   normalizeVec3,
-  scaleVec3,
   snapValue,
-  snapVec3,
-  subVec3,
   toTuple,
+  subVec3,
   vec3,
-  type Brush,
-  type EditableMesh,
-  type GeometryNode,
-  type Transform,
-  type Vec3
+  type EditableMesh
 } from "@web-hammer/shared";
-import type { ToolId } from "@web-hammer/tool-system";
 import {
-  applyBrushEditTransform,
-  createBrushExtrudeHandles,
-  computeBrushEditSelectionCenter,
-  applyMeshEditTransform,
-  buildClipPreview,
   createBrushEditHandles,
-  createMeshExtrudeHandles,
-  computeMeshEditSelectionCenter,
+  createBrushExtrudeHandles,
   createMeshEditHandles,
-  extrudeBrushHandle,
-  type BrushEditHandle,
-  type BrushExtrudeHandle,
-  type MeshExtrudeHandle,
-  type MeshEditMode
+  createMeshExtrudeHandles,
+  extrudeBrushHandle
 } from "@/viewport/editing";
+import { BrushClipOverlay } from "@/viewport/components/BrushClipOverlay";
+import { BrushCreatePreview } from "@/viewport/components/BrushCreatePreview";
+import { ConstructionGrid } from "@/viewport/components/ConstructionGrid";
+import { EditableMeshPreviewOverlay } from "@/viewport/components/EditableMeshPreviewOverlay";
+import { BrushEditOverlay, MeshEditOverlay } from "@/viewport/components/EditOverlays";
+import { EditorCameraRig } from "@/viewport/components/EditorCameraRig";
+import { BrushExtrudeOverlay, ExtrudeAxisGuide, MeshExtrudeOverlay } from "@/viewport/components/ExtrudeOverlays";
+import { ObjectTransformGizmo } from "@/viewport/components/ObjectTransformGizmo";
+import { ScenePreview } from "@/viewport/components/ScenePreview";
 import {
-  Box3,
-  BufferGeometry,
-  DoubleSide,
-  Euler,
-  Float32BufferAttribute,
-  FrontSide,
-  Matrix4,
-  Mesh,
-  Object3D,
-  Plane,
-  Quaternion,
-  Raycaster,
-  Vector2,
-  Vector3,
-  WireframeGeometry,
-  type PerspectiveCamera
-} from "three";
-
-type ViewportCanvasProps = {
-  activeToolId: ToolId;
-  meshEditMode: MeshEditMode;
-  onClearSelection: () => void;
-  onCommitMeshTopology: (nodeId: string, mesh: EditableMesh) => void;
-  onFocusNode: (nodeId: string) => void;
-  onPlaceAsset: (position: { x: number; y: number; z: number }) => void;
-  onPlaceBrush: (brush: Brush, transform: Transform) => void;
-  onPreviewBrushData: (nodeId: string, brush: Brush) => void;
-  onPreviewMeshData: (nodeId: string, mesh: EditableMesh) => void;
-  onPreviewNodeTransform: (nodeId: string, transform: Transform) => void;
-  onSelectNodes: (nodeIds: string[]) => void;
-  onSplitBrushAtCoordinate: (nodeId: string, axis: "x" | "y" | "z", coordinate: number) => void;
-  onUpdateBrushData: (nodeId: string, brush: Brush, beforeBrush?: Brush) => void;
-  onUpdateMeshData: (nodeId: string, mesh: EditableMesh, beforeMesh?: EditableMesh) => void;
-  onUpdateNodeTransform: (nodeId: string, transform: Transform, beforeTransform?: Transform) => void;
-  renderScene: DerivedRenderScene;
-  selectedNode?: GeometryNode;
-  selectedNodeIds: string[];
-  transformMode: "rotate" | "scale" | "translate";
-  viewport: ViewportState;
-};
-
-type MarqueeState = {
-  active: boolean;
-  current: Vector2;
-  origin: Vector2;
-};
-
-type BrushCreateBasis = {
-  normal: Vec3;
-  u: Vec3;
-  v: Vec3;
-};
-
-type BrushCreateState =
-  | {
-      anchor: Vec3;
-      basis: BrushCreateBasis;
-      currentPoint: Vec3;
-      stage: "base";
-    }
-  | {
-      anchor: Vec3;
-      basis: BrushCreateBasis;
-      depth: number;
-      dragPlane: Plane;
-      height: number;
-      stage: "height";
-      startPoint: Vec3;
-      width: number;
-    };
-
-type BevelState = {
-  baseMesh: EditableMesh;
-  dragDirection: Vec3;
-  dragPlane: Plane;
-  edge: [string, string];
-  profile: EdgeBevelProfile;
-  previewMesh: EditableMesh;
-  startPoint: Vec3;
-  steps: number;
-  width: number;
-};
-
-type ExtrudeGestureState =
-  | {
-      amount: number;
-      axisLock?: "x" | "y" | "z";
-      baseBrush: Brush;
-      dragPlane: Plane;
-      handle: BrushExtrudeHandle;
-      kind: "brush";
-      nodeId: string;
-      normal: Vec3;
-      previewBrush: Brush;
-      startPoint: Vec3;
-    }
-  | {
-      amount: number;
-      axisLock?: "x" | "y" | "z";
-      baseMesh: EditableMesh;
-      dragPlane: Plane;
-      handle: MeshExtrudeHandle;
-      kind: "mesh";
-      nodeId: string;
-      normal: Vec3;
-      previewMesh: EditableMesh;
-      startPoint: Vec3;
-    };
-
-const tempBox = new Box3();
-const projectedPoint = new Vector3();
-
-function EditorCameraRig({
-  controlsEnabled,
-  viewport
-}: Pick<ViewportCanvasProps, "viewport"> & { controlsEnabled: boolean }) {
-  const camera = useThree((state) => state.camera as PerspectiveCamera);
-  const controlsRef = useRef<any>(null);
-
-  useEffect(() => {
-    const [x, y, z] = toTuple(viewport.camera.position);
-    const [targetX, targetY, targetZ] = toTuple(viewport.camera.target);
-
-    camera.position.set(x, y, z);
-    camera.near = viewport.camera.near;
-    camera.far = viewport.camera.far;
-    camera.fov = viewport.camera.fov;
-    camera.updateProjectionMatrix();
-
-    controlsRef.current?.target.set(targetX, targetY, targetZ);
-    controlsRef.current?.update();
-  }, [camera, viewport]);
-
-  return (
-    <OrbitControls
-      ref={controlsRef}
-      dampingFactor={0.12}
-      enableDamping
-      enabled={controlsEnabled}
-      makeDefault
-      maxDistance={viewport.camera.maxDistance}
-      maxPolarAngle={Math.PI - 0.01}
-      minDistance={viewport.camera.minDistance}
-      minPolarAngle={0.01}
-      target={toTuple(viewport.camera.target)}
-    />
-  );
-}
-
-function ConstructionGrid({
-  activeToolId,
-  onPlaceAsset,
-  viewport
-}: Pick<ViewportCanvasProps, "activeToolId" | "onPlaceAsset" | "viewport">) {
-  if (!viewport.grid.visible) {
-    return null;
-  }
-
-  const minorStep = viewport.grid.snapSize;
-  const majorStep = minorStep * viewport.grid.majorLineEvery;
-  const extent = viewport.grid.size;
-
-  return (
-    <group position={[0, viewport.grid.elevation, 0]}>
-      <mesh
-        onClick={(event) => {
-          if (activeToolId !== "asset-place") {
-            return;
-          }
-
-          event.stopPropagation();
-          const snapped = snapVec3(
-            vec3(event.point.x, viewport.grid.elevation, event.point.z),
-            viewport.grid.snapSize
-          );
-          onPlaceAsset(snapped);
-        }}
-        receiveShadow
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -0.05, 0]}
-      >
-        <planeGeometry args={[extent, extent]} />
-        <meshBasicMaterial color="#0a0f13" transparent opacity={0.78} />
-      </mesh>
-      <GridLines color="#3c4652" opacity={0.72} size={extent} step={minorStep} y={0.002} />
-      <GridLines color="#7f8b99" opacity={0.86} size={extent} step={majorStep} y={0.006} />
-    </group>
-  );
-}
-
-function GridLines({
-  color,
-  opacity,
-  size,
-  step,
-  y
-}: {
-  color: string;
-  opacity: number;
-  size: number;
-  step: number;
-  y: number;
-}) {
-  const geometry = useMemo(() => {
-    const positions: number[] = [];
-    const halfSize = size / 2;
-    const safeStep = Math.max(step, 1);
-
-    for (let offset = -halfSize; offset <= halfSize + 0.0001; offset += safeStep) {
-      positions.push(-halfSize, y, offset, halfSize, y, offset);
-      positions.push(offset, y, -halfSize, offset, y, halfSize);
-    }
-
-    return createIndexedGeometry(positions);
-  }, [size, step, y]);
-
-  return (
-    <lineSegments frustumCulled={false} geometry={geometry} renderOrder={1}>
-      <lineBasicMaterial color={color} depthWrite={false} opacity={opacity} toneMapped={false} transparent />
-    </lineSegments>
-  );
-}
-
-function RenderPrimitive({
-  hovered,
-  interactive,
-  mesh,
-  onFocusNode,
-  onHoverEnd,
-  onHoverStart,
-  onMeshObjectChange,
-  onSelectNodes,
-  selected
-}: {
-  hovered: boolean;
-  interactive: boolean;
-  mesh: DerivedRenderMesh;
-  onFocusNode: (nodeId: string) => void;
-  onHoverEnd: () => void;
-  onHoverStart: (nodeId: string) => void;
-  onMeshObjectChange: (nodeId: string, object: Mesh | null) => void;
-  onSelectNodes: (nodeIds: string[]) => void;
-  selected: boolean;
-}) {
-  const meshRef = useRef<Mesh | null>(null);
-  const hasRenderableGeometry = Boolean(mesh.surface || mesh.primitive);
-  const geometry = useMemo(() => {
-    if (!mesh.surface) {
-      return undefined;
-    }
-
-    const bufferGeometry = createIndexedGeometry(mesh.surface.positions, mesh.surface.indices);
-    bufferGeometry.computeVertexNormals();
-    bufferGeometry.computeBoundingBox();
-    bufferGeometry.computeBoundingSphere();
-
-    return bufferGeometry;
-  }, [mesh.surface]);
-
-  useEffect(() => {
-    const currentMesh = meshRef.current;
-
-    if (geometry && currentMesh && mesh.bvhEnabled) {
-      enableBvhRaycast(currentMesh, geometry);
-    }
-
-    return () => {
-      if (geometry) {
-        disableBvhRaycast(geometry);
-      }
-    };
-  }, [geometry, mesh.bvhEnabled]);
-
-  if (!hasRenderableGeometry) {
-    return null;
-  }
-
-  const materialProps = {
-    color: selected ? "#ffb35a" : hovered ? "#d8f4f0" : mesh.material.color,
-    flatShading: mesh.material.flatShaded,
-    wireframe: mesh.material.wireframe,
-    metalness: mesh.material.wireframe ? 0.05 : 0.15,
-    roughness: mesh.material.wireframe ? 0.45 : 0.72,
-    side: FrontSide,
-    emissive: selected ? "#f69036" : hovered ? "#2a7f74" : "#000000",
-    emissiveIntensity: selected ? 0.42 : hovered ? 0.16 : 0
-  };
-
-  return (
-    <mesh
-      castShadow
-      name={`node:${mesh.nodeId}`}
-      onClick={(event) => {
-        if (!interactive) {
-          return;
-        }
-
-        event.stopPropagation();
-        onSelectNodes([mesh.nodeId]);
-      }}
-      onDoubleClick={(event) => {
-        if (!interactive) {
-          return;
-        }
-
-        event.stopPropagation();
-        onFocusNode(mesh.nodeId);
-      }}
-      onPointerOut={(event) => {
-        if (!interactive) {
-          return;
-        }
-
-        event.stopPropagation();
-        onHoverEnd();
-      }}
-      onPointerOver={(event) => {
-        if (!interactive) {
-          return;
-        }
-
-        event.stopPropagation();
-        onHoverStart(mesh.nodeId);
-      }}
-      ref={(object) => {
-        meshRef.current = object;
-        onMeshObjectChange(mesh.nodeId, object);
-      }}
-      receiveShadow
-      position={toTuple(mesh.position)}
-      rotation={toTuple(mesh.rotation)}
-      scale={toTuple(mesh.scale)}
-    >
-      {geometry ? <primitive attach="geometry" object={geometry} /> : null}
-      {mesh.primitive?.kind === "box" ? <boxGeometry args={toTuple(mesh.primitive.size)} /> : null}
-      {mesh.primitive?.kind === "icosahedron" ? (
-        <icosahedronGeometry args={[mesh.primitive.radius, mesh.primitive.detail]} />
-      ) : null}
-      {mesh.primitive?.kind === "cylinder" ? (
-        <cylinderGeometry
-          args={[
-            mesh.primitive.radiusTop,
-            mesh.primitive.radiusBottom,
-            mesh.primitive.height,
-            mesh.primitive.radialSegments
-          ]}
-        />
-      ) : null}
-      <meshStandardMaterial {...materialProps} />
-    </mesh>
-  );
-}
-
-function ScenePreview({
-  hiddenNodeIds = [],
-  interactive,
-  onFocusNode,
-  onMeshObjectChange,
-  onSelectNode,
-  renderScene,
-  selectedNodeIds
-}: {
-  hiddenNodeIds?: string[];
-  interactive: boolean;
-  onFocusNode: (nodeId: string) => void;
-  onMeshObjectChange: (nodeId: string, object: Mesh | null) => void;
-  onSelectNode: (nodeIds: string[]) => void;
-  renderScene: DerivedRenderScene;
-  selectedNodeIds: string[];
-}) {
-  const [hoveredNodeId, setHoveredNodeId] = useState<string>();
-  const hiddenIds = useMemo(() => new Set(hiddenNodeIds), [hiddenNodeIds]);
-
-  return (
-    <>
-      {renderScene.meshes.map((mesh) =>
-        hiddenIds.has(mesh.nodeId) ? null : (
-          <RenderPrimitive
-            hovered={hoveredNodeId === mesh.nodeId}
-            interactive={interactive}
-            key={mesh.nodeId}
-            mesh={mesh}
-            onFocusNode={onFocusNode}
-            onHoverEnd={() => setHoveredNodeId(undefined)}
-            onHoverStart={setHoveredNodeId}
-            onMeshObjectChange={onMeshObjectChange}
-            onSelectNodes={onSelectNode}
-            selected={selectedNodeIds.includes(mesh.nodeId)}
-          />
-        )
-      )}
-
-      {renderScene.entityMarkers.map((entity) => (
-        <group key={entity.entityId} position={toTuple(entity.position)}>
-          <mesh position={[0, 0.8, 0]}>
-            <octahedronGeometry args={[0.35, 0]} />
-            <meshStandardMaterial color={entity.color} emissive={entity.color} emissiveIntensity={0.25} />
-          </mesh>
-          <mesh position={[0, 0.35, 0]}>
-            <cylinderGeometry args={[0.08, 0.08, 0.7, 8]} />
-            <meshStandardMaterial color="#d8e0ea" metalness={0.1} roughness={0.55} />
-          </mesh>
-        </group>
-      ))}
-    </>
-  );
-}
-
-function ObjectTransformGizmo({
-  activeToolId,
-  onPreviewNodeTransform,
-  onUpdateNodeTransform,
-  selectedNodeIds,
-  transformMode,
-  viewport
-}: Pick<
-  ViewportCanvasProps,
-  "activeToolId" | "onPreviewNodeTransform" | "onUpdateNodeTransform" | "selectedNodeIds" | "transformMode" | "viewport"
->) {
-  const baselineTransformRef = useRef<Transform | undefined>(undefined);
-  const scene = useThree((state) => state.scene);
-  const selectedNodeId = selectedNodeIds[0];
-  const selectedObject = selectedNodeId ? scene.getObjectByName(`node:${selectedNodeId}`) : undefined;
-
-  if (activeToolId !== "transform" || !selectedNodeId || !selectedObject) {
-    return null;
-  }
-
-  return (
-    <TransformControls
-      enabled
-      mode={transformMode}
-      object={selectedObject}
-      onMouseDown={() => {
-        baselineTransformRef.current = objectToTransform(selectedObject);
-      }}
-      onMouseUp={() => {
-        if (!baselineTransformRef.current) {
-          return;
-        }
-
-        onUpdateNodeTransform(selectedNodeId, objectToTransform(selectedObject), baselineTransformRef.current);
-        baselineTransformRef.current = undefined;
-      }}
-      onObjectChange={() => {
-        onPreviewNodeTransform(selectedNodeId, objectToTransform(selectedObject));
-      }}
-      rotationSnap={Math.PI / 12}
-      scaleSnap={Math.max(viewport.grid.snapSize / 16, 0.125)}
-      showX
-      showY
-      showZ
-      translationSnap={viewport.grid.snapSize}
-    />
-  );
-}
-
-function BrushClipOverlay({
-  node,
-  onSplitBrushAtCoordinate,
-  viewport
-}: {
-  node: Extract<GeometryNode, { kind: "brush" }>;
-  onSplitBrushAtCoordinate: ViewportCanvasProps["onSplitBrushAtCoordinate"];
-  viewport: ViewportState;
-}) {
-  const [preview, setPreview] = useState<{ faceId: string; line: ReturnType<typeof buildClipPreview> }>();
-  const rebuilt = useMemo(() => reconstructBrushFaces(node.data), [node.data]);
-
-  useEffect(() => {
-    setPreview(undefined);
-  }, [node.id, node.data, viewport.grid.snapSize]);
-
-  if (!rebuilt.valid) {
-    return null;
-  }
-
-  const handleFacePointer = (face: ReconstructedBrushFace, point: Vector3) => {
-    const line = buildClipPreview(face, vec3(point.x, point.y, point.z), viewport.grid.snapSize);
-
-    if (!line) {
-      setPreview(undefined);
-      return;
-    }
-
-    setPreview({
-      faceId: face.id,
-      line
-    });
-  };
-
-  return (
-    <group
-      position={toTuple(node.transform.position)}
-      rotation={toTuple(node.transform.rotation)}
-      scale={toTuple(node.transform.scale)}
-    >
-      {rebuilt.faces.map((face) => (
-        <FaceHitArea
-          face={face}
-          hovered={preview?.faceId === face.id}
-          key={face.id}
-          onClick={(localPoint) => {
-            const line = buildClipPreview(face, localPoint, viewport.grid.snapSize);
-
-            if (!line) {
-              return;
-            }
-
-            onSplitBrushAtCoordinate(node.id, line.axis, line.coordinate);
-          }}
-          onHover={handleFacePointer}
-          onHoverEnd={() => setPreview(undefined)}
-        />
-      ))}
-
-      {preview?.line ? <PreviewLine color="#7dd3fc" end={preview.line.end} start={preview.line.start} /> : null}
-    </group>
-  );
-}
-
-function BrushExtrudeOverlay({
-  node,
-  onPreviewBrushData,
-  onUpdateBrushData,
-  setTransformDragging,
-  visibleHandleIds,
-  viewport
-}: {
-  node: Extract<GeometryNode, { kind: "brush" }>;
-  onPreviewBrushData: ViewportCanvasProps["onPreviewBrushData"];
-  onUpdateBrushData: ViewportCanvasProps["onUpdateBrushData"];
-  setTransformDragging: (dragging: boolean) => void;
-  visibleHandleIds?: string[];
-  viewport: ViewportState;
-}) {
-  const handles = useMemo(() => createBrushExtrudeHandles(node.data), [node.data]);
-  const [frozenHandles, setFrozenHandles] = useState<BrushExtrudeHandle[] | null>(null);
-  const handlesRef = useRef(handles);
-  const handleIdFilter = visibleHandleIds ? new Set(visibleHandleIds) : undefined;
-  const renderedHandles = (frozenHandles ?? handles).filter((handle) =>
-    handleIdFilter ? handleIdFilter.has(handle.id) : true
-  );
-  handlesRef.current = handles;
-  const handleDragStateChange = useCallback((dragging: boolean) => {
-    setFrozenHandles(dragging ? structuredClone(handlesRef.current) : null);
-  }, []);
-
-  useEffect(() => {
-    setFrozenHandles(null);
-  }, [node.id]);
-
-  if (renderedHandles.length === 0) {
-    return null;
-  }
-
-  return (
-    <group
-      position={toTuple(node.transform.position)}
-      rotation={toTuple(node.transform.rotation)}
-      scale={toTuple(node.transform.scale)}
-    >
-      {renderedHandles.map((handle) => (
-        <BrushExtrudeDragHandle
-          handle={handle}
-          key={`${handle.kind}:${handle.id}`}
-          node={node}
-          onDragStateChange={handleDragStateChange}
-          onPreviewBrushData={onPreviewBrushData}
-          onUpdateBrushData={onUpdateBrushData}
-          setTransformDragging={setTransformDragging}
-          viewport={viewport}
-        />
-      ))}
-    </group>
-  );
-}
-
-function BrushExtrudeDragHandle({
-  handle,
-  node,
-  onDragStateChange,
-  onPreviewBrushData,
-  onUpdateBrushData,
-  setTransformDragging,
-  viewport
-}: {
-  handle: BrushExtrudeHandle;
-  node: Extract<GeometryNode, { kind: "brush" }>;
-  onDragStateChange: (dragging: boolean) => void;
-  onPreviewBrushData: ViewportCanvasProps["onPreviewBrushData"];
-  onUpdateBrushData: ViewportCanvasProps["onUpdateBrushData"];
-  setTransformDragging: (dragging: boolean) => void;
-  viewport: ViewportState;
-}) {
-  const dragStateRef = useRef<{
-    baseBrush: Brush;
-    baseHandle: BrushExtrudeHandle;
-    plane: Plane;
-    startPoint: Vector3;
-  } | null>(null);
-  const raycasterRef = useRef(new Raycaster());
-  const { camera, gl } = useThree();
-  const extrusionNormal = handle.normal ? new Vector3(handle.normal.x, handle.normal.y, handle.normal.z).normalize() : undefined;
-  const tip = useMemo(
-    () => (handle.normal ? addFaceOffset(handle.position, handle.normal, handle.kind === "face" ? 0.42 : 0.3) : handle.position),
-    [handle]
-  );
-  const stemEnd = useMemo(
-    () => (handle.normal ? addFaceOffset(handle.position, handle.normal, handle.kind === "face" ? 0.28 : 0.18) : handle.position),
-    [handle]
-  );
-
-  useEffect(() => {
-    return () => {
-      dragStateRef.current = null;
-      onDragStateChange(false);
-      setTransformDragging(false);
-    };
-  }, [onDragStateChange, setTransformDragging]);
-
-  if (!extrusionNormal) {
-    return null;
-  }
-
-  return (
-    <group>
-      <PreviewLine color={handle.kind === "face" ? "#7dd3fc" : "#67e8f9"} end={stemEnd} start={handle.position} />
-      <mesh
-        onPointerDown={(event) => {
-          event.stopPropagation();
-
-          const cameraDirection = camera.getWorldDirection(new Vector3());
-          let tangent = new Vector3().crossVectors(cameraDirection, extrusionNormal);
-
-          if (tangent.lengthSq() <= 0.0001) {
-            tangent = new Vector3().crossVectors(new Vector3(0, 1, 0), extrusionNormal);
-          }
-
-          if (tangent.lengthSq() <= 0.0001) {
-            tangent = new Vector3().crossVectors(new Vector3(1, 0, 0), extrusionNormal);
-          }
-
-          const planeNormal = new Vector3().crossVectors(extrusionNormal, tangent).normalize();
-          const plane = new Plane().setFromNormalAndCoplanarPoint(
-            planeNormal,
-            new Vector3(tip.x, tip.y, tip.z)
-          );
-          const startPoint = event.ray.intersectPlane(plane, new Vector3()) ?? new Vector3(tip.x, tip.y, tip.z);
-
-          dragStateRef.current = {
-            baseBrush: structuredClone(node.data),
-            baseHandle: structuredClone(handle),
-            plane,
-            startPoint
-          };
-          onDragStateChange(true);
-          setTransformDragging(true);
-
-          const handlePointerMove = (pointerEvent: PointerEvent) => {
-            if (!dragStateRef.current) {
-              return;
-            }
-
-            const rect = gl.domElement.getBoundingClientRect();
-            const ndc = new Vector2(
-              ((pointerEvent.clientX - rect.left) / rect.width) * 2 - 1,
-              -(((pointerEvent.clientY - rect.top) / rect.height) * 2 - 1)
-            );
-            raycasterRef.current.setFromCamera(ndc, camera);
-            const point = raycasterRef.current.ray.intersectPlane(dragStateRef.current.plane, new Vector3());
-
-            if (!point) {
-              return;
-            }
-
-            const delta = point.clone().sub(dragStateRef.current.startPoint).dot(extrusionNormal);
-            const snappedDelta = Math.max(0, Math.round(delta / viewport.grid.snapSize) * viewport.grid.snapSize);
-            const nextBrush = extrudeBrushHandle(
-              dragStateRef.current.baseBrush,
-              dragStateRef.current.baseHandle,
-              snappedDelta
-            );
-
-            if (nextBrush) {
-              onPreviewBrushData(node.id, nextBrush);
-            } else {
-              onPreviewBrushData(node.id, dragStateRef.current.baseBrush);
-            }
-          };
-
-          const handlePointerUp = (pointerEvent: PointerEvent) => {
-            window.removeEventListener("pointermove", handlePointerMove);
-            window.removeEventListener("pointerup", handlePointerUp);
-            onDragStateChange(false);
-            setTransformDragging(false);
-
-            if (!dragStateRef.current) {
-              return;
-            }
-
-            const rect = gl.domElement.getBoundingClientRect();
-            const ndc = new Vector2(
-              ((pointerEvent.clientX - rect.left) / rect.width) * 2 - 1,
-              -(((pointerEvent.clientY - rect.top) / rect.height) * 2 - 1)
-            );
-            raycasterRef.current.setFromCamera(ndc, camera);
-            const point = raycasterRef.current.ray.intersectPlane(dragStateRef.current.plane, new Vector3());
-            const delta = point ? point.clone().sub(dragStateRef.current.startPoint).dot(extrusionNormal) : 0;
-            const snappedDelta = Math.max(0, Math.round(delta / viewport.grid.snapSize) * viewport.grid.snapSize);
-            const nextBrush = extrudeBrushHandle(
-              dragStateRef.current.baseBrush,
-              dragStateRef.current.baseHandle,
-              snappedDelta
-            );
-
-            if (nextBrush) {
-              onUpdateBrushData(node.id, nextBrush, dragStateRef.current.baseBrush);
-            } else {
-              onPreviewBrushData(node.id, dragStateRef.current.baseBrush);
-            }
-
-            dragStateRef.current = null;
-          };
-
-          window.addEventListener("pointermove", handlePointerMove);
-          window.addEventListener("pointerup", handlePointerUp, { once: true });
-        }}
-        position={toTuple(tip)}
-      >
-        <octahedronGeometry args={[handle.kind === "face" ? 0.12 : 0.09, 0]} />
-        <meshStandardMaterial
-          color={handle.kind === "face" ? "#dbeafe" : "#cffafe"}
-          emissive={handle.kind === "face" ? "#38bdf8" : "#06b6d4"}
-          emissiveIntensity={0.28}
-        />
-      </mesh>
-    </group>
-  );
-}
-
-function MeshExtrudeOverlay({
-  node,
-  onPreviewMeshData,
-  onUpdateMeshData,
-  setTransformDragging,
-  visibleHandleIds,
-  viewport
-}: {
-  node: Extract<GeometryNode, { kind: "mesh" }>;
-  onPreviewMeshData: ViewportCanvasProps["onPreviewMeshData"];
-  onUpdateMeshData: ViewportCanvasProps["onUpdateMeshData"];
-  setTransformDragging: (dragging: boolean) => void;
-  visibleHandleIds?: string[];
-  viewport: ViewportState;
-}) {
-  const handles = useMemo(() => createMeshExtrudeHandles(node.data), [node.data]);
-  const [frozenHandles, setFrozenHandles] = useState<MeshExtrudeHandle[] | null>(null);
-  const handlesRef = useRef(handles);
-  const handleIdFilter = visibleHandleIds ? new Set(visibleHandleIds) : undefined;
-  const renderedHandles = (frozenHandles ?? handles).filter((handle) =>
-    handleIdFilter ? handleIdFilter.has(handle.id) : true
-  );
-  handlesRef.current = handles;
-  const handleDragStateChange = useCallback((dragging: boolean) => {
-    setFrozenHandles(dragging ? structuredClone(handlesRef.current) : null);
-  }, []);
-
-  useEffect(() => {
-    setFrozenHandles(null);
-  }, [node.id]);
-
-  if (renderedHandles.length === 0) {
-    return null;
-  }
-
-  return (
-    <group
-      position={toTuple(node.transform.position)}
-      rotation={toTuple(node.transform.rotation)}
-      scale={toTuple(node.transform.scale)}
-    >
-      {renderedHandles.map((handle) => (
-        <MeshExtrudeDragHandle
-          handle={handle}
-          key={`${handle.kind}:${handle.id}`}
-          node={node}
-          onDragStateChange={handleDragStateChange}
-          onPreviewMeshData={onPreviewMeshData}
-          onUpdateMeshData={onUpdateMeshData}
-          setTransformDragging={setTransformDragging}
-          viewport={viewport}
-        />
-      ))}
-    </group>
-  );
-}
-
-function MeshExtrudeDragHandle({
-  handle,
-  node,
-  onDragStateChange,
-  onPreviewMeshData,
-  onUpdateMeshData,
-  setTransformDragging,
-  viewport
-}: {
-  handle: MeshExtrudeHandle;
-  node: Extract<GeometryNode, { kind: "mesh" }>;
-  onDragStateChange: (dragging: boolean) => void;
-  onPreviewMeshData: ViewportCanvasProps["onPreviewMeshData"];
-  onUpdateMeshData: ViewportCanvasProps["onUpdateMeshData"];
-  setTransformDragging: (dragging: boolean) => void;
-  viewport: ViewportState;
-}) {
-  const dragStateRef = useRef<{
-    baseHandle: MeshExtrudeHandle;
-    baseMesh: EditableMesh;
-    plane: Plane;
-    startPoint: Vector3;
-  } | null>(null);
-  const raycasterRef = useRef(new Raycaster());
-  const { camera, gl } = useThree();
-  const extrusionNormal = useMemo(
-    () => new Vector3(handle.normal.x, handle.normal.y, handle.normal.z).normalize(),
-    [handle.normal.x, handle.normal.y, handle.normal.z]
-  );
-  const tip = useMemo(
-    () => addFaceOffset(handle.position, handle.normal, handle.kind === "face" ? 0.42 : 0.3),
-    [handle]
-  );
-  const stemEnd = useMemo(
-    () => addFaceOffset(handle.position, handle.normal, handle.kind === "face" ? 0.28 : 0.18),
-    [handle]
-  );
-
-  useEffect(() => {
-    return () => {
-      dragStateRef.current = null;
-      onDragStateChange(false);
-      setTransformDragging(false);
-    };
-  }, [onDragStateChange, setTransformDragging]);
-
-  return (
-    <group>
-      <PreviewLine color={handle.kind === "face" ? "#7dd3fc" : "#67e8f9"} end={stemEnd} start={handle.position} />
-      <mesh
-        onPointerDown={(event) => {
-          event.stopPropagation();
-
-          const cameraDirection = camera.getWorldDirection(new Vector3());
-          let tangent = new Vector3().crossVectors(cameraDirection, extrusionNormal);
-
-          if (tangent.lengthSq() <= 0.0001) {
-            tangent = new Vector3().crossVectors(new Vector3(0, 1, 0), extrusionNormal);
-          }
-
-          if (tangent.lengthSq() <= 0.0001) {
-            tangent = new Vector3().crossVectors(new Vector3(1, 0, 0), extrusionNormal);
-          }
-
-          const planeNormal = new Vector3().crossVectors(extrusionNormal, tangent).normalize();
-          const plane = new Plane().setFromNormalAndCoplanarPoint(
-            planeNormal,
-            new Vector3(tip.x, tip.y, tip.z)
-          );
-          const startPoint = event.ray.intersectPlane(plane, new Vector3()) ?? new Vector3(tip.x, tip.y, tip.z);
-
-          dragStateRef.current = {
-            baseHandle: structuredClone(handle),
-            baseMesh: structuredClone(node.data),
-            plane,
-            startPoint
-          };
-          onDragStateChange(true);
-          setTransformDragging(true);
-
-          const handlePointerMove = (pointerEvent: PointerEvent) => {
-            if (!dragStateRef.current) {
-              return;
-            }
-
-            const rect = gl.domElement.getBoundingClientRect();
-            const ndc = new Vector2(
-              ((pointerEvent.clientX - rect.left) / rect.width) * 2 - 1,
-              -(((pointerEvent.clientY - rect.top) / rect.height) * 2 - 1)
-            );
-            raycasterRef.current.setFromCamera(ndc, camera);
-            const point = raycasterRef.current.ray.intersectPlane(dragStateRef.current.plane, new Vector3());
-
-            if (!point) {
-              return;
-            }
-
-            const delta = point.clone().sub(dragStateRef.current.startPoint).dot(extrusionNormal);
-            const snappedDelta = Math.max(0, Math.round(delta / viewport.grid.snapSize) * viewport.grid.snapSize);
-            const nextMesh =
-              dragStateRef.current.baseHandle.kind === "face"
-                ? extrudeEditableMeshFace(
-                    dragStateRef.current.baseMesh,
-                    dragStateRef.current.baseHandle.id,
-                    snappedDelta
-                  )
-                : extrudeEditableMeshEdge(
-                    dragStateRef.current.baseMesh,
-                    dragStateRef.current.baseHandle.vertexIds as [string, string],
-                    snappedDelta
-                  );
-
-            if (nextMesh) {
-              onPreviewMeshData(node.id, nextMesh);
-            } else {
-              onPreviewMeshData(node.id, dragStateRef.current.baseMesh);
-            }
-          };
-
-          const handlePointerUp = (pointerEvent: PointerEvent) => {
-            window.removeEventListener("pointermove", handlePointerMove);
-            window.removeEventListener("pointerup", handlePointerUp);
-            onDragStateChange(false);
-            setTransformDragging(false);
-
-            if (!dragStateRef.current) {
-              return;
-            }
-
-            const rect = gl.domElement.getBoundingClientRect();
-            const ndc = new Vector2(
-              ((pointerEvent.clientX - rect.left) / rect.width) * 2 - 1,
-              -(((pointerEvent.clientY - rect.top) / rect.height) * 2 - 1)
-            );
-            raycasterRef.current.setFromCamera(ndc, camera);
-            const point = raycasterRef.current.ray.intersectPlane(dragStateRef.current.plane, new Vector3());
-            const delta = point ? point.clone().sub(dragStateRef.current.startPoint).dot(extrusionNormal) : 0;
-            const snappedDelta = Math.max(0, Math.round(delta / viewport.grid.snapSize) * viewport.grid.snapSize);
-            const nextMesh =
-              dragStateRef.current.baseHandle.kind === "face"
-                ? extrudeEditableMeshFace(
-                    dragStateRef.current.baseMesh,
-                    dragStateRef.current.baseHandle.id,
-                    snappedDelta
-                  )
-                : extrudeEditableMeshEdge(
-                    dragStateRef.current.baseMesh,
-                    dragStateRef.current.baseHandle.vertexIds as [string, string],
-                    snappedDelta
-                  );
-
-            if (nextMesh) {
-              onUpdateMeshData(node.id, nextMesh, dragStateRef.current.baseMesh);
-            } else {
-              onPreviewMeshData(node.id, dragStateRef.current.baseMesh);
-            }
-
-            dragStateRef.current = null;
-          };
-
-          window.addEventListener("pointermove", handlePointerMove);
-          window.addEventListener("pointerup", handlePointerUp, { once: true });
-        }}
-        position={toTuple(tip)}
-      >
-        <octahedronGeometry args={[handle.kind === "face" ? 0.12 : 0.09, 0]} />
-        <meshStandardMaterial
-          color={handle.kind === "face" ? "#dbeafe" : "#cffafe"}
-          emissive={handle.kind === "face" ? "#38bdf8" : "#06b6d4"}
-          emissiveIntensity={0.28}
-        />
-      </mesh>
-    </group>
-  );
-}
-
-function MeshEditOverlay({
-  handles,
-  meshEditMode,
-  node,
-  onPreviewMeshData,
-  onUpdateMeshData,
-  selectedHandleIds,
-  setSelectedHandleIds,
-  transformMode,
-  viewport
-}: {
-  handles: ReturnType<typeof createMeshEditHandles>;
-  meshEditMode: MeshEditMode;
-  node: Extract<GeometryNode, { kind: "mesh" }>;
-  onPreviewMeshData: ViewportCanvasProps["onPreviewMeshData"];
-  onUpdateMeshData: ViewportCanvasProps["onUpdateMeshData"];
-  selectedHandleIds: string[];
-  setSelectedHandleIds: (ids: string[]) => void;
-  transformMode: ViewportCanvasProps["transformMode"];
-  viewport: ViewportState;
-}) {
-  const [controlObject, setControlObject] = useState<Object3D | null>(null);
-  const controlRef = useRef<Object3D | null>(null);
-  const baselineMeshRef = useRef<EditableMesh | undefined>(undefined);
-  const baselineTransformRef = useRef<Transform | undefined>(undefined);
-  const selectionCenter = useMemo(
-    () => computeMeshEditSelectionCenter(handles, selectedHandleIds),
-    [handles, selectedHandleIds]
-  );
-
-  useEffect(() => {
-    if (baselineMeshRef.current) {
-      return;
-    }
-
-    const validIds = new Set(handles.map((handle) => handle.id));
-    const nextIds = selectedHandleIds.filter((id) => validIds.has(id));
-
-    if (nextIds.length !== selectedHandleIds.length) {
-      setSelectedHandleIds(nextIds);
-    }
-  }, [handles, selectedHandleIds, setSelectedHandleIds]);
-
-  useEffect(() => {
-    if (!controlRef.current || selectedHandleIds.length === 0) {
-      return;
-    }
-
-    if (!baselineMeshRef.current) {
-      controlRef.current.position.set(selectionCenter.x, selectionCenter.y, selectionCenter.z);
-      controlRef.current.rotation.set(0, 0, 0);
-      controlRef.current.scale.set(1, 1, 1);
-    }
-  }, [selectedHandleIds.length, selectionCenter]);
-
-  return (
-    <>
-      <group
-        position={toTuple(node.transform.position)}
-        rotation={toTuple(node.transform.rotation)}
-        scale={toTuple(node.transform.scale)}
-      >
-        {handles.map((handle) => {
-          const selected = selectedHandleIds.includes(handle.id);
-
-          return (
-            <group key={handle.id}>
-              {meshEditMode === "face" && handle.points && handle.points.length >= 3 ? (
-                <EditableFaceSelectionHitArea
-                  normal={handle.normal}
-                  onSelect={(event) => {
-                    event.stopPropagation();
-                    setSelectedHandleIds(resolveSubobjectSelection(selectedHandleIds, handle.id, event.shiftKey));
-                  }}
-                  points={handle.points}
-                  selected={selected}
-                />
-              ) : null}
-              {meshEditMode === "edge" && handle.points?.length === 2 ? (
-                <EditableEdgeSelectionHitArea
-                  onSelect={(event) => {
-                    event.stopPropagation();
-                    setSelectedHandleIds(resolveSubobjectSelection(selectedHandleIds, handle.id, event.shiftKey));
-                  }}
-                  points={handle.points}
-                  selected={selected}
-                />
-              ) : null}
-              <MeshEditHandleVisual
-                handle={handle}
-                mode={meshEditMode}
-                onSelect={(event) => {
-                  event.stopPropagation();
-                  setSelectedHandleIds(resolveSubobjectSelection(selectedHandleIds, handle.id, event.shiftKey));
-                }}
-                selected={selected}
-              />
-            </group>
-          );
-        })}
-
-        {selectedHandleIds.length > 0 ? (
-          <group
-            ref={(object) => {
-              controlRef.current = object;
-              setControlObject(object);
-
-              if (object && !baselineMeshRef.current) {
-                object.position.set(selectionCenter.x, selectionCenter.y, selectionCenter.z);
-                object.rotation.set(0, 0, 0);
-                object.scale.set(1, 1, 1);
-              }
-            }}
-          >
-            <mesh visible={false}>
-              <boxGeometry args={[0.2, 0.2, 0.2]} />
-              <meshBasicMaterial transparent opacity={0} />
-            </mesh>
-          </group>
-        ) : null}
-      </group>
-
-      {selectedHandleIds.length > 0 && controlObject ? (
-        <TransformControls
-          key={`mesh-edit:${transformMode}:${selectedHandleIds.join(":")}`}
-          enabled
-          mode={transformMode}
-          object={controlObject}
-          onMouseDown={() => {
-            baselineMeshRef.current = structuredClone(node.data);
-            baselineTransformRef.current = objectToTransform(controlObject);
-          }}
-          onMouseUp={() => {
-            if (!baselineMeshRef.current || !baselineTransformRef.current) {
-              return;
-            }
-
-            const nextMesh = applyMeshEditTransform(
-              baselineMeshRef.current,
-              meshEditMode,
-              selectedHandleIds,
-              baselineTransformRef.current,
-              objectToTransform(controlObject)
-            );
-            onUpdateMeshData(node.id, nextMesh, baselineMeshRef.current);
-            baselineMeshRef.current = undefined;
-            baselineTransformRef.current = undefined;
-          }}
-          onObjectChange={() => {
-            if (!baselineMeshRef.current || !baselineTransformRef.current) {
-              return;
-            }
-
-            const nextMesh = applyMeshEditTransform(
-              baselineMeshRef.current,
-              meshEditMode,
-              selectedHandleIds,
-              baselineTransformRef.current,
-              objectToTransform(controlObject)
-            );
-            onPreviewMeshData(node.id, nextMesh);
-          }}
-          rotationSnap={Math.PI / 12}
-          scaleSnap={Math.max(viewport.grid.snapSize / 16, 0.125)}
-          showX
-          showY
-          showZ
-          translationSnap={viewport.grid.snapSize}
-        />
-      ) : null}
-    </>
-  );
-}
-
-function BrushEditOverlay({
-  handles,
-  meshEditMode,
-  node,
-  onPreviewBrushData,
-  onUpdateBrushData,
-  selectedHandleIds,
-  setSelectedHandleIds,
-  transformMode,
-  viewport
-}: {
-  handles: BrushEditHandle[];
-  meshEditMode: MeshEditMode;
-  node: Extract<GeometryNode, { kind: "brush" }>;
-  onPreviewBrushData: ViewportCanvasProps["onPreviewBrushData"];
-  onUpdateBrushData: ViewportCanvasProps["onUpdateBrushData"];
-  selectedHandleIds: string[];
-  setSelectedHandleIds: (ids: string[]) => void;
-  transformMode: ViewportCanvasProps["transformMode"];
-  viewport: ViewportState;
-}) {
-  const [controlObject, setControlObject] = useState<Object3D | null>(null);
-  const controlRef = useRef<Object3D | null>(null);
-  const baselineBrushRef = useRef<Brush | undefined>(undefined);
-  const baselineHandlesRef = useRef<BrushEditHandle[] | undefined>(undefined);
-  const baselineTransformRef = useRef<Transform | undefined>(undefined);
-  const selectionCenter = useMemo(
-    () => computeBrushEditSelectionCenter(handles, selectedHandleIds),
-    [handles, selectedHandleIds]
-  );
-
-  useEffect(() => {
-    if (baselineBrushRef.current) {
-      return;
-    }
-
-    const validIds = new Set(handles.map((handle) => handle.id));
-    const nextIds = selectedHandleIds.filter((id) => validIds.has(id));
-
-    if (nextIds.length !== selectedHandleIds.length) {
-      setSelectedHandleIds(nextIds);
-    }
-  }, [handles, selectedHandleIds, setSelectedHandleIds]);
-
-  useEffect(() => {
-    if (!controlRef.current || selectedHandleIds.length === 0) {
-      return;
-    }
-
-    if (!baselineBrushRef.current) {
-      controlRef.current.position.set(selectionCenter.x, selectionCenter.y, selectionCenter.z);
-      controlRef.current.rotation.set(0, 0, 0);
-      controlRef.current.scale.set(1, 1, 1);
-    }
-  }, [selectedHandleIds.length, selectionCenter]);
-
-  return (
-    <>
-      <group
-        position={toTuple(node.transform.position)}
-        rotation={toTuple(node.transform.rotation)}
-        scale={toTuple(node.transform.scale)}
-      >
-        {handles.map((handle) => {
-          const selected = selectedHandleIds.includes(handle.id);
-
-          return (
-            <group key={handle.id}>
-              {meshEditMode === "face" && handle.points && handle.points.length >= 3 ? (
-                <EditableFaceSelectionHitArea
-                  normal={handle.normal}
-                  onSelect={(event) => {
-                    event.stopPropagation();
-                    setSelectedHandleIds(resolveSubobjectSelection(selectedHandleIds, handle.id, event.shiftKey));
-                  }}
-                  points={handle.points}
-                  selected={selected}
-                />
-              ) : null}
-              {meshEditMode === "edge" && handle.points?.length === 2 ? (
-                <EditableEdgeSelectionHitArea
-                  onSelect={(event) => {
-                    event.stopPropagation();
-                    setSelectedHandleIds(resolveSubobjectSelection(selectedHandleIds, handle.id, event.shiftKey));
-                  }}
-                  points={handle.points}
-                  selected={selected}
-                />
-              ) : null}
-              <BrushEditHandleVisual
-                handle={handle}
-                mode={meshEditMode}
-                onSelect={(event) => {
-                  event.stopPropagation();
-                  setSelectedHandleIds(resolveSubobjectSelection(selectedHandleIds, handle.id, event.shiftKey));
-                }}
-                selected={selected}
-              />
-            </group>
-          );
-        })}
-
-        {selectedHandleIds.length > 0 ? (
-          <group
-            ref={(object) => {
-              controlRef.current = object;
-              setControlObject(object);
-
-              if (object && !baselineBrushRef.current) {
-                object.position.set(selectionCenter.x, selectionCenter.y, selectionCenter.z);
-                object.rotation.set(0, 0, 0);
-                object.scale.set(1, 1, 1);
-              }
-            }}
-          >
-            <mesh visible={false}>
-              <boxGeometry args={[0.2, 0.2, 0.2]} />
-              <meshBasicMaterial opacity={0} transparent />
-            </mesh>
-          </group>
-        ) : null}
-      </group>
-
-      {selectedHandleIds.length > 0 && controlObject ? (
-        <TransformControls
-          key={`brush-edit:${transformMode}:${selectedHandleIds.join(":")}`}
-          enabled
-          mode={transformMode}
-          object={controlObject}
-          onMouseDown={() => {
-            baselineBrushRef.current = structuredClone(node.data);
-            baselineHandlesRef.current = structuredClone(handles);
-            baselineTransformRef.current = objectToTransform(controlObject);
-          }}
-          onMouseUp={() => {
-            if (!baselineBrushRef.current || !baselineTransformRef.current) {
-              return;
-            }
-
-            const nextBrush = applyBrushEditTransform(
-              baselineBrushRef.current,
-              baselineHandlesRef.current ?? handles,
-              selectedHandleIds,
-              baselineTransformRef.current,
-              objectToTransform(controlObject),
-              viewport.grid.snapSize
-            );
-
-            if (nextBrush) {
-              onUpdateBrushData(node.id, nextBrush, baselineBrushRef.current);
-            } else {
-              onPreviewBrushData(node.id, baselineBrushRef.current);
-            }
-
-            baselineBrushRef.current = undefined;
-            baselineHandlesRef.current = undefined;
-            baselineTransformRef.current = undefined;
-          }}
-          onObjectChange={() => {
-            if (!baselineBrushRef.current || !baselineTransformRef.current) {
-              return;
-            }
-
-            const nextBrush = applyBrushEditTransform(
-              baselineBrushRef.current,
-              baselineHandlesRef.current ?? handles,
-              selectedHandleIds,
-              baselineTransformRef.current,
-              objectToTransform(controlObject),
-              viewport.grid.snapSize
-            );
-
-            if (nextBrush) {
-              onPreviewBrushData(node.id, nextBrush);
-            }
-          }}
-          showX
-          showY
-          showZ
-          rotationSnap={Math.PI / 12}
-          scaleSnap={Math.max(viewport.grid.snapSize / 16, 0.125)}
-          translationSnap={viewport.grid.snapSize}
-        />
-      ) : null}
-    </>
-  );
-}
-
-function resolveSubobjectSelection(currentIds: string[], targetId: string, additive: boolean) {
-  if (!additive) {
-    return [targetId];
-  }
-
-  return currentIds.includes(targetId)
-    ? currentIds.filter((id) => id !== targetId)
-    : [...currentIds, targetId];
-}
-
-function FaceHitArea({
-  face,
-  hovered,
-  onClick,
-  onHover,
-  onHoverEnd
-}: {
-  face: ReconstructedBrushFace;
-  hovered: boolean;
-  onClick: (localPoint: Vec3) => void;
-  onHover: (face: ReconstructedBrushFace, localPoint: Vector3) => void;
-  onHoverEnd: () => void;
-}) {
-  const geometry = useMemo(() => {
-    const positions = face.vertices.flatMap((vertex) => [
-      vertex.position.x + face.normal.x * 0.02,
-      vertex.position.y + face.normal.y * 0.02,
-      vertex.position.z + face.normal.z * 0.02
-    ]);
-
-    return createIndexedGeometry(positions, face.triangleIndices);
-  }, [face]);
-
-  useEffect(() => () => geometry.dispose(), [geometry]);
-
-  return (
-    <mesh
-      geometry={geometry}
-      onClick={(event) => {
-        event.stopPropagation();
-        const localPoint = event.object.worldToLocal(event.point.clone());
-        onClick(vec3(localPoint.x, localPoint.y, localPoint.z));
-      }}
-      onPointerMove={(event) => {
-        event.stopPropagation();
-        onHover(face, event.object.worldToLocal(event.point.clone()));
-      }}
-      onPointerOut={(event) => {
-        event.stopPropagation();
-        onHoverEnd();
-      }}
-      renderOrder={8}
-    >
-      <meshBasicMaterial
-        color="#7dd3fc"
-        depthWrite={false}
-        opacity={hovered ? 0.12 : 0.015}
-        side={DoubleSide}
-        transparent
-      />
-    </mesh>
-  );
-}
-
-function EditableFaceSelectionHitArea({
-  normal,
-  onSelect,
-  points,
-  selected
-}: {
-  normal?: Vec3;
-  onSelect: (event: any) => void;
-  points: Vec3[];
-  selected: boolean;
-}) {
-  const geometry = useMemo(() => {
-    const faceNormal = normalizeVec3(normal ?? vec3(0, 0, 1));
-    const positions = points.flatMap((point) => [
-      point.x + faceNormal.x * 0.01,
-      point.y + faceNormal.y * 0.01,
-      point.z + faceNormal.z * 0.01
-    ]);
-    const indices = triangulatePolygon3D(points, normal ?? faceNormal);
-
-    return indices.length >= 3 ? createIndexedGeometry(positions, indices) : undefined;
-  }, [normal, points]);
-
-  if (!geometry) {
-    return null;
-  }
-
-  return (
-    <mesh geometry={geometry} onClick={onSelect} renderOrder={7}>
-      <meshBasicMaterial
-        color="#93c5fd"
-        depthWrite={false}
-        opacity={selected ? 0.08 : 0.018}
-        side={DoubleSide}
-        transparent
-      />
-    </mesh>
-  );
-}
-
-function EditableEdgeSelectionHitArea({
-  onSelect,
-  points,
-  selected
-}: {
-  onSelect: (event: any) => void;
-  points: Vec3[];
-  selected: boolean;
-}) {
-  const midpoint = useMemo(() => averageVec3(points), [points]);
-  const quaternion = useMemo(() => {
-    if (points.length !== 2) {
-      return new Quaternion();
-    }
-
-    const direction = new Vector3(
-      points[1].x - points[0].x,
-      points[1].y - points[0].y,
-      points[1].z - points[0].z
-    );
-
-    if (direction.lengthSq() <= 0.000001) {
-      return new Quaternion();
-    }
-
-    return new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), direction.normalize());
-  }, [points]);
-  const length = useMemo(() => {
-    if (points.length !== 2) {
-      return 0;
-    }
-
-    return new Vector3(
-      points[1].x - points[0].x,
-      points[1].y - points[0].y,
-      points[1].z - points[0].z
-    ).length();
-  }, [points]);
-
-  if (length <= 0.0001) {
-    return null;
-  }
-
-  return (
-    <mesh onClick={onSelect} position={toTuple(midpoint)} quaternion={quaternion} renderOrder={7}>
-      <cylinderGeometry args={[selected ? 0.1 : 0.085, selected ? 0.1 : 0.085, length, 6]} />
-      <meshBasicMaterial color="#93c5fd" depthWrite={false} opacity={selected ? 0.12 : 0.025} transparent />
-    </mesh>
-  );
-}
-
-function MeshEditHandleVisual({
-  handle,
-  mode,
-  onSelect,
-  selected
-}: {
-  handle: ReturnType<typeof createMeshEditHandles>[number];
-  mode: MeshEditMode;
-  onSelect: (event: any) => void;
-  selected: boolean;
-}) {
-  return (
-    <group>
-      {mode === "edge" && handle.points?.length === 2 ? (
-        <PreviewLine color={selected ? "#93c5fd" : "#64748b"} end={handle.points[1]} start={handle.points[0]} />
-      ) : null}
-      {mode === "face" && handle.points && handle.points.length >= 3 ? (
-        <ClosedPolyline color={selected ? "#93c5fd" : "#38bdf8"} points={handle.points} />
-      ) : null}
-      <mesh onClick={onSelect} position={toTuple(handle.position)}>
-        {mode === "vertex" ? <octahedronGeometry args={[selected ? 0.1 : 0.075, 0]} /> : null}
-        {mode === "edge" ? <boxGeometry args={selected ? [0.16, 0.16, 0.16] : [0.12, 0.12, 0.12]} /> : null}
-        {mode === "face" ? <boxGeometry args={selected ? [0.18, 0.18, 0.04] : [0.14, 0.14, 0.03]} /> : null}
-        <meshStandardMaterial
-          color={selected ? "#dbeafe" : mode === "face" ? "#67e8f9" : "#cbd5e1"}
-          emissive={selected ? "#60a5fa" : "#0f172a"}
-          emissiveIntensity={selected ? 0.35 : 0.08}
-        />
-      </mesh>
-    </group>
-  );
-}
-
-function BrushEditHandleVisual({
-  handle,
-  mode,
-  onSelect,
-  selected
-}: {
-  handle: BrushEditHandle;
-  mode: MeshEditMode;
-  onSelect: (event: any) => void;
-  selected: boolean;
-}) {
-  const faceOutline = mode === "face" && handle.points && handle.points.length >= 3;
-  const edgeLine = mode === "edge" && handle.points?.length === 2;
-
-  return (
-    <group>
-      {edgeLine ? (
-        <PreviewLine color={selected ? "#f8fafc" : "#94a3b8"} end={handle.points![1]} start={handle.points![0]} />
-      ) : null}
-      {faceOutline ? (
-        <ClosedPolyline color={selected ? "#f8fafc" : "#94a3b8"} points={handle.points!} />
-      ) : null}
-      <mesh onClick={onSelect} position={toTuple(handle.position)}>
-        {mode === "vertex" ? <octahedronGeometry args={[selected ? 0.11 : 0.085, 0]} /> : null}
-        {mode === "edge" ? <boxGeometry args={selected ? [0.18, 0.18, 0.18] : [0.14, 0.14, 0.14]} /> : null}
-        {mode === "face" ? <boxGeometry args={selected ? [0.2, 0.2, 0.04] : [0.16, 0.16, 0.03]} /> : null}
-        <meshStandardMaterial
-          color={selected ? "#f8fafc" : "#e2e8f0"}
-          emissive={selected ? "#93c5fd" : "#0f172a"}
-          emissiveIntensity={selected ? 0.24 : 0.06}
-        />
-      </mesh>
-    </group>
-  );
-}
-
-function ClosedPolyline({
-  color,
-  points
-}: {
-  color: string;
-  points: Vec3[];
-}) {
-  const geometry = useMemo(() => {
-    const positions: number[] = [];
-
-    for (let index = 0; index < points.length; index += 1) {
-      const current = points[index];
-      const next = points[(index + 1) % points.length];
-      positions.push(current.x, current.y, current.z, next.x, next.y, next.z);
-    }
-
-    return createIndexedGeometry(positions);
-  }, [points]);
-
-  return (
-    <lineSegments geometry={geometry} renderOrder={10}>
-      <lineBasicMaterial color={color} depthWrite={false} opacity={0.9} toneMapped={false} transparent />
-    </lineSegments>
-  );
-}
-
-function PreviewLine({
-  color,
-  end,
-  start
-}: {
-  color: string;
-  end: Vec3;
-  start: Vec3;
-}) {
-  const geometry = useMemo(() => createIndexedGeometry([start.x, start.y, start.z, end.x, end.y, end.z]), [end, start]);
-
-  return (
-    <lineSegments geometry={geometry} renderOrder={10}>
-      <lineBasicMaterial color={color} depthWrite={false} linewidth={2} toneMapped={false} />
-    </lineSegments>
-  );
-}
-
-function ExtrudeAxisGuide({
-  node,
-  state,
-  viewport
-}: {
-  node: GeometryNode;
-  state: ExtrudeGestureState;
-  viewport: ViewportState;
-}) {
-  if (!state.axisLock || state.handle.kind !== "edge") {
-    return null;
-  }
-
-  const direction = resolveExtrudeDirection(state);
-  const length = Math.max(viewport.grid.snapSize * 6, 6);
-  const start = addFaceOffset(state.handle.position, direction, -length * 0.5);
-  const end = addFaceOffset(state.handle.position, direction, length * 0.5);
-
-  return (
-    <group
-      position={toTuple(node.transform.position)}
-      rotation={toTuple(node.transform.rotation)}
-      scale={toTuple(node.transform.scale)}
-    >
-      <PreviewLine color={axisLockColor(state.axisLock)} end={end} start={start} />
-    </group>
-  );
-}
-
-function EditableMeshPreviewOverlay({
-  mesh,
-  node
-}: {
-  mesh: EditableMesh;
-  node: GeometryNode;
-}) {
-  const triangulated = useMemo(() => triangulateEditableMesh(mesh), [mesh]);
-  const geometry = useMemo(() => {
-    if (!triangulated.valid) {
-      return undefined;
-    }
-
-    const nextGeometry = createIndexedGeometry(triangulated.positions, triangulated.indices);
-    nextGeometry.computeVertexNormals();
-    return nextGeometry;
-  }, [triangulated]);
-  const wireframeGeometry = useMemo(() => (geometry ? new WireframeGeometry(geometry) : undefined), [geometry]);
-
-  useEffect(
-    () => () => {
-      // WebGPU can still reference transient preview geometry for a frame after
-      // React has swapped it out. Avoid manual disposal on this hot path.
-    },
-    [geometry, wireframeGeometry]
-  );
-
-  if (!geometry) {
-    return null;
-  }
-
-  return (
-    <group
-      position={toTuple(node.transform.position)}
-      rotation={toTuple(node.transform.rotation)}
-      scale={toTuple(node.transform.scale)}
-    >
-      <mesh geometry={geometry} renderOrder={11}>
-        <meshStandardMaterial
-          color="#8b5cf6"
-          depthWrite={false}
-          emissive="#6d28d9"
-          emissiveIntensity={0.24}
-          opacity={0.48}
-          polygonOffset
-          polygonOffsetFactor={-2}
-          polygonOffsetUnits={-2}
-          side={FrontSide}
-          transparent
-        />
-      </mesh>
-      {wireframeGeometry ? (
-        <lineSegments geometry={wireframeGeometry} renderOrder={12}>
-          <lineBasicMaterial color="#f8fafc" depthWrite={false} opacity={0.95} toneMapped={false} transparent />
-        </lineSegments>
-      ) : null}
-    </group>
-  );
-}
-
-function BrushCreatePreview({ snapSize, state }: { snapSize: number; state: BrushCreateState }) {
-  const geometry = useMemo(() => createIndexedGeometry(buildBrushCreatePreviewPositions(state, snapSize)), [snapSize, state]);
-
-  return (
-    <lineSegments geometry={geometry} renderOrder={12}>
-      <lineBasicMaterial color="#7dd3fc" depthWrite={false} opacity={0.94} toneMapped={false} transparent />
-    </lineSegments>
-  );
-}
+  buildBrushCreatePlacement,
+  computeBrushCreateCenter,
+  createBrushCreateBasis,
+  createBrushCreateDragPlane,
+  measureBrushCreateBase,
+  projectPointerToPlane,
+  projectPointerToThreePlane,
+  resolveBrushCreateSurfaceHit
+} from "@/viewport/utils/brush-create";
+import {
+  findMatchingMeshEdgePair,
+  makeUndirectedPairKey,
+  rejectVec3FromAxis,
+  resolveExtrudeDirection,
+  vec3LengthSquared
+} from "@/viewport/utils/interaction";
+import {
+  createScreenRect,
+  intersectsSelectionRect,
+  projectLocalPointToScreen,
+  rectContainsPoint
+} from "@/viewport/utils/screen-space";
+import { useEffect, useRef, useState, type PointerEventHandler } from "react";
+import { Mesh, Raycaster, Vector2, Vector3, type PerspectiveCamera } from "three";
+import type {
+  BevelState,
+  BrushCreateState,
+  ExtrudeGestureState,
+  MarqueeState,
+  ViewportCanvasProps
+} from "@/viewport/types";
 
 export function ViewportCanvas({
   activeToolId,
@@ -1937,10 +242,12 @@ export function ViewportCanvas({
     }
 
     const edgeHandle = editableMeshHandles.find(
-      (handle) => handle.vertexIds.length === 2 && makeUndirectedPairKey(handle.vertexIds as [string, string]) === makeUndirectedPairKey(selectedEdges[0])
+      (handle) =>
+        handle.vertexIds.length === 2 &&
+        makeUndirectedPairKey(handle.vertexIds as [string, string]) === makeUndirectedPairKey(selectedEdges[0])
     );
 
-    if (!edgeHandle || !edgeHandle.points || edgeHandle.points.length !== 2) {
+    if (!edgeHandle?.points || edgeHandle.points.length !== 2) {
       return;
     }
 
@@ -1962,7 +269,9 @@ export function ViewportCanvas({
         dragPlane
       ) ?? new Vector3(midpoint.x, midpoint.y, midpoint.z);
     const averagedFaceDirection = normalizeVec3(averageVec3(faceDirections));
-    const fallbackDirection = normalizeVec3(crossVec3(axis, vec3(dragPlane.normal.x, dragPlane.normal.y, dragPlane.normal.z)));
+    const fallbackDirection = normalizeVec3(
+      crossVec3(axis, vec3(dragPlane.normal.x, dragPlane.normal.y, dragPlane.normal.z))
+    );
 
     setBevelState({
       baseMesh: structuredClone(editableMeshSource),
@@ -2002,7 +311,7 @@ export function ViewportCanvas({
         return;
       }
 
-      const anchor = addFaceOffset(handle.position, handle.normal, handle.kind === "face" ? 0.42 : 0.3);
+      const anchor = resolveExtrudeAnchor(handle.position, handle.normal, handle.kind);
       const dragPlane = createBrushCreateDragPlane(cameraRef.current, handle.normal, anchor);
       const startPoint =
         projectPointerToThreePlane(
@@ -2041,7 +350,7 @@ export function ViewportCanvas({
         return;
       }
 
-      const anchor = addFaceOffset(handle.position, handle.normal, handle.kind === "face" ? 0.42 : 0.3);
+      const anchor = resolveExtrudeAnchor(handle.position, handle.normal, handle.kind);
       const dragPlane = createBrushCreateDragPlane(cameraRef.current, handle.normal, anchor);
       const startPoint =
         projectPointerToThreePlane(
@@ -2085,8 +394,7 @@ export function ViewportCanvas({
                   current.width,
                   Math.max(1, current.steps + (event.deltaY < 0 ? 1 : -1)),
                   current.profile
-                ) ??
-                current.previewMesh,
+                ) ?? current.previewMesh,
               steps: Math.max(1, current.steps + (event.deltaY < 0 ? 1 : -1))
             }
           : current
@@ -2155,7 +463,7 @@ export function ViewportCanvas({
 
         if (selectedFaces.length > 0) {
           event.preventDefault();
-          commitMeshTopology(deleteEditableMeshFaces(editableMeshSource ?? { faces: [], halfEdges: [], vertices: [] }, selectedFaces));
+          commitMeshTopology(deleteEditableMeshFaces(editableMeshSource ?? emptyEditableMesh(), selectedFaces));
         }
         return;
       }
@@ -2165,7 +473,7 @@ export function ViewportCanvas({
 
         if (selectedFaces.length > 1) {
           event.preventDefault();
-          commitMeshTopology(mergeEditableMeshFaces(editableMeshSource ?? { faces: [], halfEdges: [], vertices: [] }, selectedFaces));
+          commitMeshTopology(mergeEditableMeshFaces(editableMeshSource ?? emptyEditableMesh(), selectedFaces));
         }
         return;
       }
@@ -2175,7 +483,7 @@ export function ViewportCanvas({
 
         if (selectedEdges.length === 2) {
           event.preventDefault();
-          commitMeshTopology(cutEditableMeshBetweenEdges(editableMeshSource ?? { faces: [], halfEdges: [], vertices: [] }, selectedEdges));
+          commitMeshTopology(cutEditableMeshBetweenEdges(editableMeshSource ?? emptyEditableMesh(), selectedEdges));
         }
         return;
       }
@@ -2199,12 +507,12 @@ export function ViewportCanvas({
           const selectedFaces = resolveSelectedEditableMeshFaceIds();
 
           if (selectedFaces.length > 0) {
-            commitMeshTopology(invertEditableMeshNormals(editableMeshSource ?? { faces: [], halfEdges: [], vertices: [] }, selectedFaces));
+            commitMeshTopology(invertEditableMeshNormals(editableMeshSource ?? emptyEditableMesh(), selectedFaces));
             return;
           }
         }
 
-        commitMeshTopology(invertEditableMeshNormals(editableMeshSource ?? { faces: [], halfEdges: [], vertices: [] }));
+        commitMeshTopology(invertEditableMeshNormals(editableMeshSource ?? emptyEditableMesh()));
       }
     };
 
@@ -2217,15 +525,13 @@ export function ViewportCanvas({
     activeToolId,
     bevelState,
     brushEditHandleIds,
-    cancelExtrudePreview,
     editableMeshHandles,
     editableMeshSource,
     extrudeState,
     meshEditMode,
     meshEditSelectionIds,
     selectedMeshNode,
-    selectedNode,
-    updateExtrudeAxisLock
+    selectedNode
   ]);
 
   const updateBevelPreview = (clientX: number, clientY: number, bounds: DOMRect) => {
@@ -2246,10 +552,10 @@ export function ViewportCanvas({
       return;
     }
 
-    const width = dotVec3(
-      subVec3(vec3(point.x, point.y, point.z), bevelState.startPoint),
-      bevelState.dragDirection
-    );
+    const width =
+      (point.x - bevelState.startPoint.x) * bevelState.dragDirection.x +
+      (point.y - bevelState.startPoint.y) * bevelState.dragDirection.y +
+      (point.z - bevelState.startPoint.z) * bevelState.dragDirection.z;
 
     setBevelState((currentState) => {
       if (!currentState) {
@@ -2263,8 +569,7 @@ export function ViewportCanvas({
           width,
           currentState.steps,
           currentState.profile
-        ) ??
-        currentState.previewMesh;
+        ) ?? currentState.previewMesh;
 
       return {
         ...currentState,
@@ -2436,7 +741,7 @@ export function ViewportCanvas({
       const nextDragPlane = createBrushCreateDragPlane(
         cameraRef.current!,
         nextDirection,
-        addFaceOffset(nextState.handle.position, nextDirection, nextState.handle.kind === "face" ? 0.42 : 0.3)
+        resolveExtrudeAnchor(nextState.handle.position, nextDirection, nextState.handle.kind)
       );
       const point = projectPointerToThreePlane(
         pointer.x + bounds.left,
@@ -2625,15 +930,11 @@ export function ViewportCanvas({
     setBrushCreateState(null);
   };
 
-  const handlePointerDown: React.PointerEventHandler<HTMLDivElement> = (event) => {
+  const handlePointerDown: PointerEventHandler<HTMLDivElement> = (event) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     pointerPositionRef.current = new Vector2(event.clientX - bounds.left, event.clientY - bounds.top);
 
-    if (extrudeState) {
-      return;
-    }
-
-    if (bevelState) {
+    if (extrudeState || bevelState) {
       return;
     }
 
@@ -2646,11 +947,10 @@ export function ViewportCanvas({
       return;
     }
 
-    const point = new Vector2(event.clientX - bounds.left, event.clientY - bounds.top);
-    marqueeOriginRef.current = point;
+    marqueeOriginRef.current = new Vector2(event.clientX - bounds.left, event.clientY - bounds.top);
   };
 
-  const handlePointerMove: React.PointerEventHandler<HTMLDivElement> = (event) => {
+  const handlePointerMove: PointerEventHandler<HTMLDivElement> = (event) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     pointerPositionRef.current = new Vector2(event.clientX - bounds.left, event.clientY - bounds.top);
 
@@ -2677,9 +977,8 @@ export function ViewportCanvas({
 
     const point = new Vector2(event.clientX - bounds.left, event.clientY - bounds.top);
     const origin = marqueeOriginRef.current;
-    const distance = point.distanceTo(origin);
 
-    if (!marquee && distance < 4) {
+    if (!marquee && point.distanceTo(origin) < 4) {
       return;
     }
 
@@ -2690,7 +989,7 @@ export function ViewportCanvas({
     });
   };
 
-  const handlePointerUp: React.PointerEventHandler<HTMLDivElement> = (event) => {
+  const handlePointerUp: PointerEventHandler<HTMLDivElement> = (event) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     pointerPositionRef.current = new Vector2(event.clientX - bounds.left, event.clientY - bounds.top);
 
@@ -2814,19 +1113,7 @@ export function ViewportCanvas({
           cameraRef.current = state.camera as PerspectiveCamera;
         }}
         onPointerMissed={() => {
-          if (activeToolId === "brush") {
-            return;
-          }
-
-          if (extrudeState) {
-            return;
-          }
-
-          if (bevelState) {
-            return;
-          }
-
-          if (marqueeOriginRef.current || marquee) {
+          if (activeToolId === "brush" || extrudeState || bevelState || marqueeOriginRef.current || marquee) {
             return;
           }
 
@@ -2853,7 +1140,10 @@ export function ViewportCanvas({
           shadow-mapSize-width={2048}
           shadow-normalBias={0.045}
         />
-        <EditorCameraRig controlsEnabled={!marquee && !transformDragging && !brushCreateState && !bevelState && !extrudeState} viewport={viewport} />
+        <EditorCameraRig
+          controlsEnabled={!marquee && !transformDragging && !brushCreateState && !bevelState && !extrudeState}
+          viewport={viewport}
+        />
         <ConstructionGrid activeToolId={activeToolId} onPlaceAsset={onPlaceAsset} viewport={viewport} />
         <axesHelper args={[3]} />
         <ScenePreview
@@ -2950,419 +1240,20 @@ export function ViewportCanvas({
   );
 }
 
-function objectToTransform(object: Object3D): Transform {
-  return {
-    position: vec3(object.position.x, object.position.y, object.position.z),
-    rotation: vec3(object.rotation.x, object.rotation.y, object.rotation.z),
-    scale: vec3(object.scale.x, object.scale.y, object.scale.z)
-  };
+function emptyEditableMesh(): EditableMesh {
+  return { faces: [], halfEdges: [], vertices: [] };
 }
 
-function resolveExtrudeDirection(state: ExtrudeGestureState): Vec3 {
-  if (state.handle.kind === "face" || !state.axisLock) {
-    return vec3(state.normal.x, state.normal.y, state.normal.z);
-  }
-
-  const axisVector =
-    state.axisLock === "x"
-      ? vec3(1, 0, 0)
-      : state.axisLock === "y"
-        ? vec3(0, 1, 0)
-        : vec3(0, 0, 1);
-  const alignment = dotVec3(state.normal, axisVector);
-  const direction = alignment >= 0 ? axisVector : scaleVec3(axisVector, -1);
-
-  return vec3(direction.x, direction.y, direction.z);
-}
-
-function axisLockColor(axis: "x" | "y" | "z") {
-  if (axis === "x") {
-    return "#f87171";
-  }
-
-  if (axis === "y") {
-    return "#4ade80";
-  }
-
-  return "#60a5fa";
-}
-
-function createScreenRect(origin: Vector2, current: Vector2) {
-  return {
-    height: Math.abs(current.y - origin.y),
-    left: Math.min(origin.x, current.x),
-    top: Math.min(origin.y, current.y),
-    width: Math.abs(current.x - origin.x)
-  };
-}
-
-function intersectsSelectionRect(
-  object: Mesh,
-  camera: PerspectiveCamera,
-  viewportBounds: DOMRect,
-  selectionRect: ReturnType<typeof createScreenRect>
-): boolean {
-  tempBox.setFromObject(object);
-
-  if (tempBox.isEmpty()) {
-    return false;
-  }
-
-  const screenRect = projectBoxToScreenRect(tempBox, camera, viewportBounds);
-  return rectsIntersect(screenRect, selectionRect);
-}
-
-function projectBoxToScreenRect(box: Box3, camera: PerspectiveCamera, viewportBounds: DOMRect) {
-  const min = box.min;
-  const max = box.max;
-  const corners = [
-    [min.x, min.y, min.z],
-    [min.x, min.y, max.z],
-    [min.x, max.y, min.z],
-    [min.x, max.y, max.z],
-    [max.x, min.y, min.z],
-    [max.x, min.y, max.z],
-    [max.x, max.y, min.z],
-    [max.x, max.y, max.z]
-  ];
-
-  let left = Number.POSITIVE_INFINITY;
-  let right = Number.NEGATIVE_INFINITY;
-  let top = Number.POSITIVE_INFINITY;
-  let bottom = Number.NEGATIVE_INFINITY;
-
-  corners.forEach(([x, y, z]) => {
-    projectedPoint.set(x, y, z).project(camera);
-    const screenX = ((projectedPoint.x + 1) * 0.5) * viewportBounds.width;
-    const screenY = ((1 - projectedPoint.y) * 0.5) * viewportBounds.height;
-
-    left = Math.min(left, screenX);
-    right = Math.max(right, screenX);
-    top = Math.min(top, screenY);
-    bottom = Math.max(bottom, screenY);
-  });
-
-  return {
-    height: Math.max(0, bottom - top),
-    left,
-    top,
-    width: Math.max(0, right - left)
-  };
-}
-
-function rectsIntersect(
-  left: ReturnType<typeof createScreenRect>,
-  right: ReturnType<typeof createScreenRect>
+function resolveExtrudeAnchor(
+  position: { x: number; y: number; z: number },
+  normal: { x: number; y: number; z: number },
+  kind: "edge" | "face"
 ) {
-  return !(
-    left.left + left.width < right.left ||
-    right.left + right.width < left.left ||
-    left.top + left.height < right.top ||
-    right.top + right.height < left.top
-  );
-}
+  const distance = kind === "face" ? 0.42 : 0.3;
 
-function createIndexedGeometry(positions: number[], indices?: number[]) {
-  const geometry = new BufferGeometry();
-  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
-
-  if (indices) {
-    geometry.setIndex(indices);
-  }
-
-  return geometry;
-}
-
-function addFaceOffset(origin: Vec3, normal: Vec3, distance: number): Vec3 {
-  return vec3(origin.x + normal.x * distance, origin.y + normal.y * distance, origin.z + normal.z * distance);
-}
-
-function projectLocalPointToScreen(
-  point: Vec3,
-  node: GeometryNode,
-  camera: PerspectiveCamera,
-  viewportBounds: DOMRect
-) {
-  const worldPoint = new Vector3(point.x, point.y, point.z)
-    .multiply(new Vector3(node.transform.scale.x, node.transform.scale.y, node.transform.scale.z))
-    .applyEuler(new Euler(node.transform.rotation.x, node.transform.rotation.y, node.transform.rotation.z, "XYZ"))
-    .add(new Vector3(node.transform.position.x, node.transform.position.y, node.transform.position.z))
-    .project(camera);
-
-  return {
-    x: ((worldPoint.x + 1) * 0.5) * viewportBounds.width,
-    y: ((1 - worldPoint.y) * 0.5) * viewportBounds.height
-  };
-}
-
-function resolveBrushCreateSurfaceHit(
-  clientX: number,
-  clientY: number,
-  viewportBounds: DOMRect,
-  camera: PerspectiveCamera,
-  raycaster: Raycaster,
-  meshObjects: Map<string, Mesh>,
-  gridElevation: number
-): { normal: Vec3; point: Vec3 } | undefined {
-  const ndc = new Vector2(
-    ((clientX - viewportBounds.left) / viewportBounds.width) * 2 - 1,
-    -(((clientY - viewportBounds.top) / viewportBounds.height) * 2 - 1)
-  );
-  raycaster.setFromCamera(ndc, camera);
-
-  const hit = raycaster.intersectObjects(Array.from(meshObjects.values()), false)[0];
-
-  if (hit) {
-    const worldNormal = hit.face
-      ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize()
-      : new Vector3(0, 1, 0);
-
-    return {
-      normal: vec3(worldNormal.x, worldNormal.y, worldNormal.z),
-      point: vec3(hit.point.x, hit.point.y, hit.point.z)
-    };
-  }
-
-  const point = raycaster.ray.intersectPlane(new Plane(new Vector3(0, 1, 0), -gridElevation), new Vector3());
-
-  if (!point) {
-    return undefined;
-  }
-
-  return {
-    normal: vec3(0, 1, 0),
-    point: vec3(point.x, point.y, point.z)
-  };
-}
-
-function createBrushCreateBasis(normal: Vec3): BrushCreateBasis {
-  const normalVector = new Vector3(normal.x, normal.y, normal.z).normalize();
-  const reference = Math.abs(normalVector.y) < 0.99 ? new Vector3(0, 1, 0) : new Vector3(0, 0, 1);
-  const u = new Vector3().crossVectors(reference, normalVector).normalize();
-  const v = new Vector3().crossVectors(u, normalVector).normalize();
-
-  return {
-    normal: vec3(normalVector.x, normalVector.y, normalVector.z),
-    u: vec3(u.x, u.y, u.z),
-    v: vec3(v.x, v.y, v.z)
-  };
-}
-
-function projectPointerToPlane(
-  clientX: number,
-  clientY: number,
-  viewportBounds: DOMRect,
-  camera: PerspectiveCamera,
-  raycaster: Raycaster,
-  anchor: Vec3,
-  normal: Vec3
-): Vec3 | undefined {
-  const plane = new Plane().setFromNormalAndCoplanarPoint(
-    new Vector3(normal.x, normal.y, normal.z),
-    new Vector3(anchor.x, anchor.y, anchor.z)
-  );
-  const point = projectPointerToThreePlane(clientX, clientY, viewportBounds, camera, raycaster, plane);
-
-  return point ? vec3(point.x, point.y, point.z) : undefined;
-}
-
-function projectPointerToThreePlane(
-  clientX: number,
-  clientY: number,
-  viewportBounds: DOMRect,
-  camera: PerspectiveCamera,
-  raycaster: Raycaster,
-  plane: Plane
-) {
-  const ndc = new Vector2(
-    ((clientX - viewportBounds.left) / viewportBounds.width) * 2 - 1,
-    -(((clientY - viewportBounds.top) / viewportBounds.height) * 2 - 1)
-  );
-  raycaster.setFromCamera(ndc, camera);
-  return raycaster.ray.intersectPlane(plane, new Vector3()) ?? undefined;
-}
-
-function measureBrushCreateBase(anchor: Vec3, basis: BrushCreateBasis, point: Vec3, snapSize: number) {
-  const delta = subVec3(point, anchor);
-
-  return {
-    depth: snapValue(dotVec3(delta, basis.v), snapSize),
-    width: snapValue(dotVec3(delta, basis.u), snapSize)
-  };
-}
-
-function computeBrushCreateCenter(anchor: Vec3, basis: BrushCreateBasis, width: number, depth: number, height: number): Vec3 {
   return vec3(
-    anchor.x + basis.u.x * (width * 0.5) + basis.v.x * (depth * 0.5) + basis.normal.x * (height * 0.5),
-    anchor.y + basis.u.y * (width * 0.5) + basis.v.y * (depth * 0.5) + basis.normal.y * (height * 0.5),
-    anchor.z + basis.u.z * (width * 0.5) + basis.v.z * (depth * 0.5) + basis.normal.z * (height * 0.5)
+    position.x + normal.x * distance,
+    position.y + normal.y * distance,
+    position.z + normal.z * distance
   );
-}
-
-function createBrushCreateDragPlane(camera: PerspectiveCamera, normal: Vec3, coplanarPoint: Vec3) {
-  const axis = new Vector3(normal.x, normal.y, normal.z).normalize();
-  const cameraDirection = camera.getWorldDirection(new Vector3());
-  let tangent = new Vector3().crossVectors(cameraDirection, axis);
-
-  if (tangent.lengthSq() <= 0.0001) {
-    tangent = new Vector3().crossVectors(new Vector3(0, 1, 0), axis);
-  }
-
-  if (tangent.lengthSq() <= 0.0001) {
-    tangent = new Vector3().crossVectors(new Vector3(1, 0, 0), axis);
-  }
-
-  const planeNormal = new Vector3().crossVectors(axis, tangent).normalize();
-
-  return new Plane().setFromNormalAndCoplanarPoint(
-    planeNormal,
-    new Vector3(coplanarPoint.x, coplanarPoint.y, coplanarPoint.z)
-  );
-}
-
-function buildBrushCreatePlacement(
-  state: Extract<BrushCreateState, { stage: "height" }>
-): { brush: Brush; transform: Transform } | undefined {
-  if (Math.abs(state.width) <= 0.0001 || Math.abs(state.depth) <= 0.0001 || Math.abs(state.height) <= 0.0001) {
-    return undefined;
-  }
-
-  const center = computeBrushCreateCenter(state.anchor, state.basis, state.width, state.depth, state.height);
-  const rotation = basisToEuler(state.basis);
-
-  return {
-    brush: createAxisAlignedBrushFromBounds({
-      x: { min: -Math.abs(state.width) * 0.5, max: Math.abs(state.width) * 0.5 },
-      y: { min: -Math.abs(state.height) * 0.5, max: Math.abs(state.height) * 0.5 },
-      z: { min: -Math.abs(state.depth) * 0.5, max: Math.abs(state.depth) * 0.5 }
-    }),
-    transform: {
-      ...makeTransform(center),
-      rotation
-    }
-  };
-}
-
-function basisToEuler(basis: BrushCreateBasis): Vec3 {
-  const matrix = new Matrix4().makeBasis(
-    new Vector3(basis.u.x, basis.u.y, basis.u.z),
-    new Vector3(basis.normal.x, basis.normal.y, basis.normal.z),
-    new Vector3(basis.v.x, basis.v.y, basis.v.z)
-  );
-  const quaternion = new Quaternion().setFromRotationMatrix(matrix);
-  const euler = new Euler().setFromQuaternion(quaternion, "XYZ");
-
-  return vec3(euler.x, euler.y, euler.z);
-}
-
-function buildBrushCreatePreviewPositions(state: BrushCreateState, snapSize: number): number[] {
-  const positions: number[] = [];
-  const base =
-    state.stage === "base"
-      ? measureBrushCreateBase(state.anchor, state.basis, state.currentPoint, snapSize)
-      : { depth: state.depth, width: state.width };
-  const baseCorners = buildBrushCreateCorners(state.anchor, state.basis, base.width, base.depth, 0);
-
-  pushLoopSegments(positions, baseCorners);
-
-  if (state.stage === "height" && Math.abs(state.height) > 0.0001) {
-    const topCorners = buildBrushCreateCorners(state.anchor, state.basis, state.width, state.depth, state.height);
-    pushLoopSegments(positions, topCorners);
-
-    for (let index = 0; index < baseCorners.length; index += 1) {
-      const bottom = baseCorners[index];
-      const top = topCorners[index];
-      positions.push(bottom.x, bottom.y, bottom.z, top.x, top.y, top.z);
-    }
-  }
-
-  return positions;
-}
-
-function buildBrushCreateCorners(anchor: Vec3, basis: BrushCreateBasis, width: number, depth: number, height: number): Vec3[] {
-  const widthOffset = vec3(basis.u.x * width, basis.u.y * width, basis.u.z * width);
-  const depthOffset = vec3(basis.v.x * depth, basis.v.y * depth, basis.v.z * depth);
-  const heightOffset = vec3(basis.normal.x * height, basis.normal.y * height, basis.normal.z * height);
-
-  return [
-    vec3(anchor.x + heightOffset.x, anchor.y + heightOffset.y, anchor.z + heightOffset.z),
-    vec3(
-      anchor.x + widthOffset.x + heightOffset.x,
-      anchor.y + widthOffset.y + heightOffset.y,
-      anchor.z + widthOffset.z + heightOffset.z
-    ),
-    vec3(
-      anchor.x + widthOffset.x + depthOffset.x + heightOffset.x,
-      anchor.y + widthOffset.y + depthOffset.y + heightOffset.y,
-      anchor.z + widthOffset.z + depthOffset.z + heightOffset.z
-    ),
-    vec3(
-      anchor.x + depthOffset.x + heightOffset.x,
-      anchor.y + depthOffset.y + heightOffset.y,
-      anchor.z + depthOffset.z + heightOffset.z
-    )
-  ];
-}
-
-function pushLoopSegments(positions: number[], points: Vec3[]) {
-  for (let index = 0; index < points.length; index += 1) {
-    const current = points[index];
-    const next = points[(index + 1) % points.length];
-    positions.push(current.x, current.y, current.z, next.x, next.y, next.z);
-  }
-}
-
-function rectContainsPoint(rect: ReturnType<typeof createScreenRect>, point: { x: number; y: number }) {
-  return (
-    point.x >= rect.left &&
-    point.x <= rect.left + rect.width &&
-    point.y >= rect.top &&
-    point.y <= rect.top + rect.height
-  );
-}
-
-function makeUndirectedPairKey(pair: [string, string]) {
-  return pair[0] < pair[1] ? `${pair[0]}:${pair[1]}` : `${pair[1]}:${pair[0]}`;
-}
-
-function findMatchingMeshEdgePair(
-  meshHandles: ReturnType<typeof createMeshEditHandles>,
-  brushHandle: BrushEditHandle,
-  epsilon = 0.001
-) {
-  if (!brushHandle.points || brushHandle.points.length !== 2) {
-    return undefined;
-  }
-
-  return meshHandles
-    .filter((handle) => handle.vertexIds.length === 2 && handle.points?.length === 2)
-    .find((handle) => segmentsMatch(brushHandle.points!, handle.points!, epsilon))
-    ?.vertexIds as [string, string] | undefined;
-}
-
-function segmentsMatch(left: Vec3[], right: Vec3[], epsilon: number) {
-  return (
-    (pointsMatch(left[0], right[0], epsilon) && pointsMatch(left[1], right[1], epsilon)) ||
-    (pointsMatch(left[0], right[1], epsilon) && pointsMatch(left[1], right[0], epsilon))
-  );
-}
-
-function pointsMatch(left: Vec3, right: Vec3, epsilon: number) {
-  return (
-    Math.abs(left.x - right.x) <= epsilon &&
-    Math.abs(left.y - right.y) <= epsilon &&
-    Math.abs(left.z - right.z) <= epsilon
-  );
-}
-
-function rejectVec3FromAxis(vector: Vec3, axis: Vec3) {
-  return subVec3(vector, {
-    x: axis.x * dotVec3(vector, axis),
-    y: axis.y * dotVec3(vector, axis),
-    z: axis.z * dotVec3(vector, axis)
-  });
-}
-
-function vec3LengthSquared(vector: Vec3) {
-  return vector.x * vector.x + vector.y * vector.y + vector.z * vector.z;
 }
