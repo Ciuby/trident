@@ -1,15 +1,22 @@
 import type { MeshEditMode } from "@/viewport/editing";
 import { FloatingPanel } from "@/components/editor-shell/FloatingPanel";
 import {
+  BevelIcon,
+  CutMeshIcon,
+  DeleteFacesIcon,
   DeflateIcon,
   EdgeModeIcon,
   FaceModeIcon,
+  ExtrudeIcon,
+  FillFaceIcon,
   FlipNormalsIcon,
   InflateIcon,
   LowerTopIcon,
+  MergeFacesIcon,
   RaiseTopIcon,
   RotateModeIcon,
   ScaleModeIcon,
+  SubdivideIcon,
   TranslateModeIcon,
   VertexModeIcon
 } from "@/components/editor-shell/icons";
@@ -18,25 +25,39 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 
 export function MeshEditToolBars({
+  onBevel,
+  onDelete,
   meshEditMode,
+  onExtrude,
+  onFillFace,
   onDeflate,
   onInflate,
   onInvertNormals,
   onLowerTop,
+  onMerge,
   onRaiseTop,
   onSetMeshEditMode,
+  onSubdivide,
+  onCut,
   onSetTransformMode,
   selectedGeometry,
   selectedMesh,
   transformMode
 }: {
+  onBevel: () => void;
+  onDelete: () => void;
   meshEditMode: MeshEditMode;
+  onExtrude: () => void;
+  onFillFace: () => void;
   onDeflate: () => void;
   onInflate: () => void;
   onInvertNormals: () => void;
   onLowerTop: () => void;
+  onMerge: () => void;
   onRaiseTop: () => void;
   onSetMeshEditMode: (mode: MeshEditMode) => void;
+  onSubdivide: () => void;
+  onCut: () => void;
   onSetTransformMode: (mode: "rotate" | "scale" | "translate") => void;
   selectedGeometry: boolean;
   selectedMesh: boolean;
@@ -58,6 +79,15 @@ export function MeshEditToolBars({
         <MeshBarButton disabled={!selectedMesh} icon={DeflateIcon} onClick={onDeflate} tooltip="Deflate" />
         <MeshBarButton disabled={!selectedMesh} icon={RaiseTopIcon} onClick={onRaiseTop} tooltip="Raise top" />
         <MeshBarButton disabled={!selectedMesh} icon={LowerTopIcon} onClick={onLowerTop} tooltip="Lower top" />
+        <MeshBarButton disabled={!selectedGeometry || meshEditMode !== "edge"} icon={BevelIcon} onClick={onBevel} tooltip="Bevel" />
+      </FloatingPanel>
+      <FloatingPanel className="flex h-10 items-center gap-1 p-1.5">
+        <MeshBarButton disabled={!selectedGeometry || meshEditMode === "vertex"} icon={ExtrudeIcon} onClick={onExtrude} tooltip="Extrude" />
+        <MeshBarButton disabled={!selectedGeometry || meshEditMode === "vertex"} icon={CutMeshIcon} onClick={onCut} tooltip={meshEditMode === "face" ? "Face cut" : "Edge cut"} />
+        <MeshBarButton disabled={!selectedGeometry || meshEditMode !== "face"} icon={MergeFacesIcon} onClick={onMerge} tooltip="Merge faces" />
+        <MeshBarButton disabled={!selectedGeometry} icon={FillFaceIcon} onClick={onFillFace} tooltip={meshEditMode === "vertex" ? "Fill from vertices" : "Fill from edges"} />
+        <MeshBarButton disabled={!selectedGeometry || meshEditMode !== "face"} icon={SubdivideIcon} onClick={onSubdivide} tooltip="Subdivide face" />
+        <MeshBarButton disabled={!selectedGeometry || meshEditMode !== "face"} icon={DeleteFacesIcon} onClick={onDelete} tooltip="Delete faces" />
         <MeshBarButton disabled={!selectedGeometry} icon={FlipNormalsIcon} onClick={onInvertNormals} tooltip="Invert normals" />
       </FloatingPanel>
     </div>

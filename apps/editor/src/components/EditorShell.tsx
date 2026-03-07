@@ -10,6 +10,7 @@ import { StatusBar } from "@/components/editor-shell/StatusBar";
 import { ToolPalette } from "@/components/editor-shell/ToolPalette";
 import { ViewportCanvas } from "@/viewport/ViewportCanvas";
 import type { MeshEditMode } from "@/viewport/editing";
+import type { MeshEditToolbarActionRequest } from "@/viewport/types";
 
 type EditorShellProps = {
   activeRightPanel: "inspector" | "materials";
@@ -20,6 +21,7 @@ type EditorShellProps = {
   gridSnapValues: readonly GridSnapValue[];
   jobs: WorkerJob[];
   meshEditMode: MeshEditMode;
+  meshEditToolbarAction?: MeshEditToolbarActionRequest;
   onAssignMaterial: (materialId: string) => void;
   onClipSelection: (axis: TransformAxis) => void;
   onCommitMeshTopology: (nodeId: string, mesh: EditableMesh) => void;
@@ -33,6 +35,7 @@ type EditorShellProps = {
   onFocusNode: (nodeId: string) => void;
   onLoadWhmap: () => void;
   onInvertSelectionNormals: () => void;
+  onMeshEditToolbarAction: (action: MeshEditToolbarActionRequest["kind"]) => void;
   onPlaceEntity: (type: "spawn" | "light") => void;
   onMeshInflate: (factor: number) => void;
   onMirrorSelection: (axis: TransformAxis) => void;
@@ -76,6 +79,7 @@ export function EditorShell({
   gridSnapValues,
   jobs,
   meshEditMode,
+  meshEditToolbarAction,
   onAssignMaterial,
   onClipSelection,
   onCommitMeshTopology,
@@ -89,6 +93,7 @@ export function EditorShell({
   onFocusNode,
   onLoadWhmap,
   onInvertSelectionNormals,
+  onMeshEditToolbarAction,
   onPlaceEntity,
   onMeshInflate,
   onMirrorSelection,
@@ -159,6 +164,7 @@ export function EditorShell({
         <ViewportCanvas
           activeToolId={activeToolId}
           meshEditMode={meshEditMode}
+          meshEditToolbarAction={meshEditToolbarAction}
           onClearSelection={onClearSelection}
           onCommitMeshTopology={onCommitMeshTopology}
           onFocusNode={onFocusNode}
@@ -186,6 +192,7 @@ export function EditorShell({
           meshEditMode={meshEditMode}
           onInvertSelectionNormals={onInvertSelectionNormals}
           onLowerTop={() => onExtrudeSelection("y", -1)}
+          onMeshEditToolbarAction={onMeshEditToolbarAction}
           onMeshInflate={onMeshInflate}
           onRaiseTop={() => onExtrudeSelection("y", 1)}
           onSetMeshEditMode={onSetMeshEditMode}

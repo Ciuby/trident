@@ -5,9 +5,25 @@ import type { ToolId } from "@web-hammer/tool-system";
 import type { BrushExtrudeHandle, MeshEditMode, MeshExtrudeHandle } from "@/viewport/editing";
 import type { Plane, Vector2 } from "three";
 
+export type MeshEditToolbarAction =
+  | "bevel"
+  | "cut"
+  | "delete"
+  | "extrude"
+  | "fill-face"
+  | "invert-normals"
+  | "merge"
+  | "subdivide";
+
+export type MeshEditToolbarActionRequest = {
+  id: number;
+  kind: MeshEditToolbarAction;
+};
+
 export type ViewportCanvasProps = {
   activeToolId: ToolId;
   meshEditMode: MeshEditMode;
+  meshEditToolbarAction?: MeshEditToolbarActionRequest;
   onClearSelection: () => void;
   onCommitMeshTopology: (nodeId: string, mesh: EditableMesh) => void;
   onFocusNode: (nodeId: string) => void;

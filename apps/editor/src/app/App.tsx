@@ -52,11 +52,13 @@ import { useAppHotkeys } from "@/app/hooks/useAppHotkeys";
 import { useEditorSubscriptions } from "@/app/hooks/useEditorSubscriptions";
 import { useExportWorker } from "@/app/hooks/useExportWorker";
 import { clampSnapSize, resolveViewportSnapSize } from "@/viewport/utils/snap";
+import type { MeshEditToolbarActionRequest } from "@/viewport/types";
 
 export function App() {
   const [editor] = useState(() => createEditorCore(createSeedSceneDocument()));
   const [activeToolId, setActiveToolId] = useState<ToolId>(defaultToolId);
   const [meshEditMode, setMeshEditMode] = useState<MeshEditMode>("vertex");
+  const [meshEditToolbarAction, setMeshEditToolbarAction] = useState<MeshEditToolbarActionRequest>();
   const [transformMode, setTransformMode] = useState<"rotate" | "scale" | "translate">("translate");
   const [workerManager] = useState(() => createWorkerTaskManager());
   const [workerJobs, setWorkerJobs] = useState<WorkerJob[]>([]);
@@ -117,6 +119,13 @@ export function App() {
 
   const handleSetSnapEnabled = (enabled: boolean) => {
     uiStore.viewport.grid.enabled = enabled;
+  };
+
+  const handleMeshEditToolbarAction = (kind: MeshEditToolbarActionRequest["kind"]) => {
+    setMeshEditToolbarAction((current) => ({
+      id: (current?.id ?? 0) + 1,
+      kind
+    }));
   };
 
   const handleUpdateNodeTransform = (
@@ -555,6 +564,7 @@ export function App() {
         editor={editor}
         gridSnapValues={gridSnapValues}
         jobs={[...workerJobs, ...exportJobs]}
+        meshEditToolbarAction={meshEditToolbarAction}
         onInvertSelectionNormals={handleInvertSelectionNormals}
         onAssignMaterial={handleAssignMaterial}
         onClipSelection={handleClipSelection}
@@ -568,6 +578,7 @@ export function App() {
         onExtrudeSelection={handleExtrudeSelection}
         onFocusNode={handleFocusNode}
         onLoadWhmap={handleLoadWhmap}
+        onMeshEditToolbarAction={handleMeshEditToolbarAction}
         onMeshInflate={handleMeshInflate}
         onMirrorSelection={handleMirrorSelection}
         onPlaceAsset={handlePlaceAsset}

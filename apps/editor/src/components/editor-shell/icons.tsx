@@ -149,6 +149,60 @@ export function FlipNormalsIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function BevelIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <path d="M6 16 11 8h7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      <path d="M6 16h10l2-2" opacity="0.34" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+export function MergeFacesIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <path d="M5.5 8.5 10.5 6l4.5 2.5-5 2.5-4.5-2.5ZM14 10.5l4.5-2.3 0 7-4.5 2.3v-7Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.6" />
+      <path d="M10 11h4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+export function FillFaceIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <path d="M7 8.5 17 7l-2.5 9L6 17.5Z" fill="currentColor" fillOpacity="0.24" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.6" />
+      <path d="M9 12h6" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+export function CutMeshIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <path d="M6 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm12-8a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" stroke="currentColor" strokeWidth="1.6" />
+      <path d="m7.5 14.8 9-5.6M9 7l6 10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+export function SubdivideIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <path d="M6 7h12v10H6z" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M12 7v10M6 12h12" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+export function DeleteFacesIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <path d="M7 8h10l-1 10H8L7 8Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.6" />
+      <path d="M9 8V6h6v2M10 11v4M14 11v4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
 export function TranslateModeIcon(props: SVGProps<SVGSVGElement>) {
   return <Move3d {...props} />;
 }

@@ -84,12 +84,14 @@ import type {
   FaceSubdivisionState,
   LastMeshEditAction,
   MarqueeState,
+  MeshEditToolbarAction,
   ViewportCanvasProps
 } from "@/viewport/types";
 
 export function ViewportCanvas({
   activeToolId,
   meshEditMode,
+  meshEditToolbarAction,
   onClearSelection,
   onCommitMeshTopology,
   onFocusNode,
@@ -659,6 +661,110 @@ export function ViewportCanvas({
     }
   };
 
+  const runMeshEditToolbarAction = (action: MeshEditToolbarAction) => {
+    if (activeToolId !== "mesh-edit" || !selectedNode || bevelState || extrudeState || faceCutState || faceSubdivisionState) {
+      return;
+    }
+
+    switch (action) {
+      case "bevel": {
+        if (meshEditMode === "edge") {
+          startBevelOperation();
+        }
+        return;
+      }
+      case "cut": {
+        if (meshEditMode === "face") {
+          startFaceCutOperation();
+          return;
+        }
+
+        if (meshEditMode === "edge") {
+          const selectedEdges = resolveSelectedEditableMeshEdgePairs();
+
+          if (selectedEdges.length === 2) {
+            commitMeshTopology(cutEditableMeshBetweenEdges(editableMeshSource ?? emptyEditableMesh(), selectedEdges));
+          }
+        }
+        return;
+      }
+      case "delete": {
+        if (meshEditMode === "face") {
+          const selectedFaces = resolveSelectedEditableMeshFaceIds();
+
+          if (selectedFaces.length > 0) {
+            commitMeshTopology(deleteEditableMeshFaces(editableMeshSource ?? emptyEditableMesh(), selectedFaces));
+          }
+        }
+        return;
+      }
+      case "extrude": {
+        if (meshEditMode !== "vertex") {
+          startExtrudeOperation();
+        }
+        return;
+      }
+      case "fill-face": {
+        if (meshEditMode === "edge") {
+          const selectedEdges = resolveSelectedEditableMeshEdgePairs();
+
+          if (selectedEdges.length >= 3) {
+            commitMeshTopology(fillEditableMeshFaceFromEdges(editableMeshSource ?? emptyEditableMesh(), selectedEdges));
+          }
+          return;
+        }
+
+        if (meshEditMode === "vertex") {
+          const selectedVertices = resolveSelectedEditableMeshVertexIds();
+
+          if (selectedVertices.length >= 3) {
+            commitMeshTopology(fillEditableMeshFaceFromVertices(editableMeshSource ?? emptyEditableMesh(), selectedVertices));
+          }
+        }
+        return;
+      }
+      case "invert-normals": {
+        if (meshEditMode === "face") {
+          const selectedFaces = resolveSelectedEditableMeshFaceIds();
+
+          if (selectedFaces.length > 0) {
+            commitMeshTopology(invertEditableMeshNormals(editableMeshSource ?? emptyEditableMesh(), selectedFaces));
+            return;
+          }
+        }
+
+        commitMeshTopology(invertEditableMeshNormals(editableMeshSource ?? emptyEditableMesh()));
+        return;
+      }
+      case "merge": {
+        if (meshEditMode === "face") {
+          const selectedFaces = resolveSelectedEditableMeshFaceIds();
+
+          if (selectedFaces.length > 1) {
+            commitMeshTopology(mergeEditableMeshFaces(editableMeshSource ?? emptyEditableMesh(), selectedFaces));
+          }
+        }
+        return;
+      }
+      case "subdivide": {
+        if (meshEditMode === "face") {
+          startFaceSubdivisionOperation();
+        }
+        return;
+      }
+      default:
+        return;
+    }
+  };
+
+  useEffect(() => {
+    if (!meshEditToolbarAction) {
+      return;
+    }
+
+    runMeshEditToolbarAction(meshEditToolbarAction.kind);
+  }, [meshEditToolbarAction?.id]);
+
   useEffect(() => {
     const handleWheel = (event: WheelEvent) => {
       if (!bevelState) {
@@ -817,91 +923,56 @@ export function ViewportCanvas({
       }
 
       if ((event.key === "Delete" || event.key === "Backspace") && meshEditMode === "face") {
-        const selectedFaces = resolveSelectedEditableMeshFaceIds();
-
-        if (selectedFaces.length > 0) {
-          event.preventDefault();
-          commitMeshTopology(deleteEditableMeshFaces(editableMeshSource ?? emptyEditableMesh(), selectedFaces));
-        }
+        event.preventDefault();
+        runMeshEditToolbarAction("delete");
         return;
       }
 
       if (event.key.toLowerCase() === "m" && meshEditMode === "face") {
-        const selectedFaces = resolveSelectedEditableMeshFaceIds();
-
-        if (selectedFaces.length > 1) {
-          event.preventDefault();
-          commitMeshTopology(mergeEditableMeshFaces(editableMeshSource ?? emptyEditableMesh(), selectedFaces));
-        }
+        event.preventDefault();
+        runMeshEditToolbarAction("merge");
         return;
       }
 
       if (event.shiftKey && event.key.toLowerCase() === "k" && meshEditMode === "face") {
         event.preventDefault();
-        startFaceCutOperation();
+        runMeshEditToolbarAction("cut");
         return;
       }
 
       if (!event.shiftKey && event.key.toLowerCase() === "d" && meshEditMode === "face") {
         event.preventDefault();
-        startFaceSubdivisionOperation();
+        runMeshEditToolbarAction("subdivide");
         return;
       }
 
       if (!event.shiftKey && event.key.toLowerCase() === "k" && meshEditMode === "edge") {
-        const selectedEdges = resolveSelectedEditableMeshEdgePairs();
-
-        if (selectedEdges.length === 2) {
-          event.preventDefault();
-          commitMeshTopology(cutEditableMeshBetweenEdges(editableMeshSource ?? emptyEditableMesh(), selectedEdges));
-        }
+        event.preventDefault();
+        runMeshEditToolbarAction("cut");
         return;
       }
 
       if (event.shiftKey && event.key.toLowerCase() === "f") {
-        if (meshEditMode === "edge") {
-          const selectedEdges = resolveSelectedEditableMeshEdgePairs();
-
-          if (selectedEdges.length >= 3) {
-            event.preventDefault();
-            commitMeshTopology(fillEditableMeshFaceFromEdges(editableMeshSource ?? emptyEditableMesh(), selectedEdges));
-          }
-        } else if (meshEditMode === "vertex") {
-          const selectedVertices = resolveSelectedEditableMeshVertexIds();
-
-          if (selectedVertices.length >= 3) {
-            event.preventDefault();
-            commitMeshTopology(fillEditableMeshFaceFromVertices(editableMeshSource ?? emptyEditableMesh(), selectedVertices));
-          }
-        }
+        event.preventDefault();
+        runMeshEditToolbarAction("fill-face");
         return;
       }
 
       if (event.key.toLowerCase() === "b" && meshEditMode === "edge") {
         event.preventDefault();
-        startBevelOperation();
+        runMeshEditToolbarAction("bevel");
         return;
       }
 
       if (event.key.toLowerCase() === "x" && meshEditMode !== "vertex") {
         event.preventDefault();
-        startExtrudeOperation();
+        runMeshEditToolbarAction("extrude");
         return;
       }
 
       if (event.key.toLowerCase() === "n") {
         event.preventDefault();
-
-        if (meshEditMode === "face") {
-          const selectedFaces = resolveSelectedEditableMeshFaceIds();
-
-          if (selectedFaces.length > 0) {
-            commitMeshTopology(invertEditableMeshNormals(editableMeshSource ?? emptyEditableMesh(), selectedFaces));
-            return;
-          }
-        }
-
-        commitMeshTopology(invertEditableMeshNormals(editableMeshSource ?? emptyEditableMesh()));
+        runMeshEditToolbarAction("invert-normals");
       }
     };
 

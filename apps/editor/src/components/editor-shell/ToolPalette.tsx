@@ -10,6 +10,7 @@ type ToolPaletteProps = {
   currentSnapSize: GridSnapValue;
   gridSnapValues: readonly GridSnapValue[];
   meshEditMode: MeshEditMode;
+  onMeshEditToolbarAction: (action: "bevel" | "cut" | "delete" | "extrude" | "fill-face" | "invert-normals" | "merge" | "subdivide") => void;
   onInvertSelectionNormals: () => void;
   onLowerTop: () => void;
   onMeshInflate: (factor: number) => void;
@@ -31,6 +32,7 @@ export function ToolPalette({
   currentSnapSize,
   gridSnapValues,
   meshEditMode,
+  onMeshEditToolbarAction,
   onInvertSelectionNormals,
   onLowerTop,
   onMeshInflate,
@@ -54,13 +56,20 @@ export function ToolPalette({
       </div>
       {activeToolId === "mesh-edit" ? (
         <MeshEditToolBars
+          onBevel={() => onMeshEditToolbarAction("bevel")}
+          onCut={() => onMeshEditToolbarAction("cut")}
+          onDelete={() => onMeshEditToolbarAction("delete")}
+          onExtrude={() => onMeshEditToolbarAction("extrude")}
           meshEditMode={meshEditMode}
+          onFillFace={() => onMeshEditToolbarAction("fill-face")}
           onDeflate={() => onMeshInflate(0.9)}
           onInflate={() => onMeshInflate(1.1)}
-          onInvertNormals={onInvertSelectionNormals}
+          onInvertNormals={() => onMeshEditToolbarAction("invert-normals")}
           onLowerTop={onLowerTop}
+          onMerge={() => onMeshEditToolbarAction("merge")}
           onRaiseTop={onRaiseTop}
           onSetMeshEditMode={onSetMeshEditMode}
+          onSubdivide={() => onMeshEditToolbarAction("subdivide")}
           onSetTransformMode={onSetTransformMode}
           selectedGeometry={selectedGeometry}
           selectedMesh={selectedMesh}
