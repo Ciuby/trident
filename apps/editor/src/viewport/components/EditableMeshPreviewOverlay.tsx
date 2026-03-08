@@ -1,7 +1,7 @@
-import { triangulateEditableMesh } from "@web-hammer/geometry-kernel";
-import { type EditableMesh, type GeometryNode } from "@web-hammer/shared";
+import { getFaceVertices, triangulateMeshFace } from "@web-hammer/geometry-kernel";
+import { type EditableMesh, type GeometryNode, type Vec3 } from "@web-hammer/shared";
 import { useEffect, useMemo } from "react";
-import { BufferGeometry, Float32BufferAttribute, FrontSide } from "three";
+import { BufferGeometry, DoubleSide, Float32BufferAttribute } from "three";
 import { NodeTransformGroup } from "@/viewport/components/NodeTransformGroup";
 import { createIndexedGeometry } from "@/viewport/utils/geometry";
 
@@ -12,16 +12,44 @@ export function EditableMeshPreviewOverlay({
   mesh: EditableMesh;
   node: GeometryNode;
 }) {
-  const triangulated = useMemo(() => triangulateEditableMesh(mesh), [mesh]);
   const geometry = useMemo(() => {
-    if (!triangulated.valid) {
+    const faceData = mesh.faces
+      .map((face) => {
+        const triangulated = triangulateMeshFace(mesh, face.id);
+
+        if (!triangulated) {
+          return undefined;
+        }
+
+        return {
+          indices: triangulated.indices,
+          positions: getFaceVertices(mesh, face.id).map((vertex) => vertex.position)
+        };
+      })
+      .filter((face): face is { indices: number[]; positions: Vec3[] } => Boolean(face));
+
+    if (faceData.length === 0) {
       return undefined;
     }
 
-    const nextGeometry = createIndexedGeometry(triangulated.positions, triangulated.indices);
+    const positions: number[] = [];
+    const indices: number[] = [];
+    let vertexOffset = 0;
+
+    faceData.forEach((face) => {
+      face.positions.forEach((position) => {
+        positions.push(position.x, position.y, position.z);
+      });
+      face.indices.forEach((index) => {
+        indices.push(vertexOffset + index);
+      });
+      vertexOffset += face.positions.length;
+    });
+
+    const nextGeometry = createIndexedGeometry(positions, indices);
     nextGeometry.computeVertexNormals();
     return nextGeometry;
-  }, [triangulated]);
+  }, [mesh]);
   const wireframeGeometry = useMemo(() => {
     const verticesById = new Map(mesh.vertices.map((vertex) => [vertex.id, vertex.position] as const));
     const segments: number[] = [];
@@ -90,7 +118,7 @@ export function EditableMeshPreviewOverlay({
           polygonOffset
           polygonOffsetFactor={-2}
           polygonOffsetUnits={-2}
-          side={FrontSide}
+          side={DoubleSide}
           transparent
         />
       </mesh>

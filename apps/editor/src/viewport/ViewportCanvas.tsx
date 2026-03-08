@@ -7,6 +7,7 @@ import {
   deleteEditableMeshFaces,
   extrudeEditableMeshEdge,
   extrudeEditableMeshFace,
+  extrudeEditableMeshFaces,
   fillEditableMeshFaceFromEdges,
   fillEditableMeshFaceFromVertices,
   invertEditableMeshNormals,
@@ -462,7 +463,7 @@ export function ViewportCanvas({
       if (action.handleKind === "face") {
         const selectedFaces = resolveSelectedEditableMeshFaceIds();
 
-        if (selectedFaces.length !== 1) {
+        if (selectedFaces.length === 0) {
           return;
         }
 
@@ -484,7 +485,10 @@ export function ViewportCanvas({
         }
 
         if (selectedMeshNode) {
-          const nextMesh = extrudeEditableMeshFace(selectedMeshNode.data, selectedFaces[0], action.amount);
+          const nextMesh =
+            selectedFaces.length === 1
+              ? extrudeEditableMeshFace(selectedMeshNode.data, selectedFaces[0], action.amount)
+              : extrudeEditableMeshFaces(selectedMeshNode.data, selectedFaces, action.amount);
 
           if (nextMesh) {
             onUpdateMeshData(selectedMeshNode.id, nextMesh, selectedMeshNode.data);
@@ -856,20 +860,43 @@ export function ViewportCanvas({
     }
 
     if (selectedMeshNode) {
-      if (meshEditSelectionIds.length !== 1) {
+      if (meshEditSelectionIds.length === 0) {
         return;
       }
 
-      const handle = createMeshExtrudeHandles(selectedMeshNode.data).find(
-        (candidate) => candidate.id === meshEditSelectionIds[0]
-      );
+      const selectedFaceIds = meshEditMode === "face" ? resolveSelectedEditableMeshFaceIds() : [];
+      const handles = createMeshExtrudeHandles(selectedMeshNode.data);
+      const handle =
+        meshEditMode === "face"
+          ? handles.find((candidate) => candidate.kind === "face" && candidate.id === selectedFaceIds[0])
+          : handles.find((candidate) => candidate.id === meshEditSelectionIds[0]);
 
       if (!handle) {
         return;
       }
 
-      const anchor = resolveExtrudeAnchor(handle.position, handle.normal, handle.kind);
-      const dragPlane = createBrushCreateDragPlane(cameraRef.current, handle.normal, anchor);
+      const resolvedNormal =
+        meshEditMode === "face" && selectedFaceIds.length > 1
+          ? normalizeVec3(
+              averageVec3(
+                handles
+                  .filter((candidate) => candidate.kind === "face" && selectedFaceIds.includes(candidate.id))
+                  .map((candidate) => candidate.normal)
+              )
+            )
+          : handle.normal;
+      const resolvedAnchor =
+        meshEditMode === "face" && selectedFaceIds.length > 1
+          ? averageVec3(
+              handles
+                .filter((candidate) => candidate.kind === "face" && selectedFaceIds.includes(candidate.id))
+                .map((candidate) => candidate.position)
+            )
+          : handle.position;
+      const normal = vec3LengthSquared(resolvedNormal) > 0.000001 ? resolvedNormal : handle.normal;
+
+      const anchor = resolveExtrudeAnchor(resolvedAnchor, normal, handle.kind);
+      const dragPlane = createBrushCreateDragPlane(cameraRef.current, normal, anchor);
       const startPoint =
         projectPointerToThreePlane(
           pointerPositionRef.current.x + bounds.left,
@@ -884,10 +911,11 @@ export function ViewportCanvas({
         amount: 0,
         baseMesh: structuredClone(selectedMeshNode.data),
         dragPlane,
+        faceIds: meshEditMode === "face" ? selectedFaceIds : undefined,
         handle: structuredClone(handle),
         kind: "mesh",
         nodeId: selectedMeshNode.id,
-        normal: vec3(handle.normal.x, handle.normal.y, handle.normal.z),
+        normal: vec3(normal.x, normal.y, normal.z),
         previewMesh: structuredClone(selectedMeshNode.data),
         startPoint: vec3(startPoint.x, startPoint.y, startPoint.z)
       });
@@ -1446,7 +1474,11 @@ export function ViewportCanvas({
 
     const previewMesh =
       state.handle.kind === "face"
-        ? extrudeEditableMeshFace(state.baseMesh, state.handle.id, amount) ?? state.baseMesh
+        ? (
+            state.faceIds && state.faceIds.length > 1
+              ? extrudeEditableMeshFaces(state.baseMesh, state.faceIds, amount)
+              : extrudeEditableMeshFace(state.baseMesh, state.handle.id, amount)
+          ) ?? state.baseMesh
         : extrudeEditableMeshEdge(
             state.baseMesh,
             state.handle.vertexIds as [string, string],

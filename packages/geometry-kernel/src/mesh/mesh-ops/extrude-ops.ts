@@ -67,6 +67,22 @@ export function extrudeEditableMeshFace(
   return createEditableMeshFromPolygons(orientPolygonLoops(extrudedPolygons));
 }
 
+export function extrudeEditableMeshFaces(
+  mesh: EditableMesh,
+  faceIds: FaceID[],
+  amount: number,
+  epsilon = 0.0001
+): EditableMesh | undefined {
+  if (faceIds.length === 0) {
+    return undefined;
+  }
+
+  return Array.from(new Set(faceIds)).reduce<EditableMesh | undefined>(
+    (currentMesh, faceId) => (currentMesh ? extrudeEditableMeshFace(currentMesh, faceId, amount, epsilon) : currentMesh),
+    mesh
+  );
+}
+
 export function extrudeEditableMeshEdge(
   mesh: EditableMesh,
   edge: [VertexID, VertexID],

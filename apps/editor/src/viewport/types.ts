@@ -254,6 +254,7 @@ export type ExtrudeGestureState =
       baseBrush: Brush;
       baseMesh: EditableMesh;
       dragPlane: Plane;
+      faceIds?: string[];
       handle: MeshExtrudeHandle;
       kind: "brush-mesh";
       nodeId: string;
@@ -266,6 +267,7 @@ export type ExtrudeGestureState =
       axisLock?: "x" | "y" | "z";
       baseMesh: EditableMesh;
       dragPlane: Plane;
+      faceIds?: string[];
       handle: MeshExtrudeHandle;
       kind: "mesh";
       nodeId: string;
