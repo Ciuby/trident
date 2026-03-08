@@ -53,15 +53,16 @@ import { MeshSubdivideOverlay } from "@/viewport/components/MeshSubdivideOverlay
 import { ObjectTransformGizmo } from "@/viewport/components/ObjectTransformGizmo";
 import { ScenePreview } from "@/viewport/components/ScenePreview";
 import {
-  buildBrushCreatePlacement,
-  computeBrushCreateCenter,
   createBrushCreateBasis,
   createBrushCreateDragPlane,
-  measureBrushCreateBase,
-  projectPointerToPlane,
   projectPointerToThreePlane,
   resolveBrushCreateSurfaceHit
 } from "@/viewport/utils/brush-create";
+import {
+  advanceBrushCreateState,
+  startBrushCreateState,
+  updateBrushCreateState
+} from "@/viewport/utils/brush-create-session";
 import {
   findMatchingMeshEdgePair,
   makeUndirectedPairKey,
@@ -192,14 +193,7 @@ export function ViewportCanvas({
   }, [editorInteractionEnabled]);
 
   useEffect(() => {
-    setBrushCreateState((current) =>
-      current
-        ? {
-            ...current,
-            shape: activeBrushShape
-          }
-        : current
-    );
+    setBrushCreateState((current) => (current && current.shape !== activeBrushShape ? null : current));
   }, [activeBrushShape]);
 
   useEffect(() => {
@@ -1579,66 +1573,18 @@ export function ViewportCanvas({
     if (!cameraRef.current || !brushCreateState) {
       return;
     }
-
-    if (brushCreateState.stage === "base") {
-      const point = projectPointerToPlane(
-        clientX,
-        clientY,
-        bounds,
-        cameraRef.current,
-        raycasterRef.current,
-        brushCreateState.anchor,
-        brushCreateState.basis.normal
-      );
-
-      if (!point) {
-        return;
-      }
-
-      setBrushCreateState((currentState) =>
-        currentState?.stage === "base"
-          ? {
-              ...currentState,
-              currentPoint: point
-            }
-          : currentState
-      );
-      return;
-    }
-
-    const point = projectPointerToThreePlane(
+    const nextState = updateBrushCreateState(brushCreateState, {
+      bounds,
+      camera: cameraRef.current,
       clientX,
       clientY,
-      bounds,
-      cameraRef.current,
-      raycasterRef.current,
-      brushCreateState.dragPlane
-    );
+      raycaster: raycasterRef.current,
+      snapSize
+    });
 
-    if (!point) {
-      return;
+    if (nextState) {
+      setBrushCreateState(nextState);
     }
-
-    const normal = new Vector3(
-      brushCreateState.basis.normal.x,
-      brushCreateState.basis.normal.y,
-      brushCreateState.basis.normal.z
-    );
-    const startPoint = new Vector3(
-      brushCreateState.startPoint.x,
-      brushCreateState.startPoint.y,
-      brushCreateState.startPoint.z
-    );
-    const nextHeight = snapValue(point.clone().sub(startPoint).dot(normal), snapSize);
-
-    setBrushCreateState((currentState) =>
-      currentState?.stage === "height" && currentState.height !== nextHeight
-        ? {
-            ...currentState,
-            height: nextHeight
-          }
-        : currentState
-    );
   };
 
   const handleBrushCreateClick = (clientX: number, clientY: number, bounds: DOMRect) => {
@@ -1668,70 +1614,24 @@ export function ViewportCanvas({
           ? snapPointToViewportPlane(hit.point, viewportPlane, viewport, snapSize)
           : hit.point;
 
-      setBrushCreateState({
-        anchor: anchorPoint,
-        basis: createBrushCreateBasis(hit.normal),
-        currentPoint: anchorPoint,
-        shape: activeBrushShape,
-        stage: "base"
-      });
+      setBrushCreateState(startBrushCreateState(activeBrushShape, anchorPoint, createBrushCreateBasis(hit.normal)));
       return;
     }
-
-    if (brushCreateState.stage === "base") {
-      const point =
-        projectPointerToPlane(
-          clientX,
-          clientY,
-          bounds,
-          cameraRef.current,
-          raycasterRef.current,
-          brushCreateState.anchor,
-          brushCreateState.basis.normal
-        ) ?? brushCreateState.currentPoint;
-      const { depth, width } = measureBrushCreateBase(
-        brushCreateState.anchor,
-        brushCreateState.basis,
-        point,
-        snapSize
-      );
-
-      if (Math.abs(width) <= snapSize * 0.5 || Math.abs(depth) <= snapSize * 0.5) {
-        return;
-      }
-
-      const center = computeBrushCreateCenter(brushCreateState.anchor, brushCreateState.basis, width, depth, 0);
-      const dragPlane = createBrushCreateDragPlane(cameraRef.current, brushCreateState.basis.normal, center);
-      const startPoint =
-        projectPointerToThreePlane(clientX, clientY, bounds, cameraRef.current, raycasterRef.current, dragPlane) ??
-        new Vector3(center.x, center.y, center.z);
-
-      setBrushCreateState({
-        ...brushCreateState,
-        depth,
-        dragPlane,
-        height: 0,
-        stage: "height",
-        startPoint: vec3(startPoint.x, startPoint.y, startPoint.z),
-        width
-      });
-      return;
-    }
-
-    const point =
-      projectPointerToThreePlane(clientX, clientY, bounds, cameraRef.current, raycasterRef.current, brushCreateState.dragPlane) ??
-      new Vector3(brushCreateState.startPoint.x, brushCreateState.startPoint.y, brushCreateState.startPoint.z);
-    const height = snapValue(
-      point
-        .clone()
-        .sub(new Vector3(brushCreateState.startPoint.x, brushCreateState.startPoint.y, brushCreateState.startPoint.z))
-        .dot(new Vector3(brushCreateState.basis.normal.x, brushCreateState.basis.normal.y, brushCreateState.basis.normal.z)),
+    const result = advanceBrushCreateState(brushCreateState, {
+      bounds,
+      camera: cameraRef.current,
+      clientX,
+      clientY,
+      raycaster: raycasterRef.current,
       snapSize
-    );
-    const placement = buildBrushCreatePlacement({
-      ...brushCreateState,
-      height
     });
+
+    if (result.nextState) {
+      setBrushCreateState(result.nextState);
+      return;
+    }
+
+    const placement = result.placement;
 
     if (!placement) {
       return;

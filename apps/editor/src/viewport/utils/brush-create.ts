@@ -1,25 +1,18 @@
-import { createAxisAlignedBrushFromBounds } from "@web-hammer/geometry-kernel";
 import {
   dotVec3,
-  makeTransform,
   resolveTransformPivot,
   snapValue,
   subVec3,
   vec3,
-  type Brush,
   type GeometryNode,
-  type Transform,
   type Vec3
 } from "@web-hammer/shared";
-import { createPrimitiveNodeData, createPrimitiveNodeLabel } from "@/lib/authoring";
-import type { BrushCreateBasis, BrushCreatePlacement, BrushCreateState } from "@/viewport/types";
+import type { BrushCreateBasis } from "@/viewport/types";
 import {
   Camera,
   Euler,
-  Matrix4,
   Mesh,
   Plane,
-  Quaternion,
   Raycaster,
   Vector2,
   Vector3
@@ -159,71 +152,6 @@ export function createBrushCreateDragPlane(camera: Camera, normal: Vec3, coplana
   );
 }
 
-export function buildBrushCreatePlacement(
-  state: Extract<BrushCreateState, { stage: "height" }>
-): BrushCreatePlacement | undefined {
-  if (Math.abs(state.width) <= 0.0001 || Math.abs(state.depth) <= 0.0001 || Math.abs(state.height) <= 0.0001) {
-    return undefined;
-  }
-
-  const center = computeBrushCreateCenter(state.anchor, state.basis, state.width, state.depth, state.height);
-  const rotation = basisToEuler(state.basis);
-  const uniformSphereSize = Math.max(Math.abs(state.width), Math.abs(state.height), Math.abs(state.depth));
-  const size =
-    state.shape === "sphere"
-      ? vec3(uniformSphereSize, uniformSphereSize, uniformSphereSize)
-      : vec3(Math.abs(state.width), Math.abs(state.height), Math.abs(state.depth));
-
-  if (state.shape !== "cube") {
-    return {
-      kind: "primitive",
-      name: createPrimitiveNodeLabel("brush", state.shape),
-      primitive: createPrimitiveNodeData("brush", state.shape, size),
-      transform: {
-        ...makeTransform(center),
-        rotation
-      }
-    };
-  }
-
-  return {
-    brush: createAxisAlignedBrushFromBounds({
-      x: { min: -Math.abs(state.width) * 0.5, max: Math.abs(state.width) * 0.5 },
-      y: { min: -Math.abs(state.height) * 0.5, max: Math.abs(state.height) * 0.5 },
-      z: { min: -Math.abs(state.depth) * 0.5, max: Math.abs(state.depth) * 0.5 }
-    }),
-    kind: "brush",
-    transform: {
-      ...makeTransform(center),
-      rotation
-    }
-  };
-}
-
-export function buildBrushCreatePreviewPositions(state: BrushCreateState, snapSize: number): number[] {
-  const positions: number[] = [];
-  const base =
-    state.stage === "base"
-      ? measureBrushCreateBase(state.anchor, state.basis, state.currentPoint, snapSize)
-      : { depth: state.depth, width: state.width };
-  const baseCorners = buildBrushCreateCorners(state.anchor, state.basis, base.width, base.depth, 0);
-
-  pushLoopSegments(positions, baseCorners);
-
-  if (state.stage === "height" && Math.abs(state.height) > 0.0001) {
-    const topCorners = buildBrushCreateCorners(state.anchor, state.basis, state.width, state.depth, state.height);
-    pushLoopSegments(positions, topCorners);
-
-    for (let index = 0; index < baseCorners.length; index += 1) {
-      const bottom = baseCorners[index];
-      const top = topCorners[index];
-      positions.push(bottom.x, bottom.y, bottom.z, top.x, top.y, top.z);
-    }
-  }
-
-  return positions;
-}
-
 export function projectLocalPointToScreen(
   point: Vec3,
   node: GeometryNode,
@@ -242,49 +170,4 @@ export function projectLocalPointToScreen(
     x: ((worldPoint.x + 1) * 0.5) * viewportBounds.width,
     y: ((1 - worldPoint.y) * 0.5) * viewportBounds.height
   };
-}
-
-function basisToEuler(basis: BrushCreateBasis): Vec3 {
-  const matrix = new Matrix4().makeBasis(
-    new Vector3(basis.u.x, basis.u.y, basis.u.z),
-    new Vector3(basis.normal.x, basis.normal.y, basis.normal.z),
-    new Vector3(basis.v.x, basis.v.y, basis.v.z)
-  );
-  const quaternion = new Quaternion().setFromRotationMatrix(matrix);
-  const euler = new Euler().setFromQuaternion(quaternion, "XYZ");
-
-  return vec3(euler.x, euler.y, euler.z);
-}
-
-function buildBrushCreateCorners(anchor: Vec3, basis: BrushCreateBasis, width: number, depth: number, height: number): Vec3[] {
-  const widthOffset = vec3(basis.u.x * width, basis.u.y * width, basis.u.z * width);
-  const depthOffset = vec3(basis.v.x * depth, basis.v.y * depth, basis.v.z * depth);
-  const heightOffset = vec3(basis.normal.x * height, basis.normal.y * height, basis.normal.z * height);
-
-  return [
-    vec3(anchor.x + heightOffset.x, anchor.y + heightOffset.y, anchor.z + heightOffset.z),
-    vec3(
-      anchor.x + widthOffset.x + heightOffset.x,
-      anchor.y + widthOffset.y + heightOffset.y,
-      anchor.z + widthOffset.z + heightOffset.z
-    ),
-    vec3(
-      anchor.x + widthOffset.x + depthOffset.x + heightOffset.x,
-      anchor.y + widthOffset.y + depthOffset.y + heightOffset.y,
-      anchor.z + widthOffset.z + depthOffset.z + heightOffset.z
-    ),
-    vec3(
-      anchor.x + depthOffset.x + heightOffset.x,
-      anchor.y + depthOffset.y + heightOffset.y,
-      anchor.z + depthOffset.z + heightOffset.z
-    )
-  ];
-}
-
-function pushLoopSegments(positions: number[], points: Vec3[]) {
-  for (let index = 0; index < points.length; index += 1) {
-    const current = points[index];
-    const next = points[(index + 1) % points.length];
-    positions.push(current.x, current.y, current.z, next.x, next.y, next.z);
-  }
 }

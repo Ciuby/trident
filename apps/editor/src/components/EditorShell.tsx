@@ -46,7 +46,6 @@ type EditorShellProps = {
   meshEditMode: MeshEditMode;
   meshEditToolbarAction?: MeshEditToolbarActionRequest;
   onActivateViewport: (viewportId: ViewportPaneId) => void;
-  onActivateBrushTool: () => void;
   onApplyMaterial: (materialId: string, scope: "faces" | "object", faceIds: string[]) => void;
   onClipSelection: (axis: TransformAxis) => void;
   onCommitMeshTopology: (nodeId: string, mesh: EditableMesh) => void;
@@ -69,7 +68,6 @@ type EditorShellProps = {
   onMirrorSelection: (axis: TransformAxis) => void;
   onPlaceAsset: (position: { x: number; y: number; z: number }) => void;
   onPlaceBrush: (brush: Brush, transform: Transform) => void;
-  onPlaceBrushPrimitive: (shape: PrimitiveShape) => void;
   onPlacePrimitiveNode: (data: PrimitiveNodeData, transform: Transform, name: string) => void;
   onPlaceProp: (shape: PrimitiveShape) => void;
   onPlayPhysics: () => void;
@@ -132,7 +130,6 @@ export function EditorShell({
   meshEditMode,
   meshEditToolbarAction,
   onActivateViewport,
-  onActivateBrushTool,
   onApplyMaterial,
   onClipSelection,
   onCommitMeshTopology,
@@ -155,7 +152,6 @@ export function EditorShell({
   onMirrorSelection,
   onPlaceAsset,
   onPlaceBrush,
-  onPlaceBrushPrimitive,
   onPlacePrimitiveNode,
   onPlaceProp,
   onPlayPhysics,
@@ -303,6 +299,7 @@ export function EditorShell({
         </div>
 
         <ToolPalette
+          activeBrushShape={activeBrushShape}
           activeToolId={activeToolId}
           currentSnapSize={activeViewport.grid.snapSize}
           gridSnapValues={gridSnapValues}
@@ -312,8 +309,15 @@ export function EditorShell({
           onPausePhysics={onPausePhysics}
           onMeshEditToolbarAction={onMeshEditToolbarAction}
           onMeshInflate={onMeshInflate}
+          onPlaceEntity={onPlaceEntity}
+          onPlaceLight={onPlaceLight}
+          onPlaceProp={onPlaceProp}
           onPlayPhysics={onPlayPhysics}
           onRaiseTop={() => onExtrudeSelection("y", 1)}
+          onSelectBrushShape={(shape) => {
+            onSetActiveBrushShape(shape);
+            onSetToolId("brush");
+          }}
           onSetMeshEditMode={onSetMeshEditMode}
           onSetSnapEnabled={onSetSnapEnabled}
           onSetSnapSize={onSetSnapSize}
@@ -333,15 +337,12 @@ export function EditorShell({
         <InspectorSidebar
           activeRightPanel={activeRightPanel}
           activeToolId={activeToolId}
-          activeBrushShape={activeBrushShape}
           assets={assets}
           entities={entities}
           materials={materials}
           meshEditMode={meshEditMode}
           nodes={nodes}
-          onActivateBrushTool={onActivateBrushTool}
           onApplyMaterial={onApplyMaterial}
-          onChangeBrushShape={onSetActiveBrushShape}
           onChangeRightPanel={onSetRightPanel}
           onClipSelection={onClipSelection}
           onDeleteMaterial={onDeleteMaterial}
@@ -350,10 +351,6 @@ export function EditorShell({
           onMeshInflate={onMeshInflate}
           onMirrorSelection={onMirrorSelection}
           onPlaceAsset={onPlaceAsset}
-          onPlaceEntity={onPlaceEntity}
-          onPlaceLight={onPlaceLight}
-          onPlaceBrushPrimitive={onPlaceBrushPrimitive}
-          onPlaceProp={onPlaceProp}
           onSelectAsset={onSelectAsset}
           onSelectMaterial={onSelectMaterial}
           onSelectNodes={onSelectNodes}
@@ -376,6 +373,7 @@ export function EditorShell({
         />
 
         <StatusBar
+          activeBrushShape={activeBrushShape}
           activeToolLabel={activeToolLabel}
           activeViewportId={activeViewportId}
           gridSnapValues={gridSnapValues}

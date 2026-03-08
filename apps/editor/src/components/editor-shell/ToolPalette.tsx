@@ -1,5 +1,7 @@
 import type { GridSnapValue } from "@web-hammer/render-pipeline";
+import type { EntityType, LightType, PrimitiveShape } from "@web-hammer/shared";
 import type { ToolId } from "@web-hammer/tool-system";
+import { CreationToolBar } from "@/components/editor-shell/CreationToolBar";
 import { MeshEditToolBars } from "@/components/editor-shell/MeshEditToolBars";
 import { PhysicsPlaybackControl } from "@/components/editor-shell/PhysicsPlaybackControl";
 import { PrimaryToolBar } from "@/components/editor-shell/PrimaryToolBar";
@@ -9,6 +11,7 @@ import type { MeshEditMode } from "@/viewport/editing";
 import type { ViewModeId } from "@/viewport/viewports";
 
 type ToolPaletteProps = {
+  activeBrushShape: PrimitiveShape;
   activeToolId: ToolId;
   currentSnapSize: GridSnapValue;
   gridSnapValues: readonly GridSnapValue[];
@@ -18,8 +21,12 @@ type ToolPaletteProps = {
   onLowerTop: () => void;
   onPausePhysics: () => void;
   onMeshInflate: (factor: number) => void;
+  onPlaceEntity: (type: EntityType) => void;
+  onPlaceLight: (type: LightType) => void;
+  onPlaceProp: (shape: PrimitiveShape) => void;
   onPlayPhysics: () => void;
   onRaiseTop: () => void;
+  onSelectBrushShape: (shape: PrimitiveShape) => void;
   onSetMeshEditMode: (mode: MeshEditMode) => void;
   onSetSnapEnabled: (enabled: boolean) => void;
   onSetSnapSize: (snapSize: GridSnapValue) => void;
@@ -37,6 +44,7 @@ type ToolPaletteProps = {
 };
 
 export function ToolPalette({
+  activeBrushShape,
   activeToolId,
   currentSnapSize,
   gridSnapValues,
@@ -46,8 +54,12 @@ export function ToolPalette({
   onLowerTop,
   onPausePhysics,
   onMeshInflate,
+  onPlaceEntity,
+  onPlaceLight,
+  onPlaceProp,
   onPlayPhysics,
   onRaiseTop,
+  onSelectBrushShape,
   onSetMeshEditMode,
   onSetSnapEnabled,
   onSetSnapSize,
@@ -71,6 +83,15 @@ export function ToolPalette({
         <SnapControl currentSnapSize={currentSnapSize} gridSnapValues={gridSnapValues} onSetSnapEnabled={onSetSnapEnabled} onSetSnapSize={onSetSnapSize} snapEnabled={snapEnabled} />
         <PhysicsPlaybackControl mode={physicsPlayback} onPause={onPausePhysics} onPlay={onPlayPhysics} onStop={onStopPhysics} />
       </div>
+      <CreationToolBar
+        activeBrushShape={activeBrushShape}
+        activeToolId={activeToolId}
+        disabled={physicsPlayback !== "stopped"}
+        onPlaceEntity={onPlaceEntity}
+        onPlaceLight={onPlaceLight}
+        onPlaceProp={onPlaceProp}
+        onSelectBrushShape={onSelectBrushShape}
+      />
       {activeToolId === "mesh-edit" ? (
         <MeshEditToolBars
           onArc={() => onMeshEditToolbarAction("arc")}

@@ -226,6 +226,127 @@ export function ScaleModeIcon(props: SVGProps<SVGSVGElement>) {
   return <Scaling {...props} />;
 }
 
+export function CubePrimitiveIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <path d="M6 8.5 12 5l6 3.5v7L12 19l-6-3.5v-7Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.6" />
+      <path d="M12 12v7M6 8.5 12 12l6-3.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+export function CrateIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <path d="M6 8.5 12 5l6 3.5v7L12 19l-6-3.5v-7Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.6" />
+      <path d="m8.5 10 7 4m-7 0 7-4M12 5v14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+export function SpherePrimitiveIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M12 5c2.2 2.1 3.5 4.7 3.5 7s-1.3 4.9-3.5 7c-2.2-2.1-3.5-4.7-3.5-7s1.3-4.9 3.5-7Z" opacity="0.72" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M5.5 12h13" opacity="0.72" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+export function CylinderPrimitiveIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <ellipse cx="12" cy="7" rx="5.5" ry="2.5" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M6.5 7v9.5c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5V7" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M6.5 16.5c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5" opacity="0.72" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+export function ConePrimitiveIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <path d="M12 5 6.5 16.5h11L12 5Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.6" />
+      <ellipse cx="12" cy="16.5" rx="5.5" ry="2.3" opacity="0.72" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+export function PlayerSpawnIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <circle cx="12" cy="8" r="2.4" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M8.5 17.5c.8-2.4 2.1-3.6 3.5-3.6s2.7 1.2 3.5 3.6" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+      <path d="M12 4v2.2M5 19h14" opacity="0.72" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+export function NpcSpawnIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <circle cx="9" cy="9" r="2.1" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="15.5" cy="10" r="1.8" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M6.5 17.2c.7-2 1.8-3 3.1-3 1.2 0 2.3 1 3 3M13.5 17.2c.5-1.6 1.3-2.4 2.4-2.4 1 0 1.9.8 2.4 2.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+export function SmartObjectIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <path d="M7 7h10v10H7z" stroke="currentColor" strokeWidth="1.6" />
+      <path d="m12 8.5.9 2.1 2.2.2-1.7 1.4.5 2.1-1.9-1.1-1.9 1.1.5-2.1-1.7-1.4 2.2-.2.9-2.1Z" fill="currentColor" fillOpacity="0.3" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+export function PointLightIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <circle cx="12" cy="12" r="3.2" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M12 4v2.3M12 17.7V20M4 12h2.3M17.7 12H20M6.4 6.4l1.7 1.7M15.9 15.9l1.7 1.7M17.6 6.4l-1.7 1.7M8.1 15.9l-1.7 1.7" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+export function DirectionalLightIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <path d="M7 7h10v10H7z" opacity="0.18" fill="currentColor" />
+      <path d="M6 18 18 6M13 6h5v5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+export function HemisphereLightIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <path d="M5 13a7 7 0 1 1 14 0H5Z" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M5 13h14" opacity="0.72" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+export function SpotLightIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <path d="M7 7h6l4 4-7 7-4-4 1-7Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.6" />
+      <path d="M14 10l5-5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+export function AmbientLightIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <circle cx="12" cy="12" r="6.2" fill="currentColor" fillOpacity="0.16" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="12" cy="12" r="2.4" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function toolIconFor(toolId: ToolId) {
   switch (toolId) {
     case "select":

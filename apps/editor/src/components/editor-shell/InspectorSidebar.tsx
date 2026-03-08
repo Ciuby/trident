@@ -4,15 +4,12 @@ import {
   isPrimitiveNode,
   vec3,
   type Entity,
-  type EntityType,
   type GeometryNode,
   type LightNodeData,
-  type LightType,
   type Material,
   type PropBodyType,
   type PropColliderShape,
   type PrimitiveNodeData,
-  type PrimitiveShape,
   type SceneSettings,
   type Transform,
   type Vec3
@@ -27,14 +24,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FloatingPanel } from "@/components/editor-shell/FloatingPanel";
 import { MaterialLibraryPanel } from "@/components/editor-shell/MaterialLibraryPanel";
 import { SceneHierarchyPanel } from "@/components/editor-shell/SceneHierarchyPanel";
-import { BRUSH_SHAPES, ENTITY_PRESETS, LIGHT_PRESETS, PROP_PRESETS } from "@/lib/authoring";
 import { rebaseTransformPivot } from "@/viewport/utils/geometry";
 import { cn } from "@/lib/utils";
 import type { MeshEditMode } from "@/viewport/editing";
 import type { RightPanelId } from "@/state/ui-store";
 
 type InspectorSidebarProps = {
-  activeBrushShape: PrimitiveShape;
   activeRightPanel: RightPanelId;
   activeToolId: ToolId;
   assets: Array<{ id: string; path: string; type: string }>;
@@ -42,9 +37,7 @@ type InspectorSidebarProps = {
   materials: Material[];
   meshEditMode: MeshEditMode;
   nodes: GeometryNode[];
-  onActivateBrushTool: () => void;
   onApplyMaterial: (materialId: string, scope: "faces" | "object", faceIds: string[]) => void;
-  onChangeBrushShape: (shape: PrimitiveShape) => void;
   onChangeRightPanel: (panel: RightPanelId) => void;
   onClipSelection: (axis: "x" | "y" | "z") => void;
   onDeleteMaterial: (materialId: string) => void;
@@ -53,10 +46,6 @@ type InspectorSidebarProps = {
   onMeshInflate: (factor: number) => void;
   onMirrorSelection: (axis: "x" | "y" | "z") => void;
   onPlaceAsset: (position: Vec3) => void;
-  onPlaceBrushPrimitive: (shape: PrimitiveShape) => void;
-  onPlaceEntity: (type: EntityType) => void;
-  onPlaceLight: (type: LightType) => void;
-  onPlaceProp: (shape: PrimitiveShape) => void;
   onSelectAsset: (assetId: string) => void;
   onSelectMaterial: (materialId: string) => void;
   onSelectNodes: (nodeIds: string[]) => void;
@@ -81,7 +70,6 @@ type InspectorSidebarProps = {
 const AXES = ["x", "y", "z"] as const;
 
 export function InspectorSidebar({
-  activeBrushShape,
   activeRightPanel,
   activeToolId,
   assets,
@@ -89,9 +77,7 @@ export function InspectorSidebar({
   materials,
   meshEditMode,
   nodes,
-  onActivateBrushTool,
   onApplyMaterial,
-  onChangeBrushShape,
   onChangeRightPanel,
   onClipSelection,
   onDeleteMaterial,
@@ -100,10 +86,6 @@ export function InspectorSidebar({
   onMeshInflate,
   onMirrorSelection,
   onPlaceAsset,
-  onPlaceBrushPrimitive,
-  onPlaceEntity,
-  onPlaceLight,
-  onPlaceProp,
   onSelectAsset,
   onSelectMaterial,
   onSelectNodes,
@@ -265,60 +247,6 @@ export function InspectorSidebar({
               </div>
               <ScrollArea className="max-h-72 pr-1">
                 <div className="space-y-4 px-1 pb-1">
-                  <ToolSection title="Brushes">
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {BRUSH_SHAPES.map((entry) => (
-                        <Button
-                          className={cn(entry.shape === activeBrushShape && "bg-emerald-500/18 text-emerald-200")}
-                          key={entry.shape}
-                          onClick={() => {
-                            onChangeBrushShape(entry.shape);
-                            onActivateBrushTool();
-                          }}
-                          size="xs"
-                          variant="ghost"
-                        >
-                          {entry.label}
-                        </Button>
-                      ))}
-                    </div>
-                    <div className="flex gap-1.5">
-                      <Button onClick={() => onPlaceBrushPrimitive(activeBrushShape)} size="xs" variant="ghost">
-                        Drop {BRUSH_SHAPES.find((entry) => entry.shape === activeBrushShape)?.label ?? "Brush"}
-                      </Button>
-                    </div>
-                  </ToolSection>
-
-                  <ToolSection title="Props">
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {PROP_PRESETS.map((entry) => (
-                        <Button key={`prop:${entry.shape}:${entry.label}`} onClick={() => onPlaceProp(entry.shape)} size="xs" variant="ghost">
-                          {entry.label}
-                        </Button>
-                      ))}
-                    </div>
-                  </ToolSection>
-
-                  <ToolSection title="Entities">
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {ENTITY_PRESETS.map((entry) => (
-                        <Button key={entry.type} onClick={() => onPlaceEntity(entry.type)} size="xs" variant="ghost">
-                          {entry.label}
-                        </Button>
-                      ))}
-                    </div>
-                  </ToolSection>
-
-                  <ToolSection title="Lights">
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {LIGHT_PRESETS.map((entry) => (
-                        <Button key={entry.type} onClick={() => onPlaceLight(entry.type)} size="xs" variant="ghost">
-                          {entry.label}
-                        </Button>
-                      ))}
-                    </div>
-                  </ToolSection>
-
                   <ToolSection title="Assets">
                     <div className="space-y-1">
                       {assets.map((asset) => (

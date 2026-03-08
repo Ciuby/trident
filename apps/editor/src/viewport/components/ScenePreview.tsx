@@ -1,5 +1,5 @@
 import { useFrame, useThree } from "@react-three/fiber";
-import { BallCollider, CapsuleCollider, ConeCollider, CuboidCollider, CylinderCollider, MeshCollider, Physics, RigidBody, type RapierRigidBody } from "@react-three/rapier";
+import { BallCollider, CapsuleCollider, ConeCollider, CuboidCollider, CylinderCollider, Physics, RigidBody, TrimeshCollider, type RapierRigidBody } from "@react-three/rapier";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BoxGeometry,
@@ -7,6 +7,7 @@ import {
   ConeGeometry,
   CylinderGeometry,
   FrontSide,
+  Matrix4,
   Mesh,
   MeshStandardMaterial,
   Object3D,
@@ -524,18 +525,19 @@ function PhysicsPropMesh({
   selected: boolean;
 }) {
   const physics = mesh.physics;
+  const colliderArgs = useTrimeshColliderArgs(mesh);
+  const colliderProps = useMemo(() => resolvePhysicsColliderProps(mesh.physics), [mesh.physics]);
 
   if (!physics || !mesh.primitive) {
     return null;
   }
-  const massProps = physics.density !== undefined ? { density: physics.density } : { mass: physics.mass };
 
   return (
     <RigidBody
       angularDamping={physics.angularDamping}
       canSleep={physics.canSleep}
       ccd={physics.ccd}
-      colliders={physics.colliderShape === "trimesh" ? "trimesh" : false}
+      colliders={false}
       gravityScale={physics.gravityScale}
       linearDamping={physics.linearDamping}
       lockRotations={physics.lockRotations}
@@ -545,66 +547,84 @@ function PhysicsPropMesh({
       type={physics.bodyType}
     >
       {physics.colliderShape !== "trimesh" ? (
-        <>
-          <ManualCollider mesh={mesh} />
-          <RenderMeshBody
-            hovered={hovered}
-            interactive={interactive}
-            mesh={mesh}
-            onFocusNode={onFocusNode}
-            onHoverEnd={onHoverEnd}
-            onHoverStart={onHoverStart}
-            onMeshObjectChange={onMeshObjectChange}
-            onSelectNodes={onSelectNodes}
-            renderMode={renderMode}
-            selected={selected}
-          />
-        </>
+        <ManualCollider mesh={mesh} />
       ) : (
-        <RenderMeshBody
-          hovered={hovered}
-          interactive={interactive}
-          mesh={mesh}
-          onFocusNode={onFocusNode}
-          onHoverEnd={onHoverEnd}
-          onHoverStart={onHoverStart}
-          onMeshObjectChange={onMeshObjectChange}
-          onSelectNodes={onSelectNodes}
-          renderMode={renderMode}
-          selected={selected}
-        />
+        colliderArgs ? <TrimeshCollider args={colliderArgs} {...colliderProps} /> : null
       )}
+      <RenderMeshBody
+        hovered={hovered}
+        interactive={interactive}
+        mesh={mesh}
+        onFocusNode={onFocusNode}
+        onHoverEnd={onHoverEnd}
+        onHoverStart={onHoverStart}
+        onMeshObjectChange={onMeshObjectChange}
+        onSelectNodes={onSelectNodes}
+        renderMode={renderMode}
+        selected={selected}
+      />
     </RigidBody>
   );
 }
 
 function StaticPhysicsCollider({ mesh }: { mesh: DerivedRenderMesh }) {
-  const geometry = useRenderableGeometry(mesh, "lit");
-  const pivot = resolveMeshPivot(mesh);
+  const colliderArgs = useTrimeshColliderArgs(mesh);
 
-  useEffect(() => {
-    return () => {
-      geometry?.dispose();
-    };
-  }, [geometry]);
-
-  if (!geometry) {
+  if (!colliderArgs) {
     return null;
   }
 
   return (
     <RigidBody colliders={false} position={toTuple(mesh.position)} rotation={toTuple(mesh.rotation)} type="fixed">
-      <MeshCollider type="trimesh">
-        <group scale={toTuple(mesh.scale)}>
-          <group position={[-pivot.x, -pivot.y, -pivot.z]}>
-            <mesh geometry={geometry} raycast={() => null}>
-              <meshBasicMaterial opacity={0} transparent />
-            </mesh>
-          </group>
-        </group>
-      </MeshCollider>
+      <TrimeshCollider args={colliderArgs} />
     </RigidBody>
   );
+}
+
+function useTrimeshColliderArgs(mesh: DerivedRenderMesh): [ArrayLike<number>, ArrayLike<number>] | undefined {
+  const geometry = useRenderableGeometry(mesh, "lit");
+  const pivot = resolveMeshPivot(mesh);
+  const bakedGeometry = useMemo(() => {
+    const sourceGeometry = geometry;
+
+    if (!sourceGeometry) {
+      return undefined;
+    }
+
+    const clonedGeometry = sourceGeometry.clone();
+    const transformMatrix = new Matrix4()
+      .makeScale(mesh.scale.x, mesh.scale.y, mesh.scale.z)
+      .multiply(new Matrix4().makeTranslation(-pivot.x, -pivot.y, -pivot.z));
+
+    clonedGeometry.applyMatrix4(transformMatrix);
+    clonedGeometry.computeBoundingBox();
+    clonedGeometry.computeBoundingSphere();
+
+    return clonedGeometry;
+  }, [geometry, mesh.scale.x, mesh.scale.y, mesh.scale.z, pivot.x, pivot.y, pivot.z]);
+  const fallbackIndices = useMemo(() => {
+    if (!bakedGeometry) {
+      return new Uint32Array();
+    }
+
+    const positionCount = bakedGeometry.getAttribute("position")?.count ?? 0;
+    return Uint32Array.from({ length: positionCount }, (_, index) => index);
+  }, [bakedGeometry]);
+
+  useEffect(() => {
+    return () => {
+      bakedGeometry?.dispose();
+    };
+  }, [bakedGeometry]);
+
+  if (!bakedGeometry) {
+    return undefined;
+  }
+
+  return [
+    bakedGeometry.getAttribute("position").array,
+    bakedGeometry.getIndex()?.array ?? fallbackIndices
+  ];
 }
 
 function RenderMeshBody({
@@ -870,15 +890,10 @@ function RenderLightNode({
 
 function ManualCollider({ mesh }: { mesh: DerivedRenderMesh }) {
   const pivot = resolveMeshPivot(mesh);
-  const massProps = mesh.physics?.density !== undefined ? { density: mesh.physics.density } : { mass: mesh.physics?.mass };
   const commonProps = {
-    contactSkin: mesh.physics?.contactSkin,
-    friction: mesh.physics?.friction,
     position: [-pivot.x, -pivot.y, -pivot.z] as [number, number, number],
-    restitution: mesh.physics?.restitution,
     scale: toTuple(mesh.scale),
-    sensor: mesh.physics?.sensor,
-    ...massProps
+    ...resolvePhysicsColliderProps(mesh.physics)
   };
 
   if (!mesh.primitive || !mesh.physics) {
@@ -907,6 +922,20 @@ function ManualCollider({ mesh }: { mesh: DerivedRenderMesh }) {
   }
 
   return null;
+}
+
+function resolvePhysicsColliderProps(physics: DerivedRenderMesh["physics"]) {
+  if (!physics) {
+    return {};
+  }
+
+  return {
+    ...(physics.contactSkin !== undefined ? { contactSkin: physics.contactSkin } : {}),
+    ...(physics.density !== undefined ? { density: physics.density } : physics.mass !== undefined ? { mass: physics.mass } : {}),
+    ...(physics.friction !== undefined ? { friction: physics.friction } : {}),
+    ...(physics.restitution !== undefined ? { restitution: physics.restitution } : {}),
+    ...(physics.sensor !== undefined ? { sensor: physics.sensor } : {})
+  };
 }
 
 function useRenderableGeometry(mesh: DerivedRenderMesh, renderMode: ViewportRenderMode) {

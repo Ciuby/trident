@@ -1,11 +1,12 @@
 import type { GridSnapValue, ViewportState } from "@web-hammer/render-pipeline";
-import type { GeometryNode } from "@web-hammer/shared";
+import type { GeometryNode, PrimitiveShape } from "@web-hammer/shared";
 import type { WorkerJob } from "@web-hammer/workers";
 import { JobStatus } from "@/components/editor-shell/JobStatus";
 import type { MeshEditMode } from "@/viewport/editing";
 import type { ViewportPaneId } from "@/viewport/viewports";
 
 type StatusBarProps = {
+  activeBrushShape: PrimitiveShape;
   activeToolLabel: string;
   activeViewportId: ViewportPaneId;
   gridSnapValues: readonly GridSnapValue[];
@@ -17,6 +18,7 @@ type StatusBarProps = {
 };
 
 export function StatusBar({
+  activeBrushShape,
   activeToolLabel,
   activeViewportId,
   gridSnapValues,
@@ -32,7 +34,7 @@ export function StatusBar({
     : "focus none";
   const interactionHint =
     activeToolLabel === "Brush"
-      ? "click anchor / move for base / click lock / move for height / click commit / Esc cancel"
+      ? resolveBrushInteractionHint(activeBrushShape)
       : activeToolLabel === "Mesh Edit" && meshEditMode === "vertex"
         ? "click select / Shift-drag marquee / G move / R rotate / S scale / M merge / Shift+F fill"
       : activeToolLabel === "Mesh Edit" && meshEditMode === "edge"
@@ -71,4 +73,16 @@ export function StatusBar({
       <JobStatus jobs={jobs} />
     </div>
   );
+}
+
+function resolveBrushInteractionHint(shape: PrimitiveShape) {
+  if (shape === "sphere") {
+    return "click center / move for radius / click commit / Esc cancel";
+  }
+
+  if (shape === "cylinder" || shape === "cone") {
+    return "click base center / move for radius / click lock / move for height / click commit / Esc cancel";
+  }
+
+  return "click anchor / move for base / click lock / move for height / click commit / Esc cancel";
 }

@@ -552,25 +552,6 @@ export function App() {
     );
   };
 
-  const handlePlaceBrushPrimitive = (shape: PrimitiveShape) => {
-    if (shape === "cube") {
-      const activeViewportState = resolveActiveViewportState();
-      const snappedTarget = snapVec3(activeViewportState.camera.target, resolveViewportSnapSize(activeViewportState));
-      const { command, nodeId } = createPlaceBrushNodeCommand(
-        editor.scene,
-        makeTransform(vec3(snappedTarget.x, 1.5, snappedTarget.z))
-      );
-
-      editor.execute(command);
-      editor.select([nodeId], "object");
-      enqueueWorkerJob("Brush placement", { task: "brush-rebuild", worker: "geometryWorker" }, 650);
-      return;
-    }
-
-    const data = createPrimitiveNodeData("brush", shape);
-    handlePlacePrimitiveNode(data, createDefaultPrimitiveTransform(resolvePlacementPosition(data.size)), createPrimitiveNodeLabel("brush", shape));
-  };
-
   const handlePlaceProp = (shape: PrimitiveShape) => {
     const data = createPrimitiveNodeData("prop", shape);
     handlePlacePrimitiveNode(data, createDefaultPrimitiveTransform(resolvePlacementPosition(data.size)), createPrimitiveNodeLabel("prop", shape));
@@ -879,7 +860,6 @@ export function App() {
         onActivateViewport={handleActivateViewport}
         onInvertSelectionNormals={handleInvertSelectionNormals}
         onApplyMaterial={handleApplyMaterial}
-        onActivateBrushTool={() => handleSetToolId("brush")}
         onClipSelection={handleClipSelection}
         onCreateBrush={handleCreateBrush}
         onDeleteSelection={handleDeleteSelection}
@@ -898,7 +878,6 @@ export function App() {
         onMirrorSelection={handleMirrorSelection}
         onPlaceAsset={handlePlaceAsset}
         onPlaceBrush={handlePlaceBrush}
-        onPlaceBrushPrimitive={handlePlaceBrushPrimitive}
         onPlaceEntity={handlePlaceEntity}
         onPlaceLight={handlePlaceLight}
         onPlacePrimitiveNode={handlePlacePrimitiveNode}

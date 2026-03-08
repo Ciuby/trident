@@ -101,7 +101,7 @@ export type BrushCreateState =
       anchor: Vec3;
       basis: BrushCreateBasis;
       currentPoint: Vec3;
-      shape: PrimitiveShape;
+      shape: "cube";
       stage: "base";
     }
   | {
@@ -110,10 +110,36 @@ export type BrushCreateState =
       depth: number;
       dragPlane: Plane;
       height: number;
-      shape: PrimitiveShape;
+      shape: "cube";
       stage: "height";
       startPoint: Vec3;
       width: number;
+    }
+  | {
+      anchor: Vec3;
+      basis: BrushCreateBasis;
+      currentPoint: Vec3;
+      radius: number;
+      shape: "sphere";
+      stage: "radius";
+    }
+  | {
+      anchor: Vec3;
+      basis: BrushCreateBasis;
+      currentPoint: Vec3;
+      radius: number;
+      shape: "cone" | "cylinder";
+      stage: "base";
+    }
+  | {
+      anchor: Vec3;
+      basis: BrushCreateBasis;
+      dragPlane: Plane;
+      height: number;
+      radius: number;
+      shape: "cone" | "cylinder";
+      stage: "height";
+      startPoint: Vec3;
     };
 
 export type BevelState = {

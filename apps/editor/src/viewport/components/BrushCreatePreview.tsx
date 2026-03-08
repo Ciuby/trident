@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { BrushCreateState } from "@/viewport/types";
 import { createIndexedGeometry } from "@/viewport/utils/geometry";
-import { buildBrushCreatePreviewPositions } from "@/viewport/utils/brush-create";
+import { buildBrushCreatePreviewPositions } from "@/viewport/utils/brush-create-session";
 
 export function BrushCreatePreview({ snapSize, state }: { snapSize: number; state: BrushCreateState }) {
   const geometry = useMemo(() => createIndexedGeometry(buildBrushCreatePreviewPositions(state, snapSize)), [snapSize, state]);
