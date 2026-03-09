@@ -221,7 +221,7 @@ export function InspectorSidebar({
   };
 
   return (
-    <div className="pointer-events-none absolute right-4 top-4 z-20 flex h-[clamp(26rem,58vh,42rem)] w-[22rem] max-h-[calc(100%-7rem)]">
+    <div className="pointer-events-none absolute right-4 top-4 z-20 flex h-[clamp(26rem,58vh,42rem)] w-88 max-h-[calc(100%-7rem)]">
       <FloatingPanel className="flex min-h-0 w-full flex-col overflow-hidden">
         <Tabs
           className="flex min-h-0 flex-1 flex-col gap-0"

@@ -1,4 +1,3 @@
-import type { BrushNode, GeometryNode, MeshNode, ModelNode, PlayerSettings, PrimitiveNode, SceneSettings, Transform, Vec3, WorldSettings } from "./types";
 import type {
   BrushNode,
   GeometryNode,
@@ -9,7 +8,8 @@ import type {
   SceneSettings,
   Transform,
   Vec2,
-  Vec3
+  Vec3,
+  WorldSettings
 } from "./types";
 
 export function vec2(x: number, y: number): Vec2 {
@@ -198,18 +198,19 @@ function normalizeWorldSettings(world?: Partial<WorldSettings> | WorldSettings):
   const defaults = createDefaultSceneSettings().world;
   const fogNear = clampFiniteNumber(world?.fogNear, defaults.fogNear);
   const fogFar = clampFiniteNumber(world?.fogFar, defaults.fogFar);
+  const resolvedFogNear = Math.max(0, fogNear);
 
   return {
     ...defaults,
     ...world,
-    fogNear: Math.max(0, fogNear),
-    fogFar: Math.max(Math.max(0, fogNear) + 0.01, fogFar),
+    fogNear: resolvedFogNear,
+    fogFar: Math.max(resolvedFogNear + 0.01, fogFar),
     gravity: world?.gravity ?? defaults.gravity,
   };
 }
 
-function clampFiniteNumber(value: number | undefined, fallback: number) {
-  return Number.isFinite(value) ? value : fallback;
+function clampFiniteNumber(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
 export function isBrushNode(node: GeometryNode): node is BrushNode {

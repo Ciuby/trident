@@ -14,7 +14,6 @@ import type {
   TextureRecord
 } from "@web-hammer/shared";
 import { createDefaultSceneSettings, makeTransform, normalizeSceneSettings, vec3 } from "@web-hammer/shared";
-  scene.settings = normalizeSceneSettings(snapshot.settings ?? createDefaultSceneSettings());
 
 export type SceneDocument = {
   nodes: Map<NodeID, GeometryNode>;
@@ -205,7 +204,7 @@ export function loadSceneDocumentSnapshot(scene: SceneDocument, snapshot: SceneD
   snapshot.layers.forEach((layer) => {
     scene.layers.set(layer.id, structuredClone(layer));
   });
-  scene.settings = structuredClone(snapshot.settings ?? createDefaultSceneSettings());
+  scene.settings = structuredClone(normalizeSceneSettings(snapshot.settings ?? createDefaultSceneSettings()));
   ensureSceneTextureLibrary(scene);
 
   scene.touch();
