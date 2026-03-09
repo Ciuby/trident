@@ -1,5 +1,5 @@
 import { getFaceVertices, reconstructBrushFaces, triangulateMeshFace } from "@web-hammer/geometry-kernel";
-import type { Asset, AssetID, GeometryNode, Material, MaterialID, NodeID, PrimitiveRole, PropPhysics, Vec2, Vec3 } from "@web-hammer/shared";
+import type { Asset, AssetID, GeometryNode, Material, MaterialID, MaterialRenderSide, NodeID, PrimitiveRole, PropPhysics, Vec2, Vec3 } from "@web-hammer/shared";
 import {
   crossVec3,
   dotVec3,
@@ -54,6 +54,7 @@ export type RenderMaterial = {
   normalTexture?: string;
   roughness: number;
   roughnessTexture?: string;
+  side?: MaterialRenderSide;
   wireframe: boolean;
 };
 
@@ -160,6 +161,7 @@ export function createDerivedRenderMesh(
       normalTexture: appearance.normalTexture,
       roughness: appearance.roughness,
       roughnessTexture: appearance.roughnessTexture,
+      side: appearance.side,
       wireframe: appearance.wireframe
     },
     materials: surfaceResult?.materials
@@ -183,6 +185,7 @@ function getRenderAppearance(
   wireframe: boolean;
   roughness: number;
   roughnessTexture?: string;
+  side?: MaterialRenderSide;
   primitiveLabel: string;
 } {
   if (isBrushNode(node)) {
@@ -201,6 +204,7 @@ function getRenderAppearance(
       normalTexture: material?.normalTexture,
       roughness: material?.roughness ?? 0.95,
       roughnessTexture: material?.roughnessTexture,
+      side: material?.side,
       wireframe: false,
       primitiveLabel: "box"
     };
@@ -222,6 +226,7 @@ function getRenderAppearance(
       normalTexture: material?.normalTexture,
       roughness: material?.roughness ?? 0.82,
       roughnessTexture: material?.roughnessTexture,
+      side: material?.side,
       wireframe: false,
       primitiveLabel: "poly"
     };
@@ -255,6 +260,7 @@ function getRenderAppearance(
       normalTexture: material?.normalTexture,
       roughness: material?.roughness ?? (node.data.role === "brush" ? 0.95 : 0.64),
       roughnessTexture: material?.roughnessTexture,
+      side: material?.side,
       wireframe: false,
       primitiveLabel: node.data.shape
     };
@@ -512,6 +518,7 @@ function resolveRenderMaterial(
     normalTexture: material?.normalTexture,
     roughness: material?.roughness ?? fallbackRoughness,
     roughnessTexture: material?.roughnessTexture,
+    side: material?.side,
     wireframe: false
   };
 }

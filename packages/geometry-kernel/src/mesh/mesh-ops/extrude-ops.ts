@@ -10,61 +10,7 @@ export function extrudeEditableMeshFace(
   amount: number,
   epsilon = 0.0001
 ): EditableMesh | undefined {
-  if (Math.abs(amount) <= epsilon) {
-    return structuredClone(mesh);
-  }
-
-  const polygons = normalizeExtrudeSourcePolygons(mesh);
-  const target = polygons.find((polygon) => polygon.id === faceId);
-
-  if (!target) {
-    return undefined;
-  }
-
-  const offset = scaleVec3(normalizeVec3(target.normal), amount);
-  const capPositions = target.positions.map((position) => addVec3(position, offset));
-  const extrudedVertexIds = target.vertexIds.map((vertexId) => `${vertexId}:extrude`);
-  const extrudedPolygons: OrientedEditablePolygon[] = polygons
-    .filter((polygon) => polygon.id !== target.id)
-    .map((polygon) => ({
-      expectedNormal: polygon.normal,
-      id: polygon.id,
-      materialId: polygon.materialId,
-      positions: polygon.positions.map((position) => vec3(position.x, position.y, position.z))
-      ,
-      uvScale: polygon.uvScale,
-      vertexIds: [...polygon.vertexIds]
-    }));
-
-  extrudedPolygons.push({
-    expectedNormal: target.normal,
-    id: `${target.id}:extrude:cap`,
-    materialId: target.materialId,
-    positions: capPositions,
-    uvScale: target.uvScale,
-    vertexIds: extrudedVertexIds
-  });
-
-  target.positions.forEach((position, index) => {
-    const nextIndex = (index + 1) % target.positions.length;
-    const sidePositions = [position, target.positions[nextIndex], capPositions[nextIndex], capPositions[index]];
-
-    extrudedPolygons.push({
-      expectedNormal: computePolygonNormal(sidePositions),
-      id: `${target.id}:extrude:side:${index}`,
-      materialId: target.materialId,
-      positions: sidePositions,
-      uvScale: target.uvScale,
-      vertexIds: [
-        target.vertexIds[index],
-        target.vertexIds[nextIndex],
-        extrudedVertexIds[nextIndex],
-        extrudedVertexIds[index]
-      ]
-    });
-  });
-
-  return createEditableMeshFromPolygons(orientPolygonLoops(extrudedPolygons));
+  return extrudeEditableMeshFaces(mesh, [faceId], amount, epsilon);
 }
 
 export function extrudeEditableMeshFaces(
@@ -73,14 +19,165 @@ export function extrudeEditableMeshFaces(
   amount: number,
   epsilon = 0.0001
 ): EditableMesh | undefined {
-  if (faceIds.length === 0) {
+  const uniqueFaceIds = Array.from(new Set(faceIds));
+
+  if (uniqueFaceIds.length === 0) {
     return undefined;
   }
 
-  return Array.from(new Set(faceIds)).reduce<EditableMesh | undefined>(
-    (currentMesh, faceId) => (currentMesh ? extrudeEditableMeshFace(currentMesh, faceId, amount, epsilon) : currentMesh),
-    mesh
-  );
+  if (Math.abs(amount) <= epsilon) {
+    return structuredClone(mesh);
+  }
+
+  const polygons = normalizeExtrudeSourcePolygons(mesh);
+  const selectedFaceIds = new Set(uniqueFaceIds);
+  const selectedPolygons = polygons.filter((polygon) => selectedFaceIds.has(polygon.id));
+
+  if (selectedPolygons.length !== uniqueFaceIds.length) {
+    return undefined;
+  }
+
+  const selectedEdgeFaces = new Map<string, FaceID[]>();
+
+  selectedPolygons.forEach((polygon) => {
+    polygon.vertexIds.forEach((vertexId, index) => {
+      const nextVertexId = polygon.vertexIds[(index + 1) % polygon.vertexIds.length];
+      const edgeKey = makeUndirectedEdgeKey(vertexId, nextVertexId);
+      const edgeFaces = selectedEdgeFaces.get(edgeKey) ?? [];
+
+      edgeFaces.push(polygon.id);
+      selectedEdgeFaces.set(edgeKey, edgeFaces);
+    });
+  });
+
+  const selectedFaceAdjacency = new Map<FaceID, Set<FaceID>>();
+
+  selectedPolygons.forEach((polygon) => {
+    selectedFaceAdjacency.set(polygon.id, new Set());
+  });
+
+  selectedEdgeFaces.forEach((edgeFaces) => {
+    if (edgeFaces.length !== 2) {
+      return;
+    }
+
+    selectedFaceAdjacency.get(edgeFaces[0])?.add(edgeFaces[1]);
+    selectedFaceAdjacency.get(edgeFaces[1])?.add(edgeFaces[0]);
+  });
+
+  const selectedPolygonsById = new Map(selectedPolygons.map((polygon) => [polygon.id, polygon]));
+  const components: MeshPolygonData[][] = [];
+  const visited = new Set<FaceID>();
+
+  uniqueFaceIds.forEach((faceId) => {
+    if (visited.has(faceId)) {
+      return;
+    }
+
+    const stack = [faceId];
+    const component: MeshPolygonData[] = [];
+
+    while (stack.length > 0) {
+      const currentFaceId = stack.pop();
+
+      if (!currentFaceId || visited.has(currentFaceId)) {
+        continue;
+      }
+
+      visited.add(currentFaceId);
+      const polygon = selectedPolygonsById.get(currentFaceId);
+
+      if (!polygon) {
+        continue;
+      }
+
+      component.push(polygon);
+      (selectedFaceAdjacency.get(currentFaceId) ?? []).forEach((adjacentFaceId) => {
+        if (!visited.has(adjacentFaceId)) {
+          stack.push(adjacentFaceId);
+        }
+      });
+    }
+
+    if (component.length > 0) {
+      components.push(component);
+    }
+  });
+
+  const nextPolygons: OrientedEditablePolygon[] = polygons
+    .filter((polygon) => !selectedFaceIds.has(polygon.id))
+    .map(cloneExtrudePolygon);
+  const occupiedVertexIds = new Set(polygons.flatMap((polygon) => polygon.vertexIds));
+  const occupiedFaceIds = new Set(polygons.map((polygon) => polygon.id));
+
+  for (const component of components) {
+    const extrusionNormal = normalizeVec3(component[0].normal);
+
+    if (
+      component.some((polygon) => dotProductMagnitude(extrusionNormal, normalizeVec3(polygon.normal)) < 1 - epsilon * 10)
+    ) {
+      return undefined;
+    }
+
+    const offset = scaleVec3(extrusionNormal, amount);
+    const componentEdgeCounts = new Map<string, number>();
+    const extrudedVertexIds = new Map<VertexID, VertexID>();
+
+    component.forEach((polygon) => {
+      polygon.vertexIds.forEach((vertexId, index) => {
+        const nextVertexId = polygon.vertexIds[(index + 1) % polygon.vertexIds.length];
+        const edgeKey = makeUndirectedEdgeKey(vertexId, nextVertexId);
+
+        componentEdgeCounts.set(edgeKey, (componentEdgeCounts.get(edgeKey) ?? 0) + 1);
+
+        if (!extrudedVertexIds.has(vertexId)) {
+          extrudedVertexIds.set(vertexId, buildUniqueId(`${vertexId}:extrude`, occupiedVertexIds));
+        }
+      });
+    });
+
+    component.forEach((polygon) => {
+      const capPositions = polygon.positions.map((position) => addVec3(position, offset));
+
+      nextPolygons.push({
+        expectedNormal: polygon.normal,
+        id: buildUniqueId(`${polygon.id}:extrude:cap`, occupiedFaceIds),
+        materialId: polygon.materialId,
+        positions: capPositions,
+        uvScale: polygon.uvScale,
+        vertexIds: polygon.vertexIds.map((vertexId) => extrudedVertexIds.get(vertexId) ?? vertexId)
+      });
+
+      polygon.positions.forEach((position, index) => {
+        const nextIndex = (index + 1) % polygon.positions.length;
+        const startId = polygon.vertexIds[index];
+        const endId = polygon.vertexIds[nextIndex];
+        const edgeKey = makeUndirectedEdgeKey(startId, endId);
+
+        if ((componentEdgeCounts.get(edgeKey) ?? 0) !== 1) {
+          return;
+        }
+
+        const sidePositions = [position, polygon.positions[nextIndex], capPositions[nextIndex], capPositions[index]];
+
+        nextPolygons.push({
+          expectedNormal: computePolygonNormal(sidePositions),
+          id: buildUniqueId(`${polygon.id}:extrude:side:${index}`, occupiedFaceIds),
+          materialId: polygon.materialId,
+          positions: sidePositions,
+          uvScale: polygon.uvScale,
+          vertexIds: [
+            startId,
+            endId,
+            extrudedVertexIds.get(endId) ?? endId,
+            extrudedVertexIds.get(startId) ?? startId
+          ]
+        });
+      });
+    });
+  }
+
+  return createEditableMeshFromPolygons(orientPolygonLoops(nextPolygons));
 }
 
 export function extrudeEditableMeshEdge(
@@ -97,7 +194,7 @@ export function extrudeEditableMeshEdge(
   const polygons = normalizeExtrudeSourcePolygons(mesh);
   const adjacent = polygons.filter((polygon) => findEdgeIndex(polygon.vertexIds, edge) >= 0);
 
-  if (adjacent.length === 0 || adjacent.length > 2) {
+  if (adjacent.length !== 1) {
     return undefined;
   }
 
@@ -122,8 +219,10 @@ export function extrudeEditableMeshEdge(
   const extrudedStart = addVec3(startPosition, offset);
   const extrudedEnd = addVec3(endPosition, offset);
   const edgeKey = makeUndirectedEdgeKey(edge[0], edge[1]);
-  const extrudedStartId = `extrude:${edgeKey}:start`;
-  const extrudedEndId = `extrude:${edgeKey}:end`;
+  const occupiedVertexIds = new Set(polygons.flatMap((polygon) => polygon.vertexIds));
+  const occupiedFaceIds = new Set(polygons.map((polygon) => polygon.id));
+  const extrudedStartId = buildUniqueId(`extrude:${edgeKey}:start`, occupiedVertexIds);
+  const extrudedEndId = buildUniqueId(`extrude:${edgeKey}:end`, occupiedVertexIds);
   const nextPolygons: OrientedEditablePolygon[] = polygons.map((polygon) => ({
     expectedNormal: polygon.normal,
     id: polygon.id,
@@ -133,50 +232,6 @@ export function extrudeEditableMeshEdge(
     vertexIds: [...polygon.vertexIds]
   }));
 
-  if (adjacent.length === 2) {
-    adjacent.forEach((polygon, polygonIndex) => {
-      const polygonEdgeIndex = findEdgeIndex(polygon.vertexIds, orientedEdge);
-
-      if (polygonEdgeIndex < 0) {
-        return;
-      }
-
-      const polygonNextIndex = (polygonEdgeIndex + 1) % polygon.vertexIds.length;
-      const localStartId = polygon.vertexIds[polygonEdgeIndex];
-      const localEndId = polygon.vertexIds[polygonNextIndex];
-      const localStartExtruded = localStartId === orientedEdge[0] ? extrudedStart : extrudedEnd;
-      const localEndExtruded = localEndId === orientedEdge[1] ? extrudedEnd : extrudedStart;
-      const localStartExtrudedId = localStartId === orientedEdge[0] ? extrudedStartId : extrudedEndId;
-      const localEndExtrudedId = localEndId === orientedEdge[1] ? extrudedEndId : extrudedStartId;
-
-      nextPolygons.push({
-        expectedNormal: computePolygonNormal([
-          polygon.positions[polygonEdgeIndex],
-          polygon.positions[polygonNextIndex],
-          localEndExtruded,
-          localStartExtruded
-        ]),
-        id: `${polygon.id}:extrude:side:${polygonIndex}`,
-        materialId: polygon.materialId,
-        positions: [
-          polygon.positions[polygonEdgeIndex],
-          polygon.positions[polygonNextIndex],
-          localEndExtruded,
-          localStartExtruded
-        ],
-        uvScale: polygon.uvScale,
-        vertexIds: [
-          `${polygon.id}:extrude:${edgeKey}:start`,
-          `${polygon.id}:extrude:${edgeKey}:end`,
-          localEndExtrudedId,
-          localStartExtrudedId
-        ]
-      });
-    });
-
-    return createEditableMeshFromPolygons(orientPolygonLoops(nextPolygons));
-  }
-
   nextPolygons.push({
     expectedNormal: computePolygonNormal([
       vec3(startPosition.x, startPosition.y, startPosition.z),
@@ -184,7 +239,7 @@ export function extrudeEditableMeshEdge(
       vec3(extrudedEnd.x, extrudedEnd.y, extrudedEnd.z),
       vec3(extrudedStart.x, extrudedStart.y, extrudedStart.z)
     ]),
-    id: `${target.id}:extrude:${edgeKey}`,
+    id: buildUniqueId(`${target.id}:extrude:${edgeKey}`, occupiedFaceIds),
     materialId: target.materialId,
     positions: [
       vec3(startPosition.x, startPosition.y, startPosition.z),
@@ -219,4 +274,32 @@ function normalizeExtrudeSourcePolygons(mesh: EditableMesh) {
     uvScale: polygon.uvScale,
     vertexIds: polygon.vertexIds ?? []
   }));
+}
+
+function cloneExtrudePolygon(polygon: MeshPolygonData): OrientedEditablePolygon {
+  return {
+    expectedNormal: polygon.normal,
+    id: polygon.id,
+    materialId: polygon.materialId,
+    positions: polygon.positions.map((position) => vec3(position.x, position.y, position.z)),
+    uvScale: polygon.uvScale,
+    vertexIds: [...polygon.vertexIds]
+  };
+}
+
+function dotProductMagnitude(left: Vec3, right: Vec3) {
+  return left.x * right.x + left.y * right.y + left.z * right.z;
+}
+
+function buildUniqueId(baseId: string, occupiedIds: Set<string>) {
+  let nextId = baseId;
+  let suffix = 1;
+
+  while (occupiedIds.has(nextId)) {
+    nextId = `${baseId}:${suffix}`;
+    suffix += 1;
+  }
+
+  occupiedIds.add(nextId);
+  return nextId;
 }

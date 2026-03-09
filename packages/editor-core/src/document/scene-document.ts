@@ -13,7 +13,8 @@ import type {
   SceneSettings,
   TextureRecord
 } from "@web-hammer/shared";
-import { createDefaultSceneSettings, makeTransform, vec3 } from "@web-hammer/shared";
+import { createDefaultSceneSettings, makeTransform, normalizeSceneSettings, vec3 } from "@web-hammer/shared";
+  scene.settings = normalizeSceneSettings(snapshot.settings ?? createDefaultSceneSettings());
 
 export type SceneDocument = {
   nodes: Map<NodeID, GeometryNode>;

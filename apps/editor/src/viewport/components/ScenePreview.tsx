@@ -2,11 +2,13 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { BallCollider, CapsuleCollider, ConeCollider, CuboidCollider, CylinderCollider, Physics, RigidBody, TrimeshCollider, type RapierRigidBody } from "@react-three/rapier";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  BackSide,
   Box3,
   BoxGeometry,
   CapsuleGeometry,
   ConeGeometry,
   CylinderGeometry,
+  DoubleSide,
   FrontSide,
   Mesh,
   MeshStandardMaterial,
@@ -16,8 +18,10 @@ import {
   SRGBColorSpace,
   TextureLoader,
   Vector3,
-  type BufferGeometry
+  type BufferGeometry,
+  type Side
 } from "three";
+import type { MaterialRenderSide } from "@web-hammer/shared";
 import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -1411,13 +1415,24 @@ function createPreviewMaterial(spec: DerivedRenderMesh["material"], selected: bo
     flatShading: spec.flatShaded,
     metalness: spec.wireframe ? 0.05 : spec.metalness,
     roughness: spec.wireframe ? 0.45 : spec.roughness,
-    side: FrontSide,
+    side: resolvePreviewMaterialSide(spec.side),
     wireframe: spec.wireframe,
     ...(colorTexture ? { map: colorTexture } : {}),
     ...(metalnessTexture ? { metalnessMap: metalnessTexture } : {}),
     ...(normalTexture ? { normalMap: normalTexture } : {}),
     ...(roughnessTexture ? { roughnessMap: roughnessTexture } : {})
   });
+}
+
+function resolvePreviewMaterialSide(side?: MaterialRenderSide): Side {
+  switch (side) {
+    case "back":
+      return BackSide;
+    case "double":
+      return DoubleSide;
+    default:
+      return FrontSide;
+  }
 }
 
 function disposePreviewMaterial(material: MeshStandardMaterial) {

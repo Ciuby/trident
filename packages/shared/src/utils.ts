@@ -1,3 +1,4 @@
+import type { BrushNode, GeometryNode, MeshNode, ModelNode, PlayerSettings, PrimitiveNode, SceneSettings, Transform, Vec3, WorldSettings } from "./types";
 import type {
   BrushNode,
   GeometryNode,
@@ -170,10 +171,45 @@ export function createDefaultSceneSettings(): SceneSettings {
     world: {
       ambientColor: "#ffffff",
       ambientIntensity: 0.4,
+      fogColor: "#0b1118",
+      fogFar: 180,
+      fogNear: 45,
       gravity: vec3(0, -9.81, 0),
       physicsEnabled: true
     }
   };
+}
+
+export function normalizeSceneSettings(settings?: Partial<SceneSettings> | SceneSettings): SceneSettings {
+  const defaults = createDefaultSceneSettings();
+
+  return {
+    ...defaults,
+    ...settings,
+    player: {
+      ...defaults.player,
+      ...(settings?.player ?? {})
+    },
+    world: normalizeWorldSettings(settings?.world)
+  };
+}
+
+function normalizeWorldSettings(world?: Partial<WorldSettings> | WorldSettings): WorldSettings {
+  const defaults = createDefaultSceneSettings().world;
+  const fogNear = clampFiniteNumber(world?.fogNear, defaults.fogNear);
+  const fogFar = clampFiniteNumber(world?.fogFar, defaults.fogFar);
+
+  return {
+    ...defaults,
+    ...world,
+    fogNear: Math.max(0, fogNear),
+    fogFar: Math.max(Math.max(0, fogNear) + 0.01, fogFar),
+    gravity: world?.gravity ?? defaults.gravity,
+  };
+}
+
+function clampFiniteNumber(value: number | undefined, fallback: number) {
+  return Number.isFinite(value) ? value : fallback;
 }
 
 export function isBrushNode(node: GeometryNode): node is BrushNode {

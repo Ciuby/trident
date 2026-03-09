@@ -462,8 +462,9 @@ export function createMeshExtrudeHandles(mesh: EditableMesh): MeshExtrudeHandle[
   const edgeHandles = createMeshEditHandles(mesh, "edge").flatMap((handle) => {
     const normals = edgeNormals.get(handle.id);
 
-    // Valid edge extrusion supports manifold edges with one or two incident faces.
-    if (!normals || normals.length === 0 || normals.length > 2) {
+    // Edge extrusion is only safe on boundary edges. Interior edges produced
+    // disconnected topology after commit.
+    if (!normals || normals.length !== 1) {
       return [];
     }
 

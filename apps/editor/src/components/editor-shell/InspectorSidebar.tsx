@@ -312,6 +312,46 @@ export function InspectorSidebar({
                     value={draftWorldSettings.ambientIntensity}
                   />
                 </ToolSection>
+
+                <ToolSection title="Fog">
+                  <ColorField
+                    label="Fog Color"
+                    onChange={(value) => setDraftWorldSettings((current) => ({ ...current, fogColor: value }))}
+                    value={draftWorldSettings.fogColor}
+                  />
+                  <DragInput
+                    className="w-full"
+                    compact
+                    label="Near"
+                    min={0}
+                    onChange={(value) =>
+                      setDraftWorldSettings((current) => ({
+                        ...current,
+                        fogNear: Math.max(0, Math.min(value, current.fogFar - 0.01)),
+                      }))
+                    }
+                    onValueCommit={commitWorldSettings}
+                    precision={2}
+                    step={0.5}
+                    value={draftWorldSettings.fogNear}
+                  />
+                  <DragInput
+                    className="w-full"
+                    compact
+                    label="Far"
+                    min={0.01}
+                    onChange={(value) =>
+                      setDraftWorldSettings((current) => ({
+                        ...current,
+                        fogFar: Math.max(value, current.fogNear + 0.01),
+                      }))
+                    }
+                    onValueCommit={commitWorldSettings}
+                    precision={2}
+                    step={1}
+                    value={draftWorldSettings.fogFar}
+                  />
+                </ToolSection>
               </div>
             </ScrollArea>
           </TabsContent>

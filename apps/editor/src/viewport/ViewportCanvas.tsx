@@ -2078,7 +2078,16 @@ export function ViewportCanvas({
         shadows={renderMode === "lit"}
       >
         <color attach="background" args={[renderMode === "lit" ? "#0b1118" : "#091018"]} />
-        {renderMode === "lit" ? <fog attach="fog" args={["#0b1118", 45, 180]} /> : null}
+        {renderMode === "lit" ? (
+          <fog
+            attach="fog"
+            args={[
+              sceneSettings.world.fogColor,
+              Math.max(0, sceneSettings.world.fogNear),
+              Math.max(sceneSettings.world.fogNear + 0.01, sceneSettings.world.fogFar),
+            ]}
+          />
+        ) : null}
         {renderMode === "lit" ? (
           <ambientLight color={sceneSettings.world.ambientColor} intensity={sceneSettings.world.ambientIntensity} />
         ) : null}

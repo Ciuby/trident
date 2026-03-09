@@ -176,6 +176,8 @@ export type Asset = {
 
 export type MaterialCategory = "blockout" | "custom" | "flat";
 
+export type MaterialRenderSide = "back" | "double" | "front";
+
 export type TextureKind = "color" | "normal" | "metalness" | "roughness";
 
 export type TextureSource = "ai" | "import" | "upload";
@@ -198,6 +200,7 @@ export type Material = {
   name: string;
   category?: MaterialCategory;
   color: string;
+  side?: MaterialRenderSide;
   colorTexture?: string;
   edgeColor?: string;
   edgeThickness?: number;
@@ -239,6 +242,9 @@ export type PlayerSettings = {
 export type WorldSettings = {
   ambientColor: string;
   ambientIntensity: number;
+  fogColor: string;
+  fogFar: number;
+  fogNear: number;
   gravity: Vec3;
   physicsEnabled: boolean;
 };

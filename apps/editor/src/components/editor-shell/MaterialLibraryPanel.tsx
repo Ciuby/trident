@@ -23,6 +23,7 @@ import {
   vec2,
   type GeometryNode,
   type Material,
+  type MaterialRenderSide,
   type TextureKind,
   type TextureRecord,
   type Vec2
@@ -33,6 +34,13 @@ import { Button } from "@/components/ui/button";
 import { DragInput } from "@/components/ui/drag-input";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 type MaterialLibraryPanelProps = {
@@ -78,6 +86,15 @@ const TEXTURE_FIELD_BY_KIND: Record<TextureKind, TextureField> = {
   normal: "normalTexture",
   roughness: "roughnessTexture",
 };
+
+const MATERIAL_SIDE_OPTIONS: Array<{
+  label: string;
+  value: MaterialRenderSide;
+}> = [
+  { label: "Front", value: "front" },
+  { label: "Back", value: "back" },
+  { label: "Double", value: "double" },
+];
 
 export function MaterialLibraryPanel({
   materials,
@@ -730,9 +747,33 @@ function MaterialEditorForm({
       </div>
 
       <div className="space-y-2">
+        <PanelLabel>Render Side</PanelLabel>
+        <Select
+          onValueChange={(value) =>
+            onChangeDraft((current) => ({
+              ...current,
+              side: value as MaterialRenderSide,
+            }))
+          }
+          value={draftMaterial.side ?? "front"}
+        >
+          <SelectTrigger className="w-full border-white/10 bg-white/4">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="rounded-2xl bg-[#0d1714]/96">
+            {MATERIAL_SIDE_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
         {TEXTURE_FIELDS.map(({ field, icon: Icon, label }) => (
           <div
-            className="flex items-center gap-2 rounded-2xl border border-white/8 bg-white/[0.03] px-2 py-2"
+            className="flex items-center gap-2 rounded-2xl border border-white/8 bg-white/3 px-2 py-2"
             key={field}
           >
             <div
