@@ -1,9 +1,8 @@
 import { getFaceVertices, triangulateMeshFace } from "@web-hammer/geometry-kernel";
 import { type EditableMesh, type GeometryNode, type Vec3 } from "@web-hammer/shared";
-import { useEffect, useMemo } from "react";
-import { BufferGeometry, DoubleSide, Float32BufferAttribute } from "three";
+import { useEffect, useRef, useState } from "react";
+import { BufferGeometry, DoubleSide, Float32BufferAttribute, Uint32BufferAttribute } from "three";
 import { NodeTransformGroup } from "@/viewport/components/NodeTransformGroup";
-import { createIndexedGeometry } from "@/viewport/utils/geometry";
 
 export function EditableMeshPreviewOverlay({
   mesh,
@@ -12,7 +11,12 @@ export function EditableMeshPreviewOverlay({
   mesh: EditableMesh;
   node: GeometryNode;
 }) {
-  const geometry = useMemo(() => {
+  const geometryRef = useRef<BufferGeometry>(new BufferGeometry());
+  const wireframeGeometryRef = useRef<BufferGeometry>(new BufferGeometry());
+  const [hasSurfaceGeometry, setHasSurfaceGeometry] = useState(false);
+  const [hasWireframeGeometry, setHasWireframeGeometry] = useState(false);
+
+  useEffect(() => {
     const faceData = mesh.faces
       .map((face) => {
         const triangulated = triangulateMeshFace(mesh, face.id);
@@ -29,7 +33,9 @@ export function EditableMeshPreviewOverlay({
       .filter((face): face is { indices: number[]; positions: Vec3[] } => Boolean(face));
 
     if (faceData.length === 0) {
-      return undefined;
+      clearGeometry(geometryRef.current);
+      setHasSurfaceGeometry(false);
+      return;
     }
 
     const positions: number[] = [];
@@ -46,12 +52,16 @@ export function EditableMeshPreviewOverlay({
       vertexOffset += face.positions.length;
     });
 
-    const nextGeometry = createIndexedGeometry(positions, indices);
-    nextGeometry.computeVertexNormals();
-    return nextGeometry;
+    syncIndexedGeometry(geometryRef.current, positions, indices);
+    geometryRef.current.computeVertexNormals();
+    geometryRef.current.computeBoundingBox();
+    geometryRef.current.computeBoundingSphere();
+    setHasSurfaceGeometry(true);
   }, [mesh]);
-  const wireframeGeometry = useMemo(() => {
+
+  useEffect(() => {
     const verticesById = new Map(mesh.vertices.map((vertex) => [vertex.id, vertex.position] as const));
+    const halfEdgesById = new Map(mesh.halfEdges.map((halfEdge) => [halfEdge.id, halfEdge] as const));
     const segments: number[] = [];
     const seenEdges = new Set<string>();
 
@@ -60,7 +70,7 @@ export function EditableMeshPreviewOverlay({
         return;
       }
 
-      const nextHalfEdge = mesh.halfEdges.find((candidate) => candidate.id === halfEdge.next);
+      const nextHalfEdge = halfEdgesById.get(halfEdge.next);
 
       if (!nextHalfEdge) {
         return;
@@ -86,29 +96,32 @@ export function EditableMeshPreviewOverlay({
     });
 
     if (segments.length === 0) {
-      return undefined;
+      clearGeometry(wireframeGeometryRef.current);
+      setHasWireframeGeometry(false);
+      return;
     }
 
-    const nextGeometry = new BufferGeometry();
-    nextGeometry.setAttribute("position", new Float32BufferAttribute(segments, 3));
-    return nextGeometry;
+    syncLineGeometry(wireframeGeometryRef.current, segments);
+    wireframeGeometryRef.current.computeBoundingBox();
+    wireframeGeometryRef.current.computeBoundingSphere();
+    setHasWireframeGeometry(true);
   }, [mesh]);
 
   useEffect(
     () => () => {
-      // WebGPU can still reference transient preview geometry for a frame after
-      // React has swapped it out. Avoid manual disposal on this hot path.
+      geometryRef.current.dispose();
+      wireframeGeometryRef.current.dispose();
     },
-    [geometry, wireframeGeometry]
+    []
   );
 
-  if (!geometry) {
+  if (!hasSurfaceGeometry) {
     return null;
   }
 
   return (
     <NodeTransformGroup transform={node.transform}>
-      <mesh geometry={geometry} renderOrder={11}>
+      <mesh geometry={geometryRef.current} renderOrder={11}>
         <meshStandardMaterial
           color="#8b5cf6"
           depthWrite={false}
@@ -122,11 +135,44 @@ export function EditableMeshPreviewOverlay({
           transparent
         />
       </mesh>
-      {wireframeGeometry ? (
-        <lineSegments geometry={wireframeGeometry} renderOrder={12}>
+      {hasWireframeGeometry ? (
+        <lineSegments geometry={wireframeGeometryRef.current} renderOrder={12}>
           <lineBasicMaterial color="#f8fafc" depthWrite={false} opacity={0.95} toneMapped={false} transparent />
         </lineSegments>
       ) : null}
     </NodeTransformGroup>
   );
+}
+
+function clearGeometry(geometry: BufferGeometry) {
+  geometry.deleteAttribute("position");
+  geometry.deleteAttribute("normal");
+  geometry.setIndex(null);
+}
+
+function syncIndexedGeometry(geometry: BufferGeometry, positions: number[], indices: number[]) {
+  syncFloatAttribute(geometry, "position", positions, 3);
+  geometry.setIndex(new Uint32BufferAttribute(indices, 1));
+  geometry.deleteAttribute("normal");
+}
+
+function syncLineGeometry(geometry: BufferGeometry, positions: number[]) {
+  syncFloatAttribute(geometry, "position", positions, 3);
+}
+
+function syncFloatAttribute(
+  geometry: BufferGeometry,
+  attributeName: string,
+  values: number[],
+  itemSize: number
+) {
+  const current = geometry.getAttribute(attributeName);
+
+  if (!(current instanceof Float32BufferAttribute) || current.array.length !== values.length) {
+    geometry.setAttribute(attributeName, new Float32BufferAttribute(values, itemSize));
+    return;
+  }
+
+  current.array.set(values);
+  current.needsUpdate = true;
 }
