@@ -1,13 +1,17 @@
 import { useEffect } from "react";
 import type { EditorCore } from "@web-hammer/editor-core";
 
-export function useEditorSubscriptions(editor: EditorCore, setRevision: React.Dispatch<React.SetStateAction<number>>) {
+export function useEditorSubscriptions(
+  editor: EditorCore,
+  setSceneRevision: React.Dispatch<React.SetStateAction<number>>,
+  setSelectionRevision: React.Dispatch<React.SetStateAction<number>>
+) {
   useEffect(() => {
     const unsubscribeScene = editor.events.on("scene:changed", () => {
-      setRevision((revision) => revision + 1);
+      setSceneRevision((revision) => revision + 1);
     });
     const unsubscribeSelection = editor.events.on("selection:changed", () => {
-      setRevision((revision) => revision + 1);
+      setSelectionRevision((revision) => revision + 1);
     });
 
     if (editor.selection.ids.length === 0) {
@@ -22,5 +26,5 @@ export function useEditorSubscriptions(editor: EditorCore, setRevision: React.Di
       unsubscribeScene();
       unsubscribeSelection();
     };
-  }, [editor, setRevision]);
+  }, [editor, setSceneRevision, setSelectionRevision]);
 }

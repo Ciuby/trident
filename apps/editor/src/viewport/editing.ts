@@ -56,6 +56,17 @@ type BrushFaceAxis = {
 };
 
 const ZERO_VECTOR = vec3(0, 0, 0);
+const meshEditHandleCache = new WeakMap<
+  EditableMesh,
+  {
+    edge?: MeshEditHandle[];
+    face?: MeshEditHandle[];
+    faces: EditableMesh["faces"];
+    halfEdges: EditableMesh["halfEdges"];
+    vertex?: MeshEditHandle[];
+    vertices: EditableMesh["vertices"];
+  }
+>();
 
 export function resolveBrushFaceAxis(face: ReconstructedBrushFace): BrushFaceAxis | undefined {
   const normalAxis = getDominantAxis(face.normal);
@@ -120,7 +131,24 @@ export function buildBrushClipPreview(
 }
 
 export function createMeshEditHandles(mesh: EditableMesh, mode: MeshEditMode): MeshEditHandle[] {
+  const cached = meshEditHandleCache.get(mesh);
+
+  if (cached && cached.faces === mesh.faces && cached.halfEdges === mesh.halfEdges && cached.vertices === mesh.vertices) {
+    const existing = cached[mode];
+
+    if (existing) {
+      return existing;
+    }
+  }
+
   const verticesById = new Map(mesh.vertices.map((vertex) => [vertex.id, vertex]));
+  const nextCache = cached && cached.faces === mesh.faces && cached.halfEdges === mesh.halfEdges && cached.vertices === mesh.vertices
+    ? cached
+    : {
+        faces: mesh.faces,
+        halfEdges: mesh.halfEdges,
+        vertices: mesh.vertices
+      };
 
   if (mode === "vertex") {
     const vertexNormals = new Map<string, Vec3[]>();
@@ -142,13 +170,17 @@ export function createMeshEditHandles(mesh: EditableMesh, mode: MeshEditMode): M
       });
     });
 
-    return mesh.vertices.map((vertex) => ({
+    const handles = mesh.vertices.map((vertex) => ({
       id: vertex.id,
       normal: vertexNormals.has(vertex.id) ? normalizeVec3(averageVec3(vertexNormals.get(vertex.id)!)) : undefined,
       points: [vec3(vertex.position.x, vertex.position.y, vertex.position.z)],
       position: vec3(vertex.position.x, vertex.position.y, vertex.position.z),
       vertexIds: [vertex.id]
     }));
+
+    nextCache.vertex = handles;
+    meshEditHandleCache.set(mesh, nextCache);
+    return handles;
   }
 
   if (mode === "face") {
@@ -170,6 +202,8 @@ export function createMeshEditHandles(mesh: EditableMesh, mode: MeshEditMode): M
       });
     });
 
+    nextCache.face = handles;
+    meshEditHandleCache.set(mesh, nextCache);
     return handles;
   }
 
@@ -233,7 +267,10 @@ export function createMeshEditHandles(mesh: EditableMesh, mode: MeshEditMode): M
     });
   });
 
-  return Array.from(handles.values());
+  const edgeHandles = Array.from(handles.values());
+  nextCache.edge = edgeHandles;
+  meshEditHandleCache.set(mesh, nextCache);
+  return edgeHandles;
 }
 
 export function computeMeshEditSelectionCenter(

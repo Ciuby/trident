@@ -44,6 +44,18 @@ export type TriangulatedEditableMesh = EditableMeshValidation & {
   positions: number[];
 };
 
+type EditableMeshIndex = {
+  faceById: Map<FaceID, EditableMeshFace>;
+  faceVertexIds: Map<FaceID, VertexID[]>;
+  faces: EditableMesh["faces"];
+  halfEdgeById: Map<HalfEdgeID, EditableMeshHalfEdge>;
+  halfEdges: EditableMesh["halfEdges"];
+  vertexById: Map<VertexID, EditableMeshVertex>;
+  vertices: EditableMesh["vertices"];
+};
+
+const editableMeshIndexCache = new WeakMap<EditableMesh, EditableMeshIndex>();
+
 export function createEditableMeshFromPolygons(
   polygons: EditableMeshPolygon[],
   epsilon = 0.0001
@@ -131,7 +143,14 @@ export function createEditableMeshFromPolygons(
 }
 
 export function getFaceVertexIds(mesh: EditableMesh, faceId: FaceID): VertexID[] {
-  const face = mesh.faces.find((candidate) => candidate.id === faceId);
+  const index = getEditableMeshIndex(mesh);
+  const cachedIds = index.faceVertexIds.get(faceId);
+
+  if (cachedIds) {
+    return cachedIds;
+  }
+
+  const face = index.faceById.get(faceId);
 
   if (!face) {
     return [];
@@ -142,7 +161,7 @@ export function getFaceVertexIds(mesh: EditableMesh, faceId: FaceID): VertexID[]
   let guard = 0;
 
   while (currentEdgeId && guard < mesh.halfEdges.length + 1) {
-    const halfEdge = mesh.halfEdges.find((candidate) => candidate.id === currentEdgeId);
+    const halfEdge = index.halfEdgeById.get(currentEdgeId);
 
     if (!halfEdge) {
       return [];
@@ -157,14 +176,15 @@ export function getFaceVertexIds(mesh: EditableMesh, faceId: FaceID): VertexID[]
     }
   }
 
+  index.faceVertexIds.set(faceId, ids);
   return ids;
 }
 
 export function getFaceVertices(mesh: EditableMesh, faceId: FaceID): EditableMeshVertex[] {
-  const verticesById = new Map(mesh.vertices.map((vertex) => [vertex.id, vertex]));
+  const index = getEditableMeshIndex(mesh);
 
   return getFaceVertexIds(mesh, faceId)
-    .map((vertexId) => verticesById.get(vertexId))
+    .map((vertexId) => index.vertexById.get(vertexId))
     .filter((vertex): vertex is EditableMeshVertex => Boolean(vertex));
 }
 
@@ -304,4 +324,25 @@ function makeVertexKey(position: Vec3, epsilon: number): string {
     Math.round(position.y / epsilon),
     Math.round(position.z / epsilon)
   ].join(":");
+}
+
+function getEditableMeshIndex(mesh: EditableMesh): EditableMeshIndex {
+  const cached = editableMeshIndexCache.get(mesh);
+
+  if (cached && cached.faces === mesh.faces && cached.halfEdges === mesh.halfEdges && cached.vertices === mesh.vertices) {
+    return cached;
+  }
+
+  const nextIndex: EditableMeshIndex = {
+    faceById: new Map(mesh.faces.map((face) => [face.id, face] as const)),
+    faceVertexIds: new Map(),
+    faces: mesh.faces,
+    halfEdgeById: new Map(mesh.halfEdges.map((halfEdge) => [halfEdge.id, halfEdge] as const)),
+    halfEdges: mesh.halfEdges,
+    vertexById: new Map(mesh.vertices.map((vertex) => [vertex.id, vertex] as const)),
+    vertices: mesh.vertices
+  };
+
+  editableMeshIndexCache.set(mesh, nextIndex);
+  return nextIndex;
 }

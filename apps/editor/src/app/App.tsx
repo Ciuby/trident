@@ -40,7 +40,12 @@ import {
   type TransformAxis
 } from "@web-hammer/editor-core";
 import { convertBrushToEditableMesh, invertEditableMeshNormals } from "@web-hammer/geometry-kernel";
-import { deriveRenderScene, gridSnapValues, type ViewportState } from "@web-hammer/render-pipeline";
+import {
+  createDerivedRenderSceneCache,
+  deriveRenderSceneCached,
+  gridSnapValues,
+  type ViewportState
+} from "@web-hammer/render-pipeline";
 import {
   type BrushShape,
   type GeometryNode,
@@ -133,21 +138,28 @@ export function App() {
   const [transformMode, setTransformMode] = useState<"rotate" | "scale" | "translate">("translate");
   const [workerManager] = useState(() => createWorkerTaskManager());
   const [workerJobs, setWorkerJobs] = useState<WorkerJob[]>([]);
-  const [revision, setRevision] = useState(0);
+  const [sceneRevision, setSceneRevision] = useState(0);
+  const [selectionRevision, setSelectionRevision] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const glbImportInputRef = useRef<HTMLInputElement | null>(null);
+  const renderSceneCacheRef = useRef(createDerivedRenderSceneCache());
   const ui = useSnapshot(uiStore);
   const toolSession = useMemo(() => createToolSession(activeToolId), [activeToolId]);
   const { downloadBinaryFile, downloadTextFile, exportJobs, runWorkerRequest } = useExportWorker();
-  const renderScene = deriveRenderScene(
-    editor.scene.nodes.values(),
-    editor.scene.entities.values(),
-    editor.scene.materials.values(),
-    editor.scene.assets.values()
+  const renderScene = useMemo(
+    () =>
+      deriveRenderSceneCached(
+        editor.scene.nodes.values(),
+        editor.scene.entities.values(),
+        editor.scene.materials.values(),
+        editor.scene.assets.values(),
+        renderSceneCacheRef.current
+      ),
+    [editor, sceneRevision]
   );
-  const spatialAnalysis = useMemo(() => analyzeSceneSpatialLayout(editor.scene), [editor, revision]);
+  const spatialAnalysis = useMemo(() => analyzeSceneSpatialLayout(editor.scene), [editor, sceneRevision]);
 
-  useEditorSubscriptions(editor, setRevision);
+  useEditorSubscriptions(editor, setSceneRevision, setSelectionRevision);
 
   useEffect(() => workerManager.subscribe(setWorkerJobs), [workerManager]);
 
@@ -164,7 +176,7 @@ export function App() {
 
     setAiModelDraft(null);
     setAiModelPlacementArmed(false);
-  }, [aiModelDraft, editor, revision]);
+  }, [aiModelDraft, editor, sceneRevision]);
 
   const handleSelectNodes = (nodeIds: string[]) => {
     if (physicsPlayback !== "stopped") {
@@ -197,7 +209,7 @@ export function App() {
         "promote prop to mesh"
       )
     );
-  }, [activeToolId, editor, revision]);
+  }, [activeToolId, editor, sceneRevision, selectionRevision]);
 
   const handleSetRightPanel = (panel: "inspector" | "materials" | "player" | "scene" | "world") => {
     uiStore.rightPanel = panel;
@@ -330,7 +342,7 @@ export function App() {
 
     node.data = structuredClone(brush);
     editor.scene.touch();
-    setRevision((revision) => revision + 1);
+    setSceneRevision((revision) => revision + 1);
   };
 
   const handleUpdateBrushData = (nodeId: string, brush: Brush, beforeBrush?: Brush) => {
@@ -365,7 +377,7 @@ export function App() {
 
     node.data = preserveMeshMetadata(mesh, node.data);
     editor.scene.touch();
-    setRevision((revision) => revision + 1);
+    setSceneRevision((revision) => revision + 1);
   };
 
   const handleUpdateMeshData = (nodeId: string, mesh: EditableMesh, beforeMesh?: EditableMesh) => {
@@ -395,7 +407,7 @@ export function App() {
 
     node.transform = structuredClone(transform);
     editor.scene.touch();
-    setRevision((revision) => revision + 1);
+    setSceneRevision((revision) => revision + 1);
   };
 
   const handlePreviewEntityTransform = (entityId: string, transform: Transform) => {
@@ -407,7 +419,7 @@ export function App() {
 
     entity.transform = structuredClone(transform);
     editor.scene.touch();
-    setRevision((revision) => revision + 1);
+    setSceneRevision((revision) => revision + 1);
   };
 
   const handleUpdateEntity = (entityId: string, nextEntity: Entity, beforeEntity?: Entity) => {

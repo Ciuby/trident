@@ -64,18 +64,31 @@ export function ScenePreview({
 }) {
   const [hoveredNodeId, setHoveredNodeId] = useState<string>();
   const hiddenIds = useMemo(() => new Set(hiddenNodeIds), [hiddenNodeIds]);
+  const selectedIdSet = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds]);
   const physicsActive = renderMode === "lit" && physicsPlayback !== "stopped" && sceneSettings.world.physicsEnabled;
-  const playerSpawn = physicsActive ? renderScene.entityMarkers.find((entity) => entity.entityType === "player-spawn") : undefined;
-  const physicsPropMeshes = physicsActive
-    ? renderScene.meshes.filter((mesh) => !hiddenIds.has(mesh.nodeId) && mesh.physics?.enabled)
-    : [];
-  const staticMeshes = renderScene.meshes.filter(
-    (mesh) => !hiddenIds.has(mesh.nodeId) && !physicsPropMeshes.some((candidate) => candidate.nodeId === mesh.nodeId)
-  );
-  const visibleEntityMarkers =
-    physicsActive && playerSpawn
-      ? renderScene.entityMarkers.filter((entity) => entity.entityId !== playerSpawn.entityId)
-      : renderScene.entityMarkers;
+  const { physicsPropMeshes, playerSpawn, staticMeshes, visibleEntityMarkers } = useMemo(() => {
+    const nextPlayerSpawn = physicsActive
+      ? renderScene.entityMarkers.find((entity) => entity.entityType === "player-spawn")
+      : undefined;
+    const nextPhysicsPropMeshes = physicsActive
+      ? renderScene.meshes.filter((mesh) => !hiddenIds.has(mesh.nodeId) && mesh.physics?.enabled)
+      : [];
+    const physicsPropIds = new Set(nextPhysicsPropMeshes.map((mesh) => mesh.nodeId));
+    const nextStaticMeshes = renderScene.meshes.filter(
+      (mesh) => !hiddenIds.has(mesh.nodeId) && !physicsPropIds.has(mesh.nodeId)
+    );
+    const nextVisibleEntityMarkers =
+      physicsActive && nextPlayerSpawn
+        ? renderScene.entityMarkers.filter((entity) => entity.entityId !== nextPlayerSpawn.entityId)
+        : renderScene.entityMarkers;
+
+    return {
+      physicsPropMeshes: nextPhysicsPropMeshes,
+      playerSpawn: nextPlayerSpawn,
+      staticMeshes: nextStaticMeshes,
+      visibleEntityMarkers: nextVisibleEntityMarkers
+    };
+  }, [hiddenIds, physicsActive, renderScene]);
 
   return (
     <>
@@ -91,7 +104,7 @@ export function ScenePreview({
           onMeshObjectChange={onMeshObjectChange}
           onSelectNodes={onSelectNode}
           renderMode={renderMode}
-          selected={selectedNodeIds.includes(mesh.nodeId)}
+          selected={selectedIdSet.has(mesh.nodeId)}
         />
       ))}
 
@@ -117,7 +130,7 @@ export function ScenePreview({
               onMeshObjectChange={onMeshObjectChange}
               onSelectNodes={onSelectNode}
               renderMode={renderMode}
-              selected={selectedNodeIds.includes(mesh.nodeId)}
+              selected={selectedIdSet.has(mesh.nodeId)}
             />
           ))}
           {playerSpawn ? (
@@ -131,7 +144,7 @@ export function ScenePreview({
       ) : null}
 
       {visibleEntityMarkers.map((entity) => {
-        const selected = selectedNodeIds.includes(entity.entityId);
+        const selected = selectedIdSet.has(entity.entityId);
         const color = selected ? "#ffb35a" : entity.color;
 
         return (
@@ -181,7 +194,7 @@ export function ScenePreview({
           onHoverStart={setHoveredNodeId}
           onSelectNodes={onSelectNode}
           renderMode={renderMode}
-          selected={selectedNodeIds.includes(light.nodeId)}
+          selected={selectedIdSet.has(light.nodeId)}
         />
       ))}
     </>
