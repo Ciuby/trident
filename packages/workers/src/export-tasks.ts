@@ -16,6 +16,7 @@ import {
   type Vec2,
   type Vec3
 } from "@web-hammer/shared";
+import type { WebHammerEngineScene, WebHammerExportMaterial } from "@web-hammer/three-runtime";
 import { BoxGeometry, ConeGeometry, CylinderGeometry, SphereGeometry } from "three";
 
 export type WorkerExportKind = "whmap-load" | "whmap-save" | "engine-export" | "gltf-export" | "ai-model-generate";
@@ -162,45 +163,84 @@ export function parseWhmap(text: string): SceneDocumentSnapshot {
 export async function serializeEngineScene(snapshot: SceneDocumentSnapshot): Promise<string> {
   const materialsById = new Map(snapshot.materials.map((material) => [material.id, material]));
   const exportedMaterials = await Promise.all(snapshot.materials.map((material) => resolveExportMaterial(material)));
+  const engineScene = {
+    assets: snapshot.assets,
+    entities: snapshot.entities,
+    layers: snapshot.layers,
+    materials: exportedMaterials,
+    metadata: {
+      exportedAt: new Date().toISOString(),
+      format: "web-hammer-engine",
+      version: 3
+    },
+    settings: snapshot.settings,
+    nodes: await Promise.all(
+      snapshot.nodes.map(async (node) => {
+        if (isBrushNode(node)) {
+          return {
+            data: node.data,
+            geometry: await buildExportGeometry(node, materialsById),
+            id: node.id,
+            kind: "brush",
+            metadata: node.metadata,
+            name: node.name,
+            tags: node.tags,
+            transform: node.transform
+          } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "brush" }>;
+        }
 
-  return JSON.stringify(
-    {
-      assets: snapshot.assets,
-      entities: snapshot.entities,
-      layers: snapshot.layers,
-      materials: exportedMaterials,
-      metadata: {
-        exportedAt: new Date().toISOString(),
-        format: "web-hammer-engine",
-        version: 3
-      },
-      settings: snapshot.settings,
-      nodes: await Promise.all(
-        snapshot.nodes.map(async (node) => {
-          if (isBrushNode(node) || isMeshNode(node) || isPrimitiveNode(node)) {
-            return {
-              data: node.data,
-              geometry: await buildExportGeometry(node, materialsById),
-              id: node.id,
-              kind: node.kind,
-              name: node.name,
-              transform: node.transform
-            };
-          }
+        if (isMeshNode(node)) {
+          return {
+            data: node.data,
+            geometry: await buildExportGeometry(node, materialsById),
+            id: node.id,
+            kind: "mesh",
+            metadata: node.metadata,
+            name: node.name,
+            tags: node.tags,
+            transform: node.transform
+          } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "mesh" }>;
+        }
 
+        if (isPrimitiveNode(node)) {
+          return {
+            data: node.data,
+            geometry: await buildExportGeometry(node, materialsById),
+            id: node.id,
+            kind: "primitive",
+            metadata: node.metadata,
+            name: node.name,
+            tags: node.tags,
+            transform: node.transform
+          } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "primitive" }>;
+        }
+
+        if (isModelNode(node)) {
           return {
             data: node.data,
             id: node.id,
-            kind: node.kind,
+            kind: "model",
+            metadata: node.metadata,
             name: node.name,
+            tags: node.tags,
             transform: node.transform
-          };
-        })
-      )
-    },
-    null,
-    2
-  );
+          } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "model" }>;
+        }
+
+        return {
+          data: node.data,
+          id: node.id,
+          kind: "light",
+          metadata: node.metadata,
+          name: node.name,
+          tags: node.tags,
+          transform: node.transform
+        } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "light" }>;
+      })
+    )
+  } satisfies WebHammerEngineScene;
+
+  return JSON.stringify(engineScene, null, 2);
 }
 
 export async function serializeGltfScene(snapshot: SceneDocumentSnapshot): Promise<string> {
@@ -211,7 +251,7 @@ export async function serializeGltfScene(snapshot: SceneDocumentSnapshot): Promi
       name: string;
       primitives: Array<{
         indices: number[];
-        material: Awaited<ReturnType<typeof resolveExportMaterial>>;
+        material: WebHammerExportMaterial;
         normals: number[];
         positions: number[];
         uvs: number[];
@@ -280,7 +320,7 @@ async function buildGltfDocument(
       name: string;
       primitives: Array<{
         indices: number[];
-        material: Awaited<ReturnType<typeof resolveExportMaterial>>;
+        material: WebHammerExportMaterial;
         normals: number[];
         positions: number[];
         uvs: number[];
@@ -461,7 +501,7 @@ async function buildExportGeometry(
   });
   const primitiveByMaterial = new Map<string, {
     indices: number[];
-    material: Awaited<ReturnType<typeof resolveExportMaterial>>;
+    material: WebHammerExportMaterial;
     normals: number[];
     positions: number[];
     uvs: number[];
@@ -606,8 +646,9 @@ async function resolveExportMaterial(material?: Material) {
     ),
     name: resolved.name,
     normalTexture: await resolveEmbeddedTextureUri(resolved.normalTexture),
-    roughnessFactor: resolved.roughness ?? 0.8
-  };
+    roughnessFactor: resolved.roughness ?? 0.8,
+    side: resolved.side
+  } satisfies WebHammerExportMaterial;
 }
 
 function resolveGeneratedBlockoutTexture(material: Material) {
@@ -617,7 +658,7 @@ function resolveGeneratedBlockoutTexture(material: Material) {
 }
 
 async function ensureGltfMaterial(
-  material: Awaited<ReturnType<typeof resolveExportMaterial>>,
+  material: WebHammerExportMaterial,
   materials: Array<Record<string, unknown>>,
   textures: Array<Record<string, unknown>>,
   images: Array<Record<string, unknown>>,
@@ -696,7 +737,7 @@ function projectPlanarUvs(vertices: Vec3[], normal: Vec3, uvScale?: Vec2, uvOffs
 
   return vertices.flatMap((vertex) => {
     const offset = subVec3(vertex, origin);
-    return [dotVec3(offset, basis.u) * scaleX + offsetX, 1 - dotVec3(offset, basis.v) * scaleY + offsetY];
+    return [dotVec3(offset, basis.u) * scaleX + offsetX, dotVec3(offset, basis.v) * scaleY + offsetY];
   });
 }
 

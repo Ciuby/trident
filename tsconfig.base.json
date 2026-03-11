@@ -21,6 +21,7 @@
       "@web-hammer/editor-core": ["packages/editor-core/src/index.ts"],
       "@web-hammer/geometry-kernel": ["packages/geometry-kernel/src/index.ts"],
       "@web-hammer/render-pipeline": ["packages/render-pipeline/src/index.ts"],
+      "@web-hammer/three-runtime": ["packages/three-runtime/src/index.ts"],
       "@web-hammer/tool-system": ["packages/tool-system/src/index.ts"],
       "@web-hammer/workers": ["packages/workers/src/index.ts"]
     }

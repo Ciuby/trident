@@ -11,6 +11,7 @@ The public GitHub Pages build is a static demo of the editor shell. The local de
 - Entity and light placement for common gameplay and scene setup tasks
 - Material library editing with texture slots, UV controls, and reusable materials
 - Scene save/load and export flows, including `.whmap`, glTF, and engine export actions
+- A standalone Three.js runtime package for loading structured scene exports in vanilla games
 - Optional AI texture and 3D generation backed by Fal when running locally with a server-side API key
 
 ## Project Layout
@@ -21,7 +22,9 @@ The public GitHub Pages build is a static demo of the editor shell. The local de
 - `packages/render-pipeline`: render-facing scene and viewport contracts
 - `packages/tool-system`: tool registry and tool state machines
 - `packages/shared`: shared types and utilities
+- `packages/three-runtime`: vanilla Three.js loader for runtime scene exports
 - `packages/workers`: worker task contracts and manager code
+- `apps/three-runtime-playground`: minimal Vite + TypeScript app that exercises the runtime loader
 
 ## Requirements
 
@@ -59,6 +62,13 @@ This produces the static site output in `apps/editor/dist`.
 bun run typecheck
 ```
 
+Typecheck or build the standalone Three runtime playground:
+
+```bash
+bun run typecheck:three-runtime
+bun run build:three-runtime
+```
+
 ## How To Use Trident
 
 When the editor opens, you can start blocking out a space immediately:
@@ -68,6 +78,15 @@ When the editor opens, you can start blocking out a space immediately:
 3. Save your scene as `.whmap`, or export it as glTF or through the engine export action from the File menu.
 
 The editor is designed around fast iteration, so most of the workflow is direct manipulation in the viewport with supporting controls in the floating panels and sidebars.
+
+## Runtime Import Workflow
+
+- Use `.whmap` for editor-native save/load and round-tripping.
+- Use `Export Runtime Bundle` when you want to ship a map to a vanilla Three.js game.
+- The bundle contains a small `scene.runtime.json` manifest plus external asset files under `assets/`, instead of stuffing textures into one giant JSON blob.
+- Load the manifest with `@web-hammer/three-runtime`, which rebuilds geometry, materials, lights, model assets, and preserves node physics metadata for your game code.
+
+The playground app in `apps/three-runtime-playground` demonstrates that workflow outside the editor.
 
 ## Environment Variables
 

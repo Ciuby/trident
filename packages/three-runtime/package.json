@@ -1,0 +1,17 @@
+{
+  "name": "@web-hammer/three-runtime",
+  "version": "0.0.0",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "devDependencies": {
+    "@types/three": "^0.181.0"
+  },
+  "dependencies": {
+    "@web-hammer/shared": "workspace:*",
+    "fflate": "^0.8.2",
+    "three": "^0.181.1"
+  }
+}

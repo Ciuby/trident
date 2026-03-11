@@ -102,7 +102,19 @@ export function useExportWorker() {
     URL.revokeObjectURL(url);
   };
 
+  const downloadBinaryFile = (filename: string, content: Uint8Array, type: string) => {
+    const bytes = new Uint8Array(content.byteLength);
+    bytes.set(content);
+    const url = URL.createObjectURL(new Blob([bytes.buffer], { type }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
   return {
+    downloadBinaryFile,
     downloadTextFile,
     exportJobs,
     runWorkerRequest

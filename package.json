@@ -10,7 +10,10 @@
   "scripts": {
     "dev": "bun run --cwd apps/editor dev",
     "build": "bun run --cwd apps/editor build",
-    "typecheck": "bun run --cwd apps/editor typecheck"
+    "typecheck": "bun run --cwd apps/editor typecheck",
+    "dev:three-runtime": "bun run --cwd apps/three-runtime-playground dev",
+    "build:three-runtime": "bun run --cwd apps/three-runtime-playground build",
+    "typecheck:three-runtime": "bun run --cwd apps/three-runtime-playground typecheck"
   },
   "dependencies": {}
 }

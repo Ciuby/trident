@@ -74,7 +74,7 @@ export function EditorMenuBar({
                 Export glTF
               </MenubarItem>
               <MenubarItem className="rounded-lg text-xs" onClick={onExportEngine}>
-                Export Engine
+                Export Runtime Bundle
               </MenubarItem>
             </MenubarContent>
           </MenubarMenu>

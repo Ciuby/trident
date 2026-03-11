@@ -74,6 +74,11 @@ import {
   createWorkerTaskManager,
   type WorkerJob
 } from "@web-hammer/workers";
+import {
+  createWebHammerEngineBundleZip,
+  externalizeWebHammerEngineScene,
+  parseWebHammerEngineScene
+} from "@web-hammer/three-runtime";
 import { EditorShell } from "@/components/EditorShell";
 import { uiStore } from "@/state/ui-store";
 import type { Transform } from "@web-hammer/shared";
@@ -133,7 +138,7 @@ export function App() {
   const glbImportInputRef = useRef<HTMLInputElement | null>(null);
   const ui = useSnapshot(uiStore);
   const toolSession = useMemo(() => createToolSession(activeToolId), [activeToolId]);
-  const { downloadTextFile, exportJobs, runWorkerRequest } = useExportWorker();
+  const { downloadBinaryFile, downloadTextFile, exportJobs, runWorkerRequest } = useExportWorker();
   const renderScene = deriveRenderScene(
     editor.scene.nodes.values(),
     editor.scene.entities.values(),
@@ -1216,11 +1221,13 @@ export function App() {
         kind: "engine-export",
         snapshot: editor.exportSnapshot()
       },
-      "Export engine scene"
+      "Export runtime scene"
     );
 
     if (typeof payload === "string") {
-      downloadTextFile("scene.engine.json", payload, "application/json");
+      const bundle = await externalizeWebHammerEngineScene(parseWebHammerEngineScene(payload));
+      const zip = createWebHammerEngineBundleZip(bundle);
+      downloadBinaryFile("scene.runtime.zip", zip, "application/zip");
     }
   };
 

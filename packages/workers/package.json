@@ -11,6 +11,7 @@
     "@web-hammer/editor-core": "workspace:*",
     "@web-hammer/geometry-kernel": "workspace:*",
     "@web-hammer/shared": "workspace:*",
+    "@web-hammer/three-runtime": "workspace:*",
     "comlink": "^4.4.2",
     "three": "^0.181.1"
   }

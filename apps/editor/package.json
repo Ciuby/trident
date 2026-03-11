@@ -22,6 +22,7 @@
     "@web-hammer/geometry-kernel": "workspace:*",
     "@web-hammer/render-pipeline": "workspace:*",
     "@web-hammer/shared": "workspace:*",
+    "@web-hammer/three-runtime": "workspace:*",
     "@web-hammer/tool-system": "workspace:*",
     "@web-hammer/workers": "workspace:*",
     "class-variance-authority": "^0.7.1",
