@@ -85,6 +85,9 @@ The editor is designed around fast iteration, so most of the workflow is direct 
 - Use `Export Runtime Bundle` when you want to ship a map to a vanilla Three.js game.
 - The bundle contains a small `scene.runtime.json` manifest plus external asset files under `assets/`, instead of stuffing textures into one giant JSON blob.
 - Load the manifest with `@web-hammer/three-runtime`, which rebuilds geometry, materials, lights, model assets, and preserves node physics metadata for your game code.
+- Runtime package docs and code examples live in `packages/three-runtime/README.md`.
+- For large web worlds, do not export one giant scene and preload it all. Export streamable level chunks and load/unload runtime bundles on demand.
+- If you need shared heavy assets across many chunks, keep them external and let chunk manifests reference them instead of copying them into every bundle.
 
 The playground app in `apps/three-runtime-playground` demonstrates that workflow outside the editor.
 
