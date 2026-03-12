@@ -99,7 +99,8 @@ export type DerivedRenderMesh = {
 export function createDerivedRenderMesh(
   node: GeometryNode,
   materialsById = new Map<MaterialID, Material>(),
-  assetsById = new Map<AssetID, Asset>()
+  assetsById = new Map<AssetID, Asset>(),
+  transform = node.transform
 ): DerivedRenderMesh {
   const appearance = getRenderAppearance(node, materialsById, assetsById);
   const surfaceResult = isBrushNode(node)
@@ -119,15 +120,15 @@ export function createDerivedRenderMesh(
         ? node.data.physics
         : undefined,
     label: `${node.name} (${appearance.primitiveLabel})`,
-    position: node.transform.position,
-    pivot: node.transform.pivot,
+    position: transform.position,
+    pivot: transform.pivot,
     primitiveRole: isPrimitiveNode(node)
       ? node.data.role
       : isMeshNode(node)
         ? node.data.role
         : undefined,
-    rotation: node.transform.rotation,
-    scale: node.transform.scale,
+    rotation: transform.rotation,
+    scale: transform.scale,
     modelAssetId: isModelNode(node) ? node.data.assetId : undefined,
     modelCenter: isModelNode(node)
       ? resolveModelVec3Metadata(assetsById.get(node.data.assetId), "nativeCenter")

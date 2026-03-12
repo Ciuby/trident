@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Entity, GeometryNode } from "@web-hammer/shared";
+import { resolveSceneGraph } from "@web-hammer/shared";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -24,16 +25,96 @@ export function SceneHierarchyPanel({
   const [query, setQuery] = useState("");
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    const items = [
-      ...nodes.map((node) => ({ id: node.id, kind: node.kind, name: node.name })),
-      ...entities.map((entity) => ({ id: entity.id, kind: entity.type, name: entity.name }))
-    ];
+    const sceneGraph = resolveSceneGraph(nodes, entities);
+    const nodeById = new Map(nodes.map((node) => [node.id, node]));
+    const entityById = new Map(entities.map((entity) => [entity.id, entity]));
+    const parentById = new Map<string, string | undefined>();
+    const flatItems: Array<{ depth: number; id: string; kind: string; name: string }> = [];
+    const matchedIds = new Set<string>();
 
-    if (!normalizedQuery) {
-      return items;
+    nodes.forEach((node) => {
+      parentById.set(node.id, node.parentId);
+    });
+    entities.forEach((entity) => {
+      parentById.set(entity.id, entity.parentId);
+    });
+
+    if (normalizedQuery) {
+      nodes.forEach((node) => {
+        if (node.name.toLowerCase().includes(normalizedQuery)) {
+          matchedIds.add(node.id);
+        }
+      });
+      entities.forEach((entity) => {
+        if (entity.name.toLowerCase().includes(normalizedQuery)) {
+          matchedIds.add(entity.id);
+        }
+      });
+
+      Array.from(matchedIds).forEach((id) => {
+        let currentParentId = parentById.get(id);
+
+        while (currentParentId) {
+          matchedIds.add(currentParentId);
+          currentParentId = parentById.get(currentParentId);
+        }
+      });
     }
 
-    return items.filter((item) => item.name.toLowerCase().includes(normalizedQuery));
+    const appendBranch = (nodeId: string, depth: number) => {
+      const node = nodeById.get(nodeId);
+
+      if (!node) {
+        return;
+      }
+
+      if (!normalizedQuery || matchedIds.has(nodeId)) {
+        flatItems.push({
+          depth,
+          id: node.id,
+          kind: node.kind,
+          name: node.name
+        });
+      }
+
+      sceneGraph.nodeChildrenByParentId.get(nodeId)?.forEach((childNodeId) => {
+        appendBranch(childNodeId, depth + 1);
+      });
+      sceneGraph.entityChildrenByParentId.get(nodeId)?.forEach((entityId) => {
+        const entity = entityById.get(entityId);
+
+        if (!entity || (normalizedQuery && !matchedIds.has(entity.id))) {
+          return;
+        }
+
+        flatItems.push({
+          depth: depth + 1,
+          id: entity.id,
+          kind: entity.type,
+          name: entity.name
+        });
+      });
+    };
+
+    sceneGraph.rootNodeIds.forEach((nodeId) => {
+      appendBranch(nodeId, 0);
+    });
+    sceneGraph.rootEntityIds.forEach((entityId) => {
+      const entity = entityById.get(entityId);
+
+      if (!entity || (normalizedQuery && !matchedIds.has(entity.id))) {
+        return;
+      }
+
+      flatItems.push({
+        depth: 0,
+        id: entity.id,
+        kind: entity.type,
+        name: entity.name
+      });
+    });
+
+    return flatItems;
   }, [entities, nodes, query]);
 
   return (
@@ -62,6 +143,7 @@ export function SceneHierarchyPanel({
                 key={item.id}
                 onClick={() => onSelectNodes([item.id])}
                 onDoubleClick={() => onFocusNode(item.id)}
+                style={{ paddingLeft: `${item.depth * 14 + 10}px` }}
                 type="button"
               >
                 <span className="block truncate">{item.name}</span>

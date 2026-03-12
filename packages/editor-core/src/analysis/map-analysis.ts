@@ -7,7 +7,18 @@ import {
   reconstructBrushFaces
 } from "@web-hammer/geometry-kernel";
 import type { GeometryNode, MetadataValue, PrimitiveNode, Vec3 } from "@web-hammer/shared";
-import { averageVec3, isBrushNode, isMeshNode, isModelNode, isPrimitiveNode, subVec3, vec3 } from "@web-hammer/shared";
+import {
+  averageVec3,
+  isBrushNode,
+  isGroupNode,
+  isMeshNode,
+  isModelNode,
+  isPrimitiveNode,
+  resolveSceneGraph,
+  subVec3,
+  vec3,
+  type Transform
+} from "@web-hammer/shared";
 import type { SceneDocument, SceneDocumentSnapshot } from "../document/scene-document";
 
 export type Bounds3 = {
@@ -102,9 +113,13 @@ export function analyzeSceneSpatialLayout(
 ): SceneSpatialAnalysis {
   const resolvedOptions = { ...DEFAULT_OPTIONS, ...options };
   const nodes = resolveNodes(input);
-  const nodeSummaries = nodes.map((node) => summarizeNode(node, resolvedOptions));
+  const sceneGraph = resolveSceneGraph(nodes);
+  const analyzedNodes = nodes.filter((node) => !isGroupNode(node));
+  const nodeSummaries = analyzedNodes.map((node) =>
+    summarizeNode(node, sceneGraph.nodeWorldTransforms.get(node.id) ?? node.transform, resolvedOptions)
+  );
   const walkableSurfaces = nodeSummaries.flatMap((summary) => summary.walkableSurfaces);
-  const groups = summarizeGroups(nodes);
+  const groups = summarizeGroups(analyzedNodes);
   const connectorValidations = groups
     .filter((group) => group.kind === "stairs" || group.tags.includes("connector"))
     .map((group) => validateVerticalConnectorGroup(group.groupId, walkableSurfaces, groups, resolvedOptions));
@@ -240,8 +255,8 @@ export function validateVerticalConnectorGroup(
   };
 }
 
-function summarizeNode(node: GeometryNode, options: Required<SpatialAnalysisOptions>) {
-  const worldPoints = collectNodeWorldPoints(node);
+function summarizeNode(node: GeometryNode, worldTransform: Transform, options: Required<SpatialAnalysisOptions>) {
+  const worldPoints = collectNodeWorldPoints(node, worldTransform);
   const bounds = worldPoints.length > 0 ? createBounds(worldPoints) : undefined;
   const center = bounds ? boundsCenter(bounds) : undefined;
 
@@ -249,7 +264,7 @@ function summarizeNode(node: GeometryNode, options: Required<SpatialAnalysisOpti
     bounds,
     center,
     node,
-    walkableSurfaces: extractWalkableSurfaces(node, options)
+    walkableSurfaces: extractWalkableSurfaces(node, worldTransform, options)
   };
 }
 
@@ -298,30 +313,34 @@ function summarizeGroups(nodes: GeometryNode[]): BlockoutGroupSummary[] {
   return Array.from(groups.values());
 }
 
-function extractWalkableSurfaces(node: GeometryNode, options: Required<SpatialAnalysisOptions>) {
+function extractWalkableSurfaces(node: GeometryNode, worldTransform: Transform, options: Required<SpatialAnalysisOptions>) {
   if (!shouldInspectWalkableSurfaces(node)) {
     return [];
   }
 
   if (isBrushNode(node)) {
-    return extractBrushWalkableSurfaces(node, options);
+    return extractBrushWalkableSurfaces(node, worldTransform, options);
   }
 
   if (isMeshNode(node)) {
     return node.data.faces
-      .map((face) => getFaceVertices(node.data, face.id).map((vertex) => transformPoint(vertex.position, node.transform)))
+      .map((face) => getFaceVertices(node.data, face.id).map((vertex) => transformPoint(vertex.position, worldTransform)))
       .map((vertices, index) => createSurfaceSummary(node, `${node.id}:mesh:${index}`, vertices, options))
       .filter((surface): surface is WalkableSurfaceSummary => Boolean(surface));
   }
 
   if (isPrimitiveNode(node)) {
-    return extractPrimitiveWalkableSurfaces(node, options);
+    return extractPrimitiveWalkableSurfaces(node, worldTransform, options);
   }
 
   return [];
 }
 
-function extractBrushWalkableSurfaces(node: Extract<GeometryNode, { kind: "brush" }>, options: Required<SpatialAnalysisOptions>) {
+function extractBrushWalkableSurfaces(
+  node: Extract<GeometryNode, { kind: "brush" }>,
+  worldTransform: Transform,
+  options: Required<SpatialAnalysisOptions>
+) {
   const rebuilt = reconstructBrushFaces(node.data);
 
   if (!rebuilt.valid) {
@@ -336,18 +355,20 @@ function extractBrushWalkableSurfaces(node: Extract<GeometryNode, { kind: "brush
       vec3(axisAlignedBounds.x.max, axisAlignedBounds.y.max, axisAlignedBounds.z.min),
       vec3(axisAlignedBounds.x.max, axisAlignedBounds.y.max, axisAlignedBounds.z.max),
       vec3(axisAlignedBounds.x.min, axisAlignedBounds.y.max, axisAlignedBounds.z.max)
-    ].map((vertex) => transformPoint(vertex, node.transform));
+    ].map((vertex) => transformPoint(vertex, worldTransform));
 
     const surface = createSurfaceSummary(node, `${node.id}:top`, topVertices, options);
     return surface ? [surface] : [];
   }
 
   return rebuilt.faces
-    .map((face) => createSurfaceSummary(node, `${node.id}:${face.id}`, face.vertices.map((vertex) => transformPoint(vertex.position, node.transform)), options))
+    .map((face) =>
+      createSurfaceSummary(node, `${node.id}:${face.id}`, face.vertices.map((vertex) => transformPoint(vertex.position, worldTransform)), options)
+    )
     .filter((surface): surface is WalkableSurfaceSummary => Boolean(surface));
 }
 
-function extractPrimitiveWalkableSurfaces(node: PrimitiveNode, options: Required<SpatialAnalysisOptions>) {
+function extractPrimitiveWalkableSurfaces(node: PrimitiveNode, worldTransform: Transform, options: Required<SpatialAnalysisOptions>) {
   if (node.data.shape === "sphere" || node.data.shape === "cone") {
     return [];
   }
@@ -361,7 +382,7 @@ function extractPrimitiveWalkableSurfaces(node: PrimitiveNode, options: Required
     vec3(halfWidth, top, -halfDepth),
     vec3(halfWidth, top, halfDepth),
     vec3(-halfWidth, top, halfDepth)
-  ].map((vertex) => transformPoint(vertex, node.transform));
+  ].map((vertex) => transformPoint(vertex, worldTransform));
   const surface = createSurfaceSummary(node, `${node.id}:primitive:top`, vertices, options);
 
   return surface ? [surface] : [];
@@ -416,12 +437,12 @@ function createSurfaceSummary(
   };
 }
 
-function collectNodeWorldPoints(node: GeometryNode): Vec3[] {
+function collectNodeWorldPoints(node: GeometryNode, worldTransform: Transform): Vec3[] {
   if (isBrushNode(node)) {
     const rebuilt = reconstructBrushFaces(node.data);
 
     if (rebuilt.valid) {
-      return rebuilt.faces.flatMap((face) => face.vertices.map((vertex) => transformPoint(vertex.position, node.transform)));
+      return rebuilt.faces.flatMap((face) => face.vertices.map((vertex) => transformPoint(vertex.position, worldTransform)));
     }
 
     const bounds = getAxisAlignedBrushBounds(node.data);
@@ -433,23 +454,23 @@ function collectNodeWorldPoints(node: GeometryNode): Vec3[] {
     return createBoxCorners(
       vec3(bounds.x.min, bounds.y.min, bounds.z.min),
       vec3(bounds.x.max, bounds.y.max, bounds.z.max)
-    ).map((vertex) => transformPoint(vertex, node.transform));
+    ).map((vertex) => transformPoint(vertex, worldTransform));
   }
 
   if (isMeshNode(node)) {
-    return node.data.vertices.map((vertex) => transformPoint(vertex.position, node.transform));
+    return node.data.vertices.map((vertex) => transformPoint(vertex.position, worldTransform));
   }
 
   if (isPrimitiveNode(node)) {
     const half = vec3(Math.abs(node.data.size.x) * 0.5, Math.abs(node.data.size.y) * 0.5, Math.abs(node.data.size.z) * 0.5);
-    return createBoxCorners(vec3(-half.x, -half.y, -half.z), half).map((vertex) => transformPoint(vertex, node.transform));
+    return createBoxCorners(vec3(-half.x, -half.y, -half.z), half).map((vertex) => transformPoint(vertex, worldTransform));
   }
 
   if (isModelNode(node)) {
-    return createBoxCorners(vec3(-0.65, 0, -0.65), vec3(0.65, 2.2, 0.65)).map((vertex) => transformPoint(vertex, node.transform));
+    return createBoxCorners(vec3(-0.65, 0, -0.65), vec3(0.65, 2.2, 0.65)).map((vertex) => transformPoint(vertex, worldTransform));
   }
 
-  return [transformPoint(ZERO, node.transform)];
+  return [transformPoint(ZERO, worldTransform)];
 }
 
 function clusterElevationBands(surfaces: WalkableSurfaceSummary[], tolerance: number): ElevationBandSummary[] {

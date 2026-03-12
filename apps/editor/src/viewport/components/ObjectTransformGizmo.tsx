@@ -2,7 +2,7 @@ import { Billboard, TransformControls } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef, useState } from "react";
 import type { Entity, GeometryNode, Transform } from "@web-hammer/shared";
-import { resolveTransformPivot, toTuple, vec3, type Vec3 } from "@web-hammer/shared";
+import { localizeTransform, resolveTransformPivot, toTuple, vec3, type Vec3 } from "@web-hammer/shared";
 import { objectToTransform, rebaseTransformPivot, worldPointToNodeLocal } from "@/viewport/utils/geometry";
 import { resolveViewportSnapSize } from "@/viewport/utils/snap";
 import type { ViewportCanvasProps } from "@/viewport/types";
@@ -19,9 +19,12 @@ export function ObjectTransformGizmo({
   onUpdateEntityTransform,
   onUpdateNodeTransform,
   selectedEntity,
+  selectedEntityWorldTransform,
   selectedNode,
+  selectedNodeWorldTransform,
   selectedNodeIds,
   selectedNodes,
+  selectedWorldNodes,
   transformMode,
   viewport
 }: Pick<
@@ -37,19 +40,28 @@ export function ObjectTransformGizmo({
   | "transformMode"
   | "viewport"
 > & {
+  selectedEntityWorldTransform?: Transform;
   selectedNode?: GeometryNode;
+  selectedNodeWorldTransform?: Transform;
+  selectedWorldNodes: GeometryNode[];
 }) {
   const baselineTransformRef = useRef<Transform | undefined>(undefined);
   const pivotTargetRef = useRef<ThreeGroup | null>(null);
   const scene = useThree((state) => state.scene);
   const [activePivotNodeId, setActivePivotNodeId] = useState<string>();
   const selectedTarget: GeometryNode | Entity | undefined = selectedNode ?? selectedEntity;
+  const selectedTargetWorldTransform = selectedNode
+    ? selectedNodeWorldTransform ?? selectedNode.transform
+    : selectedEntity
+      ? selectedEntityWorldTransform ?? selectedEntity.transform
+      : undefined;
   const selectedObjectId = selectedTarget?.id ?? selectedNodeIds[0];
   const selectedObject = selectedObjectId
     ? scene.getObjectByName(selectedNode ? `node:${selectedObjectId}` : `entity:${selectedObjectId}`)
     : undefined;
   const snapSize = resolveViewportSnapSize(viewport);
   const activePivotNode = activePivotNodeId ? selectedNodes.find((node) => node.id === activePivotNodeId) : undefined;
+  const activePivotWorldNode = activePivotNodeId ? selectedWorldNodes.find((node) => node.id === activePivotNodeId) : undefined;
   const pivotEditingEnabled = activeToolId === "transform" || activeToolId === "mesh-edit";
 
   useEffect(() => {
@@ -118,17 +130,17 @@ export function ObjectTransformGizmo({
             onSelect={() => {
               setActivePivotNodeId(node.id);
             }}
-            position={node.transform.position}
+            position={(selectedWorldNodes.find((candidate) => candidate.id === node.id) ?? node).transform.position}
             selected={false}
           />
         )
       )}
 
-      {activePivotNode ? (
-        <group ref={pivotTargetRef} position={toTuple(activePivotNode.transform.position)}>
+      {activePivotWorldNode ? (
+        <group ref={pivotTargetRef} position={toTuple(activePivotWorldNode.transform.position)}>
           <PivotHandleMarker
             onSelect={() => {
-              setActivePivotNodeId(activePivotNode.id);
+              setActivePivotNodeId(activePivotWorldNode.id);
             }}
             position={vec3(0, 0, 0)}
             selected
@@ -136,7 +148,7 @@ export function ObjectTransformGizmo({
         </group>
       ) : null}
 
-      {activePivotNode && pivotTargetRef.current ? (
+      {activePivotNode && activePivotWorldNode && pivotTargetRef.current ? (
         <TransformControls
           enabled
           mode="translate"
@@ -152,7 +164,7 @@ export function ObjectTransformGizmo({
             const worldPosition = pivotTargetRef.current.getWorldPosition(new Vector3());
             const nextPivot = worldPointToNodeLocal(
               vec3(worldPosition.x, worldPosition.y, worldPosition.z),
-              baselineTransformRef.current
+              activePivotWorldNode.transform
             );
 
             onUpdateNodeTransform(
@@ -170,7 +182,7 @@ export function ObjectTransformGizmo({
             const worldPosition = pivotTargetRef.current.getWorldPosition(new Vector3());
             const nextPivot = worldPointToNodeLocal(
               vec3(worldPosition.x, worldPosition.y, worldPosition.z),
-              baselineTransformRef.current
+              activePivotWorldNode.transform
             );
 
             onPreviewNodeTransform(activePivotNode.id, rebaseTransformPivot(baselineTransformRef.current, nextPivot));
@@ -182,20 +194,24 @@ export function ObjectTransformGizmo({
         />
       ) : null}
 
-      {showObjectTransformGizmo && selectedObjectId && selectedObject && selectedTarget ? (
+      {showObjectTransformGizmo && selectedObjectId && selectedObject && selectedTarget && selectedTargetWorldTransform ? (
         <TransformControls
           enabled
           mode={transformMode}
           object={selectedObject}
           onMouseDown={() => {
-            baselineTransformRef.current = objectToTransform(selectedObject, pivot);
+            baselineTransformRef.current = structuredClone(selectedTarget.transform);
           }}
           onMouseUp={() => {
             if (!baselineTransformRef.current) {
               return;
             }
 
-            const nextTransform = objectToTransform(selectedObject, pivot);
+            const nextWorldTransform = objectToTransform(selectedObject, pivot);
+            const parentWorldTransform = selectedTarget.parentId
+              ? selectedWorldNodes.find((node) => node.id === selectedTarget.parentId)?.transform
+              : undefined;
+            const nextTransform = localizeTransform(nextWorldTransform, parentWorldTransform);
 
             if (selectedNode) {
               onUpdateNodeTransform(selectedObjectId, nextTransform, baselineTransformRef.current);
@@ -206,7 +222,11 @@ export function ObjectTransformGizmo({
             baselineTransformRef.current = undefined;
           }}
           onObjectChange={() => {
-            const nextTransform = objectToTransform(selectedObject, pivot);
+            const nextWorldTransform = objectToTransform(selectedObject, pivot);
+            const parentWorldTransform = selectedTarget.parentId
+              ? selectedWorldNodes.find((node) => node.id === selectedTarget.parentId)?.transform
+              : undefined;
+            const nextTransform = localizeTransform(nextWorldTransform, parentWorldTransform);
 
             if (selectedNode) {
               onPreviewNodeTransform(selectedObjectId, nextTransform);

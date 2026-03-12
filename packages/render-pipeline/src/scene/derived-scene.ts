@@ -1,5 +1,16 @@
-import type { Asset, AssetID, Entity, GeometryNode, LightNodeData, Material, MaterialID, NodeID, Transform, Vec3 } from "@web-hammer/shared";
-import { isLightNode, vec3 } from "@web-hammer/shared";
+import type {
+  Asset,
+  AssetID,
+  Entity,
+  GeometryNode,
+  LightNodeData,
+  Material,
+  MaterialID,
+  NodeID,
+  Transform,
+  Vec3
+} from "@web-hammer/shared";
+import { isGroupNode, isLightNode, resolveSceneGraph, vec3 } from "@web-hammer/shared";
 import { createDerivedRenderMesh, type DerivedRenderMesh } from "../meshes/render-mesh";
 
 export type DerivedEntityMarker = {
@@ -20,11 +31,22 @@ export type DerivedLight = {
   rotation: Vec3;
 };
 
+export type DerivedGroupMarker = {
+  label: string;
+  nodeId: string;
+  position: Vec3;
+  rotation: Vec3;
+  scale: Transform["scale"];
+};
+
 export type DerivedRenderScene = {
   lights: DerivedLight[];
   meshes: DerivedRenderMesh[];
+  groups: DerivedGroupMarker[];
   entityMarkers: DerivedEntityMarker[];
   boundsCenter: Vec3;
+  entityTransforms: Map<Entity["id"], Transform>;
+  nodeTransforms: Map<NodeID, Transform>;
 };
 
 type CachedDerivedRenderMeshEntry = {
@@ -78,6 +100,7 @@ export function deriveRenderSceneCached(
   const materialList = Array.from(materials);
   const assetList = Array.from(assets);
   const sourceNodes = Array.from(nodes);
+  const sourceEntities = Array.from(entities);
   const materialsById = new Map(materialList.map((material) => [material.id, material] as const));
   const assetsById = new Map(assetList.map((asset) => [asset.id, asset] as const));
   const materialsChanged = haveReferencedValuesChanged(materialList, cache.materialRefs);
@@ -85,16 +108,31 @@ export function deriveRenderSceneCached(
   const shouldRebuildAllMeshes = materialsChanged || assetsChanged;
   const meshes: DerivedRenderMesh[] = [];
   const lights: DerivedLight[] = [];
+  const groups: DerivedGroupMarker[] = [];
   const activeMeshIds = new Set<NodeID>();
+  const sceneGraph = resolveSceneGraph(sourceNodes, sourceEntities);
 
   sourceNodes.forEach((node) => {
+    const worldTransform = sceneGraph.nodeWorldTransforms.get(node.id) ?? node.transform;
+
+    if (isGroupNode(node)) {
+      groups.push({
+        label: node.name,
+        nodeId: node.id,
+        position: worldTransform.position,
+        rotation: worldTransform.rotation,
+        scale: worldTransform.scale
+      });
+      return;
+    }
+
     if (isLightNode(node)) {
       lights.push({
         color: node.data.color,
         data: node.data,
         nodeId: node.id,
-        position: node.transform.position,
-        rotation: node.transform.rotation
+        position: worldTransform.position,
+        rotation: worldTransform.rotation
       });
       return;
     }
@@ -103,8 +141,8 @@ export function deriveRenderSceneCached(
 
     const cached = cache.meshEntries.get(node.id);
     const mesh =
-      shouldRebuildAllMeshes || !cached || isCachedMeshEntryStale(node, cached)
-        ? createCachedMeshEntry(node, materialsById, assetsById)
+      shouldRebuildAllMeshes || !cached || isCachedMeshEntryStale(node, worldTransform, cached)
+        ? createCachedMeshEntry(node, worldTransform, materialsById, assetsById)
         : cached;
 
     cache.meshEntries.set(node.id, mesh);
@@ -120,13 +158,13 @@ export function deriveRenderSceneCached(
   replaceReferenceMap(cache.materialRefs, materialList);
   replaceReferenceMap(cache.assetRefs, assetList);
 
-  const entityMarkers = Array.from(entities, (entity) => ({
+  const entityMarkers = Array.from(sourceEntities, (entity) => ({
     entityId: entity.id,
     entityType: entity.type,
     label: entity.name,
-    position: entity.transform.position,
-    scale: entity.transform.scale,
-    rotation: entity.transform.rotation,
+    position: (sceneGraph.entityWorldTransforms.get(entity.id) ?? entity.transform).position,
+    scale: (sceneGraph.entityWorldTransforms.get(entity.id) ?? entity.transform).scale,
+    rotation: (sceneGraph.entityWorldTransforms.get(entity.id) ?? entity.transform).rotation,
     color:
       entity.type === "player-spawn"
         ? "#7dd3fc"
@@ -137,10 +175,13 @@ export function deriveRenderSceneCached(
 
   if (meshes.length === 0) {
     return {
+      entityTransforms: sceneGraph.entityWorldTransforms,
       lights,
       meshes,
+      groups,
       entityMarkers,
-      boundsCenter: vec3(0, 0, 0)
+      boundsCenter: vec3(0, 0, 0),
+      nodeTransforms: sceneGraph.nodeWorldTransforms
     };
   }
 
@@ -154,27 +195,31 @@ export function deriveRenderSceneCached(
   );
 
   return {
+    entityTransforms: sceneGraph.entityWorldTransforms,
     lights,
     meshes,
+    groups,
     entityMarkers,
-    boundsCenter: vec3(center.x / meshes.length, center.y / meshes.length, center.z / meshes.length)
+    boundsCenter: vec3(center.x / meshes.length, center.y / meshes.length, center.z / meshes.length),
+    nodeTransforms: sceneGraph.nodeWorldTransforms
   };
 }
 
 function createCachedMeshEntry(
-  node: Exclude<GeometryNode, { kind: "light" }>,
+  node: Exclude<GeometryNode, { kind: "group" | "light" }>,
+  worldTransform: Transform,
   materialsById: Map<MaterialID, Material>,
   assetsById: Map<AssetID, Asset>
 ): CachedDerivedRenderMeshEntry {
   return {
-    mesh: createDerivedRenderMesh(node, materialsById, assetsById),
+    mesh: createDerivedRenderMesh(node, materialsById, assetsById, worldTransform),
     sourceKind: node.kind,
     name: node.name,
-    transform: node.transform,
-    position: node.transform.position,
-    rotation: node.transform.rotation,
-    scale: node.transform.scale,
-    pivot: node.transform.pivot,
+    transform: structuredClone(worldTransform),
+    position: structuredClone(worldTransform.position),
+    rotation: structuredClone(worldTransform.rotation),
+    scale: structuredClone(worldTransform.scale),
+    pivot: worldTransform.pivot,
     data: node.data,
     faces: "faces" in node.data ? node.data.faces : undefined,
     halfEdges: "halfEdges" in node.data ? node.data.halfEdges : undefined,
@@ -186,17 +231,13 @@ function createCachedMeshEntry(
 }
 
 function isCachedMeshEntryStale(
-  node: Exclude<GeometryNode, { kind: "light" }>,
+  node: Exclude<GeometryNode, { kind: "group" | "light" }>,
+  worldTransform: Transform,
   cached: CachedDerivedRenderMeshEntry
 ) {
   return (
     cached.sourceKind !== node.kind ||
     cached.name !== node.name ||
-    cached.transform !== node.transform ||
-    cached.position !== node.transform.position ||
-    cached.rotation !== node.transform.rotation ||
-    cached.scale !== node.transform.scale ||
-    cached.pivot !== node.transform.pivot ||
     cached.data !== node.data ||
     cached.faces !== ("faces" in node.data ? node.data.faces : undefined) ||
     cached.halfEdges !== ("halfEdges" in node.data ? node.data.halfEdges : undefined) ||
@@ -204,7 +245,7 @@ function isCachedMeshEntryStale(
     cached.planes !== ("planes" in node.data ? node.data.planes : undefined) ||
     cached.previewSize !== ("previewSize" in node.data ? node.data.previewSize : undefined) ||
     cached.vertices !== ("vertices" in node.data ? node.data.vertices : undefined) ||
-    hasTransformValuesChanged(node.transform, cached)
+    hasTransformValuesChanged(worldTransform, cached)
   );
 }
 

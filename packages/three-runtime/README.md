@@ -10,10 +10,10 @@ Runtime loader and bundle helpers for consuming Web Hammer scene exports in plai
 
 The runtime export format is a bundle:
 
-- `scene.runtime.json`: structured scene manifest
+- `scene.runtime.json`: compact scene manifest
 - `assets/...`: textures and model files referenced by the manifest
 
-That gives you a lean manifest plus normal external asset files instead of one huge JSON blob.
+That gives you a lean manifest plus normal external asset files instead of one huge JSON blob with embedded texture payloads.
 
 ## Editor Workflow
 
@@ -93,7 +93,7 @@ const loaded = await loadWebHammerEngineScene(manifest, {
 
 ## Streaming And Keeping Worlds Lean
 
-Do not treat one runtime bundle as your whole open world. On the web, that leads to exactly the problem you called out: massive up-front downloads and long parse times.
+Do not treat one runtime bundle as your whole open world. On the web, that leads the problem of massive up-front downloads and long parse times.
 
 Current recommended strategy:
 

@@ -67,7 +67,7 @@ export function createSampleScene(): WebHammerEngineScene {
     metadata: {
       exportedAt: new Date("2026-03-11T10:00:00.000Z").toISOString(),
       format: "web-hammer-engine",
-      version: 3
+      version: 4
     },
     nodes: [
       {
@@ -123,6 +123,17 @@ export function createSampleScene(): WebHammerEngineScene {
         }
       },
       {
+        data: {},
+        id: "node:sample:spire-group",
+        kind: "group",
+        name: "Spire Cluster",
+        transform: {
+          position: { x: -2.8, y: 0, z: -1.5 },
+          rotation: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1, z: 1 }
+        }
+      },
+      {
         data: {
           materialId: propMaterial.id,
           radialSegments: 4,
@@ -134,8 +145,9 @@ export function createSampleScene(): WebHammerEngineScene {
         id: "node:sample:spire-base",
         kind: "primitive",
         name: "Spire Base",
+        parentId: "node:sample:spire-group",
         transform: {
-          position: { x: -2.8, y: 1.55, z: -1.5 },
+          position: { x: 0, y: 1.55, z: 0 },
           rotation: { x: 0, y: 0.78, z: 0 },
           scale: { x: 1, y: 1, z: 1 }
         }
@@ -148,8 +160,9 @@ export function createSampleScene(): WebHammerEngineScene {
         id: "node:sample:model",
         kind: "model",
         name: "Inserted GLB",
+        parentId: "node:sample:spire-group",
         transform: {
-          position: { x: -2.8, y: 3.1, z: -1.5 },
+          position: { x: 0, y: 3.1, z: 0 },
           rotation: { x: 0, y: -0.3, z: 0 },
           scale: { x: 1.3, y: 1.3, z: 1.3 }
         }

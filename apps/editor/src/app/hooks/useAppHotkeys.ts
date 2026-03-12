@@ -9,6 +9,7 @@ type UseAppHotkeysOptions = {
   enabled?: boolean;
   handleDeleteSelection: () => void;
   handleDuplicateSelection: () => void;
+  handleGroupSelection: () => void;
   handleInvertSelectionNormals: () => void;
   handleRedo: () => void;
   handleTranslateSelection: (axis: TransformAxis, direction: -1 | 1) => void;
@@ -24,6 +25,7 @@ export function useAppHotkeys({
   enabled = true,
   handleDeleteSelection,
   handleDuplicateSelection,
+  handleGroupSelection,
   handleInvertSelectionNormals,
   handleRedo,
   handleTranslateSelection,
@@ -64,6 +66,12 @@ export function useAppHotkeys({
       if (modifier && event.key.toLowerCase() === "d") {
         event.preventDefault();
         handleDuplicateSelection();
+        return;
+      }
+
+      if (modifier && event.key.toLowerCase() === "g" && activeToolId !== "mesh-edit") {
+        event.preventDefault();
+        handleGroupSelection();
         return;
       }
 
@@ -186,6 +194,7 @@ export function useAppHotkeys({
     enabled,
     handleDeleteSelection,
     handleDuplicateSelection,
+    handleGroupSelection,
     handleInvertSelectionNormals,
     handleRedo,
     handleTranslateSelection,

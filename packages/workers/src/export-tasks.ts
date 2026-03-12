@@ -5,6 +5,7 @@ import {
   crossVec3,
   dotVec3,
   isBrushNode,
+  isGroupNode,
   isMeshNode,
   isModelNode,
   isPrimitiveNode,
@@ -16,8 +17,13 @@ import {
   type Vec2,
   type Vec3
 } from "@web-hammer/shared";
-import type { WebHammerEngineScene, WebHammerExportMaterial } from "@web-hammer/three-runtime";
-import { BoxGeometry, ConeGeometry, CylinderGeometry, SphereGeometry } from "three";
+import {
+  externalizeWebHammerEngineScene,
+  type WebHammerEngineBundle,
+  type WebHammerEngineScene,
+  type WebHammerExportMaterial
+} from "@web-hammer/three-runtime";
+import { BoxGeometry, ConeGeometry, CylinderGeometry, Euler, Quaternion, SphereGeometry } from "three";
 
 export type WorkerExportKind = "whmap-load" | "whmap-save" | "engine-export" | "gltf-export" | "ai-model-generate";
 
@@ -48,7 +54,7 @@ export type WorkerResponse =
       id: string;
       kind: WorkerExportKind;
       ok: true;
-      payload: string | SceneDocumentSnapshot;
+      payload: string | SceneDocumentSnapshot | WebHammerEngineBundle;
     }
   | {
       id: string;
@@ -82,7 +88,7 @@ export async function executeWorkerRequest(request: WorkerRequest): Promise<Work
         id: request.id,
         kind: request.kind,
         ok: true,
-        payload: await serializeEngineScene(request.snapshot)
+        payload: await exportEngineBundle(request.snapshot)
       };
     }
 
@@ -161,6 +167,15 @@ export function parseWhmap(text: string): SceneDocumentSnapshot {
 }
 
 export async function serializeEngineScene(snapshot: SceneDocumentSnapshot): Promise<string> {
+  const engineScene = await buildEngineScene(snapshot);
+  return JSON.stringify(engineScene);
+}
+
+export async function exportEngineBundle(snapshot: SceneDocumentSnapshot): Promise<WebHammerEngineBundle> {
+  return externalizeWebHammerEngineScene(await buildEngineScene(snapshot));
+}
+
+async function buildEngineScene(snapshot: SceneDocumentSnapshot): Promise<WebHammerEngineScene> {
   const materialsById = new Map(snapshot.materials.map((material) => [material.id, material]));
   const exportedMaterials = await Promise.all(snapshot.materials.map((material) => resolveExportMaterial(material)));
   const engineScene = {
@@ -171,11 +186,24 @@ export async function serializeEngineScene(snapshot: SceneDocumentSnapshot): Pro
     metadata: {
       exportedAt: new Date().toISOString(),
       format: "web-hammer-engine",
-      version: 3
+      version: 4
     },
     settings: snapshot.settings,
     nodes: await Promise.all(
       snapshot.nodes.map(async (node) => {
+        if (isGroupNode(node)) {
+          return {
+            data: node.data,
+            id: node.id,
+            kind: "group",
+            metadata: node.metadata,
+            name: node.name,
+            parentId: node.parentId,
+            tags: node.tags,
+            transform: node.transform
+          } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "group" }>;
+        }
+
         if (isBrushNode(node)) {
           return {
             data: node.data,
@@ -184,6 +212,7 @@ export async function serializeEngineScene(snapshot: SceneDocumentSnapshot): Pro
             kind: "brush",
             metadata: node.metadata,
             name: node.name,
+            parentId: node.parentId,
             tags: node.tags,
             transform: node.transform
           } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "brush" }>;
@@ -197,6 +226,7 @@ export async function serializeEngineScene(snapshot: SceneDocumentSnapshot): Pro
             kind: "mesh",
             metadata: node.metadata,
             name: node.name,
+            parentId: node.parentId,
             tags: node.tags,
             transform: node.transform
           } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "mesh" }>;
@@ -210,6 +240,7 @@ export async function serializeEngineScene(snapshot: SceneDocumentSnapshot): Pro
             kind: "primitive",
             metadata: node.metadata,
             name: node.name,
+            parentId: node.parentId,
             tags: node.tags,
             transform: node.transform
           } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "primitive" }>;
@@ -222,6 +253,7 @@ export async function serializeEngineScene(snapshot: SceneDocumentSnapshot): Pro
             kind: "model",
             metadata: node.metadata,
             name: node.name,
+            parentId: node.parentId,
             tags: node.tags,
             transform: node.transform
           } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "model" }>;
@@ -233,6 +265,7 @@ export async function serializeEngineScene(snapshot: SceneDocumentSnapshot): Pro
           kind: "light",
           metadata: node.metadata,
           name: node.name,
+          parentId: node.parentId,
           tags: node.tags,
           transform: node.transform
         } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "light" }>;
@@ -240,13 +273,14 @@ export async function serializeEngineScene(snapshot: SceneDocumentSnapshot): Pro
     )
   } satisfies WebHammerEngineScene;
 
-  return JSON.stringify(engineScene, null, 2);
+  return engineScene;
 }
 
 export async function serializeGltfScene(snapshot: SceneDocumentSnapshot): Promise<string> {
   const materialsById = new Map(snapshot.materials.map((material) => [material.id, material]));
   const assetsById = new Map(snapshot.assets.map((asset) => [asset.id, asset]));
   const exportedNodes: Array<{
+    id: string;
     mesh?: {
       name: string;
       primitives: Array<{
@@ -258,11 +292,25 @@ export async function serializeGltfScene(snapshot: SceneDocumentSnapshot): Promi
       }>;
     };
     name: string;
+    parentId?: string;
+    rotation?: [number, number, number, number];
     scale: [number, number, number];
     translation: [number, number, number];
   }> = [];
 
   for (const node of snapshot.nodes) {
+    if (isGroupNode(node)) {
+      exportedNodes.push({
+        id: node.id,
+        name: node.name,
+        parentId: node.parentId,
+        rotation: toQuaternion(node.transform.rotation),
+        scale: [node.transform.scale.x, node.transform.scale.y, node.transform.scale.z],
+        translation: [node.transform.position.x, node.transform.position.y, node.transform.position.z]
+      });
+      continue;
+    }
+
     if (isBrushNode(node) || isMeshNode(node) || isPrimitiveNode(node)) {
       const geometry = await buildExportGeometry(node, materialsById);
 
@@ -271,11 +319,14 @@ export async function serializeGltfScene(snapshot: SceneDocumentSnapshot): Promi
       }
 
       exportedNodes.push({
+        id: node.id,
         mesh: {
           name: node.name,
           primitives: geometry.primitives
         },
         name: node.name,
+        parentId: node.parentId,
+        rotation: toQuaternion(node.transform.rotation),
         scale: [node.transform.scale.x, node.transform.scale.y, node.transform.scale.z],
         translation: [node.transform.position.x, node.transform.position.y, node.transform.position.z]
       });
@@ -286,6 +337,7 @@ export async function serializeGltfScene(snapshot: SceneDocumentSnapshot): Promi
       const previewColor = assetsById.get(node.data.assetId)?.metadata.previewColor;
       const primitive = createCylinderPrimitive();
       exportedNodes.push({
+        id: node.id,
         mesh: {
           name: node.name,
           primitives: [
@@ -305,6 +357,8 @@ export async function serializeGltfScene(snapshot: SceneDocumentSnapshot): Promi
           ]
         },
         name: node.name,
+        parentId: node.parentId,
+        rotation: toQuaternion(node.transform.rotation),
         scale: [node.transform.scale.x, node.transform.scale.y, node.transform.scale.z],
         translation: [node.transform.position.x, node.transform.position.y, node.transform.position.z]
       });
@@ -316,6 +370,7 @@ export async function serializeGltfScene(snapshot: SceneDocumentSnapshot): Promi
 
 async function buildGltfDocument(
   exportedNodes: Array<{
+    id: string;
     mesh?: {
       name: string;
       primitives: Array<{
@@ -327,6 +382,8 @@ async function buildGltfDocument(
       }>;
     };
     name: string;
+    parentId?: string;
+    rotation?: [number, number, number, number];
     scale: [number, number, number];
     translation: [number, number, number];
   }>
@@ -365,6 +422,8 @@ async function buildGltfDocument(
     });
     return bufferViews.length - 1;
   };
+
+  const nodeIndexById = new Map<string, number>();
 
   for (const exportedNode of exportedNodes) {
     if (exportedNode.mesh) {
@@ -445,10 +504,29 @@ async function buildGltfDocument(
     nodes.push({
       ...(exportedNode.mesh ? { mesh: gltfMeshes.length - 1 } : {}),
       name: exportedNode.name,
+      ...(exportedNode.rotation ? { rotation: exportedNode.rotation } : {}),
       scale: exportedNode.scale,
       translation: exportedNode.translation
     });
+    nodeIndexById.set(exportedNode.id, nodes.length - 1);
   }
+
+  const rootNodeIndices: number[] = [];
+
+  exportedNodes.forEach((exportedNode, index) => {
+    const parentIndex =
+      exportedNode.parentId
+        ? nodeIndexById.get(exportedNode.parentId)
+        : undefined;
+
+    if (parentIndex === undefined) {
+      rootNodeIndices.push(index);
+      return;
+    }
+
+    const parent = nodes[parentIndex] as { children?: number[] };
+    parent.children = [...(parent.children ?? []), index];
+  });
 
   const totalByteLength = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
   const merged = new Uint8Array(totalByteLength);
@@ -479,7 +557,7 @@ async function buildGltfDocument(
     scene: 0,
     scenes: [
       {
-        nodes: nodes.map((_, index) => index)
+        nodes: rootNodeIndices
       }
     ],
     textures
@@ -877,6 +955,11 @@ function computeCylinderUvs(positions: number[]) {
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
+}
+
+function toQuaternion(rotation: Vec3): [number, number, number, number] {
+  const quaternion = new Quaternion().setFromEuler(new Euler(rotation.x, rotation.y, rotation.z, "XYZ"));
+  return [quaternion.x, quaternion.y, quaternion.z, quaternion.w];
 }
 
 function createCylinderPrimitive() {

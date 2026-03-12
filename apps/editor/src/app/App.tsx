@@ -11,6 +11,7 @@ import {
   createExtrudeBrushNodesCommand,
   createDuplicateNodesCommand,
   createEditorCore,
+  createGroupSelectionCommand,
   createPlaceLightNodeCommand,
   createPlaceBlockoutPlatformCommand,
   createPlaceBlockoutRoomCommand,
@@ -80,8 +81,7 @@ import {
 } from "@web-hammer/workers";
 import {
   createWebHammerEngineBundleZip,
-  externalizeWebHammerEngineScene,
-  parseWebHammerEngineScene
+  isWebHammerEngineBundle
 } from "@web-hammer/three-runtime";
 import { EditorShell } from "@/components/EditorShell";
 import { uiStore } from "@/state/ui-store";
@@ -225,14 +225,17 @@ export function App() {
   const resolveViewportFocusPoint = () => {
     const selectedNodeId = editor.selection.ids[0];
     const selectedNode = selectedNodeId ? editor.scene.getNode(selectedNodeId) : undefined;
+    const selectedEntity = !selectedNode && selectedNodeId ? editor.scene.getEntity(selectedNodeId) : undefined;
 
-    return selectedNode
-      ? vec3(
-          selectedNode.transform.position.x,
-          selectedNode.transform.position.y,
-          selectedNode.transform.position.z
-        )
-      : vec3(0, 0, 0);
+    if (selectedNode) {
+      return renderScene.nodeTransforms.get(selectedNode.id)?.position ?? selectedNode.transform.position;
+    }
+
+    if (selectedEntity) {
+      return renderScene.entityTransforms.get(selectedEntity.id)?.position ?? selectedEntity.transform.position;
+    }
+
+    return vec3(0, 0, 0);
   };
 
   const handleSetViewMode = (viewMode: ViewModeId) => {
@@ -286,13 +289,19 @@ export function App() {
       }
 
       viewportPaneIds.forEach((viewportId) => {
-        focusViewportOnPoint(uiStore.viewports[viewportId], entity.transform.position);
+        focusViewportOnPoint(
+          uiStore.viewports[viewportId],
+          renderScene.entityTransforms.get(entity.id)?.position ?? entity.transform.position
+        );
       });
       return;
     }
 
     viewportPaneIds.forEach((viewportId) => {
-      focusViewportOnPoint(uiStore.viewports[viewportId], node.transform.position);
+      focusViewportOnPoint(
+        uiStore.viewports[viewportId],
+        renderScene.nodeTransforms.get(node.id)?.position ?? node.transform.position
+      );
     });
   };
 
@@ -514,6 +523,22 @@ export function App() {
     editor.execute(command);
     editor.select(duplicateIds, "object");
     enqueueWorkerJob("Duplicate selection", { task: "triangulation", worker: "geometryWorker" }, 700);
+  };
+
+  const handleGroupSelection = () => {
+    if (editor.selection.ids.length === 0) {
+      return;
+    }
+
+    const result = createGroupSelectionCommand(editor.scene, editor.selection.ids);
+
+    if (!result) {
+      return;
+    }
+
+    editor.execute(result.command);
+    editor.select([result.groupId], "object");
+    enqueueWorkerJob("Group selection", { task: "triangulation", worker: "geometryWorker" }, 550);
   };
 
   const handleDeleteSelection = () => {
@@ -1200,7 +1225,7 @@ export function App() {
       "Load .whmap"
     );
 
-    if (typeof payload !== "string") {
+    if (typeof payload !== "string" && !isWebHammerEngineBundle(payload)) {
       editor.importSnapshot(payload, "scene:load-whmap");
     }
 
@@ -1230,9 +1255,8 @@ export function App() {
       "Export runtime scene"
     );
 
-    if (typeof payload === "string") {
-      const bundle = await externalizeWebHammerEngineScene(parseWebHammerEngineScene(payload));
-      const zip = createWebHammerEngineBundleZip(bundle);
+    if (isWebHammerEngineBundle(payload)) {
+      const zip = createWebHammerEngineBundleZip(payload);
       downloadBinaryFile("scene.runtime.zip", zip, "application/zip");
     }
   };
@@ -1251,6 +1275,7 @@ export function App() {
     enabled: physicsPlayback === "stopped",
     handleDeleteSelection,
     handleDuplicateSelection,
+    handleGroupSelection,
     handleInvertSelectionNormals,
     handleRedo,
     handleTranslateSelection,
@@ -1293,6 +1318,7 @@ export function App() {
         onExportGltf={handleExportGltf}
         onExtrudeSelection={handleExtrudeSelection}
         onFocusNode={handleFocusNode}
+        onGroupSelection={handleGroupSelection}
         onGenerateAiModel={handleGenerateAiModel}
         onImportGlb={handleImportGlb}
         onLoadWhmap={handleLoadWhmap}

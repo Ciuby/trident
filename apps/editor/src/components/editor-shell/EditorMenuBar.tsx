@@ -18,6 +18,7 @@ type EditorMenuBarProps = {
   onCreateBrush: () => void;
   onDeleteSelection: () => void;
   onDuplicateSelection: () => void;
+  onGroupSelection: () => void;
   onExportEngine: () => void;
   onExportGltf: () => void;
   onFocusSelection: () => void;
@@ -36,6 +37,7 @@ export function EditorMenuBar({
   onCreateBrush,
   onDeleteSelection,
   onDuplicateSelection,
+  onGroupSelection,
   onExportEngine,
   onExportGltf,
   onFocusSelection,
@@ -95,6 +97,10 @@ export function EditorMenuBar({
               <MenubarItem className="rounded-lg text-xs" onClick={onDuplicateSelection}>
                 Duplicate
                 <MenubarShortcut>Cmd+D</MenubarShortcut>
+              </MenubarItem>
+              <MenubarItem className="rounded-lg text-xs" onClick={onGroupSelection}>
+                Group Selection
+                <MenubarShortcut>Cmd+G</MenubarShortcut>
               </MenubarItem>
               <MenubarItem className="rounded-lg text-xs" onClick={onDeleteSelection}>
                 Delete

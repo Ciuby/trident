@@ -357,6 +357,34 @@ export function ViewportCanvas({
 
   const selectedBrushNode = selectedNode && isBrushNode(selectedNode) ? selectedNode : undefined;
   const selectedMeshNode = selectedNode && isMeshNode(selectedNode) ? selectedNode : undefined;
+  const selectedNodeWorldTransform = selectedNode ? renderScene.nodeTransforms.get(selectedNode.id) ?? selectedNode.transform : undefined;
+  const selectedEntityWorldTransform = selectedEntity
+    ? renderScene.entityTransforms.get(selectedEntity.id) ?? selectedEntity.transform
+    : undefined;
+  const selectedDisplayNode = selectedNode && selectedNodeWorldTransform
+    ? {
+        ...selectedNode,
+        transform: selectedNodeWorldTransform
+      }
+    : selectedNode;
+  const selectedBrushDisplayNode =
+    selectedBrushNode && selectedNodeWorldTransform
+      ? {
+          ...selectedBrushNode,
+          transform: selectedNodeWorldTransform
+        }
+      : selectedBrushNode;
+  const selectedMeshDisplayNode =
+    selectedMeshNode && selectedNodeWorldTransform
+      ? {
+          ...selectedMeshNode,
+          transform: selectedNodeWorldTransform
+        }
+      : selectedMeshNode;
+  const selectedDisplayNodes = selectedNodes.map((node) => ({
+    ...node,
+    transform: renderScene.nodeTransforms.get(node.id) ?? node.transform
+  }));
 
   useEffect(() => {
     if (!isActiveViewport) {
@@ -2410,12 +2438,12 @@ export function ViewportCanvas({
       return;
     }
 
-    if (activeToolId === "mesh-edit" && selectedNode) {
+    if (activeToolId === "mesh-edit" && selectedDisplayNode) {
       const handleSelections = (selectedBrushNode ? brushEditHandles : meshEditHandles)
         .filter((handle) =>
           rectContainsPoint(
             selectionRect,
-            projectLocalPointToScreen(handle.position, selectedNode, cameraRef.current!, bounds)
+            projectLocalPointToScreen(handle.position, selectedDisplayNode, cameraRef.current!, bounds)
           )
         )
         .map((handle) => handle.id);
@@ -2562,35 +2590,35 @@ export function ViewportCanvas({
           sceneSettings={sceneSettings}
           selectedNodeIds={selectedNodeIds}
         />
-        {editorInteractionEnabled && isActiveViewport && arcState && selectedNode ? <EditableMeshPreviewOverlay mesh={arcState.previewMesh} node={selectedNode} /> : null}
-        {editorInteractionEnabled && isActiveViewport && bevelState && selectedNode ? <EditableMeshPreviewOverlay mesh={bevelState.previewMesh} node={selectedNode} /> : null}
-        {editorInteractionEnabled && isActiveViewport && (extrudeState?.kind === "mesh" || extrudeState?.kind === "brush-mesh") && selectedNode ? (
-          <EditableMeshPreviewOverlay mesh={extrudeState.previewMesh} node={selectedNode} />
+        {editorInteractionEnabled && isActiveViewport && arcState && selectedDisplayNode ? <EditableMeshPreviewOverlay mesh={arcState.previewMesh} node={selectedDisplayNode} /> : null}
+        {editorInteractionEnabled && isActiveViewport && bevelState && selectedDisplayNode ? <EditableMeshPreviewOverlay mesh={bevelState.previewMesh} node={selectedDisplayNode} /> : null}
+        {editorInteractionEnabled && isActiveViewport && (extrudeState?.kind === "mesh" || extrudeState?.kind === "brush-mesh") && selectedDisplayNode ? (
+          <EditableMeshPreviewOverlay mesh={extrudeState.previewMesh} node={selectedDisplayNode} />
         ) : null}
-        {editorInteractionEnabled && isActiveViewport && sculptState?.dragging && sculptState.previewMesh && selectedNode ? (
-          <EditableMeshPreviewOverlay mesh={sculptState.previewMesh} node={selectedNode} presentation="solid" />
+        {editorInteractionEnabled && isActiveViewport && sculptState?.dragging && sculptState.previewMesh && selectedDisplayNode ? (
+          <EditableMeshPreviewOverlay mesh={sculptState.previewMesh} node={selectedDisplayNode} presentation="solid" />
         ) : null}
-        {editorInteractionEnabled && isActiveViewport && extrudeState && selectedNode ? (
-          <ExtrudeAxisGuide node={selectedNode} state={extrudeState} viewport={viewport} />
+        {editorInteractionEnabled && isActiveViewport && extrudeState && selectedDisplayNode ? (
+          <ExtrudeAxisGuide node={selectedDisplayNode} state={extrudeState} viewport={viewport} />
         ) : null}
-        {editorInteractionEnabled && isActiveViewport && sculptState && selectedNode ? (
-          <SculptBrushOverlay hovered={sculptState.hovered} node={selectedNode} radius={sculptState.radius} />
+        {editorInteractionEnabled && isActiveViewport && sculptState && selectedDisplayNode ? (
+          <SculptBrushOverlay hovered={sculptState.hovered} node={selectedDisplayNode} radius={sculptState.radius} />
         ) : null}
         {editorInteractionEnabled && isActiveViewport && activeToolId === "brush" && brushCreateState ? (
           <BrushCreatePreview snapSize={snapSize} state={brushCreateState} />
         ) : null}
-        {editorInteractionEnabled && isActiveViewport && activeToolId === "clip" && selectedBrushNode ? (
+        {editorInteractionEnabled && isActiveViewport && activeToolId === "clip" && selectedBrushDisplayNode ? (
           <BrushClipOverlay
-            node={selectedBrushNode}
+            node={selectedBrushDisplayNode}
             onSplitBrushAtCoordinate={onSplitBrushAtCoordinate}
             viewport={viewport}
           />
         ) : null}
-        {editorInteractionEnabled && isActiveViewport && activeToolId === "mesh-edit" && faceCutState && selectedNode && editableMeshSource ? (
+        {editorInteractionEnabled && isActiveViewport && activeToolId === "mesh-edit" && faceCutState && selectedDisplayNode && editableMeshSource ? (
           <MeshCutOverlay
             faceId={faceCutState.faceId}
             mesh={editableMeshSource}
-            node={selectedNode}
+            node={selectedDisplayNode}
             onCommitCut={(mesh) => {
               setFaceCutState(null);
               commitMeshTopology(mesh);
@@ -2598,12 +2626,12 @@ export function ViewportCanvas({
             viewport={viewport}
           />
         ) : null}
-        {editorInteractionEnabled && isActiveViewport && activeToolId === "mesh-edit" && faceSubdivisionState && selectedNode ? (
+        {editorInteractionEnabled && isActiveViewport && activeToolId === "mesh-edit" && faceSubdivisionState && selectedDisplayNode ? (
           <MeshSubdivideOverlay
             cuts={faceSubdivisionState.cuts}
             faceId={faceSubdivisionState.faceId}
             mesh={faceSubdivisionState.baseMesh}
-            node={selectedNode}
+            node={selectedDisplayNode}
             onCommitSubdivision={() => {
               const mesh = subdivideEditableMeshFace(
                 faceSubdivisionState.baseMesh,
@@ -2618,9 +2646,9 @@ export function ViewportCanvas({
             }}
           />
         ) : null}
-        {editorInteractionEnabled && isActiveViewport && activeToolId === "extrude" && selectedBrushNode ? (
+        {editorInteractionEnabled && isActiveViewport && activeToolId === "extrude" && selectedBrushDisplayNode ? (
           <BrushExtrudeOverlay
-            node={selectedBrushNode}
+            node={selectedBrushDisplayNode}
             onCommitMeshTopology={onCommitMeshTopology}
             onPreviewBrushData={onPreviewBrushData}
             onUpdateBrushData={onUpdateBrushData}
@@ -2628,19 +2656,19 @@ export function ViewportCanvas({
             viewport={viewport}
           />
         ) : null}
-        {editorInteractionEnabled && isActiveViewport && activeToolId === "extrude" && selectedMeshNode ? (
+        {editorInteractionEnabled && isActiveViewport && activeToolId === "extrude" && selectedMeshDisplayNode ? (
           <MeshExtrudeOverlay
-            node={selectedMeshNode}
+            node={selectedMeshDisplayNode}
             onUpdateMeshData={onUpdateMeshData}
             setTransformDragging={setTransformDragging}
             viewport={viewport}
           />
         ) : null}
-        {editorInteractionEnabled && isActiveViewport && activeToolId === "mesh-edit" && selectedBrushNode && !arcState && !bevelState && !extrudeState && !faceCutState && !faceSubdivisionState ? (
+        {editorInteractionEnabled && isActiveViewport && activeToolId === "mesh-edit" && selectedBrushDisplayNode && !arcState && !bevelState && !extrudeState && !faceCutState && !faceSubdivisionState ? (
           <BrushEditOverlay
             handles={brushEditHandles}
             meshEditMode={meshEditMode}
-            node={selectedBrushNode}
+            node={selectedBrushDisplayNode}
             onCommitTransformAction={(action) => {
               lastMeshEditActionRef.current = action;
             }}
@@ -2652,11 +2680,11 @@ export function ViewportCanvas({
             viewport={viewport}
           />
         ) : null}
-        {editorInteractionEnabled && isActiveViewport && activeToolId === "mesh-edit" && selectedMeshNode && !arcState && !bevelState && !extrudeState && !faceCutState && !faceSubdivisionState ? (
+        {editorInteractionEnabled && isActiveViewport && activeToolId === "mesh-edit" && selectedMeshDisplayNode && !arcState && !bevelState && !extrudeState && !faceCutState && !faceSubdivisionState ? (
           <MeshEditOverlay
             handles={meshEditHandles}
             meshEditMode={meshEditMode}
-            node={selectedMeshNode}
+            node={selectedMeshDisplayNode}
             onCommitTransformAction={(action) => {
               lastMeshEditActionRef.current = action;
             }}
@@ -2677,8 +2705,11 @@ export function ViewportCanvas({
             onUpdateNodeTransform={onUpdateNodeTransform}
             selectedEntity={selectedEntity}
             selectedNode={selectedNode}
+            selectedEntityWorldTransform={selectedEntityWorldTransform}
+            selectedNodeWorldTransform={selectedNodeWorldTransform}
             selectedNodeIds={selectedNodeIds}
             selectedNodes={selectedNodes}
+            selectedWorldNodes={selectedDisplayNodes}
             transformMode={transformMode}
             viewport={viewport}
           />

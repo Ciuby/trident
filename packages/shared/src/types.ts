@@ -136,8 +136,14 @@ export type GeometryNodeBase = {
   id: NodeID;
   name: string;
   metadata?: Record<string, MetadataValue>;
+  parentId?: NodeID;
   tags?: string[];
   transform: Transform;
+};
+
+export type GroupNode = GeometryNodeBase & {
+  kind: "group";
+  data: Record<string, never>;
 };
 
 export type BrushNode = GeometryNodeBase & {
@@ -165,7 +171,7 @@ export type LightNode = GeometryNodeBase & {
   data: LightNodeData;
 };
 
-export type GeometryNode = BrushNode | MeshNode | ModelNode | PrimitiveNode | LightNode;
+export type GeometryNode = BrushNode | GroupNode | MeshNode | ModelNode | PrimitiveNode | LightNode;
 
 export type Asset = {
   id: AssetID;
@@ -222,6 +228,7 @@ export type Layer = {
 export type Entity = {
   id: EntityID;
   name: string;
+  parentId?: NodeID;
   type: EntityType;
   transform: Transform;
   properties: Record<string, MetadataValue>;

@@ -90,6 +90,15 @@ export function createSceneDocument(): SceneDocument {
         return undefined;
       }
 
+      const descendantNodeIds = collectDescendantNodeIds(nodes, id);
+      const descendantEntityIds = collectDescendantEntityIds(nodes, entities, id);
+
+      descendantNodeIds.forEach((nodeId) => {
+        nodes.delete(nodeId);
+      });
+      descendantEntityIds.forEach((entityId) => {
+        entities.delete(entityId);
+      });
       nodes.delete(id);
       document.touch();
 
@@ -162,6 +171,38 @@ export function createSceneDocument(): SceneDocument {
   };
 
   return document;
+}
+
+function collectDescendantNodeIds(nodes: Map<NodeID, GeometryNode>, parentId: NodeID): NodeID[] {
+  const descendants: NodeID[] = [];
+  const queue = Array.from(nodes.values())
+    .filter((node) => node.parentId === parentId)
+    .map((node) => node.id);
+
+  while (queue.length > 0) {
+    const nodeId = queue.shift()!;
+    descendants.push(nodeId);
+
+    nodes.forEach((node) => {
+      if (node.parentId === nodeId) {
+        queue.push(node.id);
+      }
+    });
+  }
+
+  return descendants;
+}
+
+function collectDescendantEntityIds(
+  nodes: Map<NodeID, GeometryNode>,
+  entities: Map<EntityID, Entity>,
+  parentId: NodeID
+): EntityID[] {
+  const validParentIds = new Set<NodeID>([parentId, ...collectDescendantNodeIds(nodes, parentId)]);
+
+  return Array.from(entities.values())
+    .filter((entity) => entity.parentId && validParentIds.has(entity.parentId))
+    .map((entity) => entity.id);
 }
 
 export function createSceneDocumentSnapshot(scene: SceneDocument): SceneDocumentSnapshot {

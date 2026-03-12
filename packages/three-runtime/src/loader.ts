@@ -1,4 +1,5 @@
 import type { Asset, MaterialRenderSide, PropPhysics, Transform, Vec3 } from "@web-hammer/shared";
+import { resolveSceneGraph } from "@web-hammer/shared";
 import {
   AmbientLight,
   BackSide,
@@ -29,6 +30,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import type {
+  WebHammerEngineBundle,
   WebHammerEngineGeometryNode,
   WebHammerEngineNode,
   WebHammerEngineScene,
@@ -91,6 +93,15 @@ export function isWebHammerEngineScene(value: unknown): value is WebHammerEngine
   );
 }
 
+export function isWebHammerEngineBundle(value: unknown): value is WebHammerEngineBundle {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<WebHammerEngineBundle>;
+  return Array.isArray(candidate.files) && isWebHammerEngineScene(candidate.manifest);
+}
+
 export function parseWebHammerEngineScene(text: string): WebHammerEngineScene {
   const parsed = JSON.parse(text) as unknown;
 
@@ -123,6 +134,12 @@ export async function loadWebHammerEngineScene(
   const physicsNodes: WebHammerLoadedScene["physicsNodes"] = [];
   const materialCache = new Map<string, MeshStandardMaterial>();
   const textureCache = new Map<string, Promise<Texture>>();
+  const nodesById = new Map(engineScene.nodes.map((node) => [node.id, node]));
+  const createdObjects = await Promise.all(
+    engineScene.nodes.map(async (node) => [node.id, await createObjectForNode(node, assetsById, materialCache, textureCache, options)] as const)
+  );
+  const attachedNodeIds = new Set<string>();
+  const attachStack = new Set<string>();
 
   root.name = "Web Hammer Scene";
   root.userData.webHammer = {
@@ -141,10 +158,56 @@ export async function loadWebHammerEngineScene(
     lights.push(worldAmbient);
   }
 
+  createdObjects.forEach(([nodeId, object]) => {
+    nodes.set(nodeId, object);
+  });
+
+  const attachNode = (nodeId: string) => {
+    if (attachedNodeIds.has(nodeId)) {
+      return;
+    }
+
+    const node = nodesById.get(nodeId);
+    const object = nodes.get(nodeId);
+
+    if (!node || !object) {
+      return;
+    }
+
+    if (attachStack.has(nodeId)) {
+      root.add(object);
+      attachedNodeIds.add(nodeId);
+      return;
+    }
+
+    attachStack.add(nodeId);
+
+    const parentObject =
+      node.parentId && node.parentId !== node.id
+        ? nodes.get(node.parentId)
+        : undefined;
+
+    if (parentObject && !attachStack.has(node.parentId!)) {
+      attachNode(node.parentId!);
+      parentObject.add(object);
+    } else {
+      root.add(object);
+    }
+
+    attachStack.delete(nodeId);
+    attachedNodeIds.add(nodeId);
+  };
+
   for (const node of engineScene.nodes) {
-    const object = await createObjectForNode(node, assetsById, materialCache, textureCache, options);
-    root.add(object);
-    nodes.set(node.id, object);
+    attachNode(node.id);
+  }
+
+  for (const node of engineScene.nodes) {
+    const object = nodes.get(node.id);
+
+    if (!object) {
+      continue;
+    }
 
     const light = findPrimaryLight(object);
 
@@ -163,8 +226,13 @@ export async function loadWebHammerEngineScene(
     }
   }
 
+  const sceneGraph = resolveSceneGraph(engineScene.nodes, engineScene.entities);
+
   return {
-    entities: engineScene.entities,
+    entities: engineScene.entities.map((entity) => ({
+      ...entity,
+      transform: sceneGraph.entityWorldTransforms.get(entity.id) ?? entity.transform
+    })),
     lights,
     nodes,
     physicsNodes,
@@ -242,6 +310,10 @@ async function createObjectForNode(
   if (node.kind === "model") {
     const modelObject = await createModelObject(node, assetsById.get(node.data.assetId), options);
     content.add(modelObject);
+    return anchor;
+  }
+
+  if (node.kind === "group") {
     return anchor;
   }
 

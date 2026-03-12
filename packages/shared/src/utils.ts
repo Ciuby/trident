@@ -1,9 +1,12 @@
 import type {
   BrushNode,
+  Entity,
   GeometryNode,
+  GroupNode,
   LightNode,
   MeshNode,
   ModelNode,
+  NodeID,
   PrimitiveNode,
   SceneSettings,
   Transform,
@@ -11,6 +14,7 @@ import type {
   Vec3,
   WorldSettings
 } from "./types";
+import { Euler, Matrix4, Quaternion, Vector3 } from "three";
 
 export function vec2(x: number, y: number): Vec2 {
   return { x, y };
@@ -155,6 +159,144 @@ export function resolveTransformPivot(transform: Transform): Vec3 {
   return transform.pivot ?? vec3(0, 0, 0);
 }
 
+export type SceneGraphResolution = {
+  entityChildrenByParentId: Map<NodeID, Entity["id"][]>;
+  entityWorldTransforms: Map<Entity["id"], Transform>;
+  nodeChildrenByParentId: Map<NodeID, NodeID[]>;
+  nodeWorldTransforms: Map<NodeID, Transform>;
+  rootEntityIds: Entity["id"][];
+  rootNodeIds: NodeID[];
+};
+
+const tempPosition = new Vector3();
+const tempQuaternion = new Quaternion();
+const tempScale = new Vector3();
+
+export function composeTransforms(parent: Transform, child: Transform): Transform {
+  const matrix = transformToMatrix(parent).multiply(transformToMatrix(child));
+  return matrixToTransform(matrix, child.pivot);
+}
+
+export function localizeTransform(world: Transform, parentWorld?: Transform): Transform {
+  if (!parentWorld) {
+    return structuredClone(world);
+  }
+
+  const matrix = transformToMatrix(parentWorld).invert().multiply(transformToMatrix(world));
+  return matrixToTransform(matrix, world.pivot);
+}
+
+export function resolveSceneGraph(
+  nodes: Iterable<Pick<GeometryNode, "id" | "parentId" | "transform">>,
+  entities: Iterable<Pick<Entity, "id" | "parentId" | "transform">> = []
+): SceneGraphResolution {
+  const nodeList = Array.from(nodes);
+  const entityList = Array.from(entities);
+  const nodesById = new Map(nodeList.map((node) => [node.id, node]));
+  const nodeWorldTransforms = new Map<NodeID, Transform>();
+  const entityWorldTransforms = new Map<Entity["id"], Transform>();
+  const nodeChildrenByParentId = new Map<NodeID, NodeID[]>();
+  const entityChildrenByParentId = new Map<NodeID, Entity["id"][]>();
+  const rootNodeIds: NodeID[] = [];
+  const rootEntityIds: Entity["id"][] = [];
+  const nodeStack = new Set<NodeID>();
+
+  const appendNodeChild = (parentId: NodeID, childId: NodeID) => {
+    const children = nodeChildrenByParentId.get(parentId);
+
+    if (children) {
+      children.push(childId);
+      return;
+    }
+
+    nodeChildrenByParentId.set(parentId, [childId]);
+  };
+
+  const appendEntityChild = (parentId: NodeID, childId: Entity["id"]) => {
+    const children = entityChildrenByParentId.get(parentId);
+
+    if (children) {
+      children.push(childId);
+      return;
+    }
+
+    entityChildrenByParentId.set(parentId, [childId]);
+  };
+
+  const resolveNodeTransform = (node: Pick<GeometryNode, "id" | "parentId" | "transform">): Transform => {
+    const cached = nodeWorldTransforms.get(node.id);
+
+    if (cached) {
+      return cached;
+    }
+
+    if (nodeStack.has(node.id)) {
+      const fallback = structuredClone(node.transform);
+      nodeWorldTransforms.set(node.id, fallback);
+      return fallback;
+    }
+
+    nodeStack.add(node.id);
+
+    const parent =
+      node.parentId && node.parentId !== node.id
+        ? nodesById.get(node.parentId)
+        : undefined;
+    const resolved = parent
+      ? composeTransforms(resolveNodeTransform(parent), node.transform)
+      : structuredClone(node.transform);
+
+    nodeWorldTransforms.set(node.id, resolved);
+    nodeStack.delete(node.id);
+    return resolved;
+  };
+
+  nodeList.forEach((node) => {
+    resolveNodeTransform(node);
+
+    const hasValidParent = Boolean(
+      node.parentId &&
+      node.parentId !== node.id &&
+      nodesById.has(node.parentId)
+    );
+
+    if (hasValidParent) {
+      appendNodeChild(node.parentId!, node.id);
+      return;
+    }
+
+    rootNodeIds.push(node.id);
+  });
+
+  entityList.forEach((entity) => {
+    const parent =
+      entity.parentId && nodesById.has(entity.parentId)
+        ? nodesById.get(entity.parentId)
+        : undefined;
+
+    entityWorldTransforms.set(
+      entity.id,
+      parent ? composeTransforms(resolveNodeTransform(parent), entity.transform) : structuredClone(entity.transform)
+    );
+
+    if (parent) {
+      appendEntityChild(parent.id, entity.id);
+      return;
+    }
+
+    rootEntityIds.push(entity.id);
+  });
+
+  return {
+    entityChildrenByParentId,
+    entityWorldTransforms,
+    nodeChildrenByParentId,
+    nodeWorldTransforms,
+    rootEntityIds,
+    rootNodeIds
+  };
+}
+
 export function createDefaultSceneSettings(): SceneSettings {
   return {
     player: {
@@ -221,6 +363,10 @@ export function isMeshNode(node: GeometryNode): node is MeshNode {
   return node.kind === "mesh";
 }
 
+export function isGroupNode(node: GeometryNode): node is GroupNode {
+  return node.kind === "group";
+}
+
 export function isModelNode(node: GeometryNode): node is ModelNode {
   return node.kind === "model";
 }
@@ -231,4 +377,24 @@ export function isPrimitiveNode(node: GeometryNode): node is PrimitiveNode {
 
 export function isLightNode(node: GeometryNode): node is LightNode {
   return node.kind === "light";
+}
+
+function transformToMatrix(transform: Transform) {
+  return new Matrix4().compose(
+    new Vector3(transform.position.x, transform.position.y, transform.position.z),
+    new Quaternion().setFromEuler(new Euler(transform.rotation.x, transform.rotation.y, transform.rotation.z, "XYZ")),
+    new Vector3(transform.scale.x, transform.scale.y, transform.scale.z)
+  );
+}
+
+function matrixToTransform(matrix: Matrix4, pivot?: Vec3): Transform {
+  matrix.decompose(tempPosition, tempQuaternion, tempScale);
+  const rotation = new Euler().setFromQuaternion(tempQuaternion, "XYZ");
+
+  return {
+    pivot: pivot ? vec3(pivot.x, pivot.y, pivot.z) : undefined,
+    position: vec3(tempPosition.x, tempPosition.y, tempPosition.z),
+    rotation: vec3(rotation.x, rotation.y, rotation.z),
+    scale: vec3(tempScale.x, tempScale.y, tempScale.z)
+  };
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { SceneDocumentSnapshot } from "@web-hammer/editor-core";
+import type { WebHammerEngineBundle } from "@web-hammer/three-runtime";
 import type { WorkerJob, WorkerRequest, WorkerResponse } from "@web-hammer/workers";
 
 export type ExportWorkerRequest = WorkerRequest extends infer Request
@@ -17,7 +18,7 @@ export function useExportWorker() {
       string,
       {
         reject: (reason?: unknown) => void;
-        resolve: (payload: string | SceneDocumentSnapshot) => void;
+        resolve: (payload: string | SceneDocumentSnapshot | WebHammerEngineBundle) => void;
       }
     >()
   );
@@ -56,7 +57,10 @@ export function useExportWorker() {
     };
   }, []);
 
-  const runWorkerRequest = (request: ExportWorkerRequest, label: string): Promise<string | SceneDocumentSnapshot> => {
+  const runWorkerRequest = (
+    request: ExportWorkerRequest,
+    label: string
+  ): Promise<string | SceneDocumentSnapshot | WebHammerEngineBundle> => {
     const id = `export:${requestCounterRef.current++}`;
     const workerTask =
       request.kind === "whmap-save"

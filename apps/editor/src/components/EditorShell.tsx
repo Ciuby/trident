@@ -64,6 +64,7 @@ type EditorShellProps = {
   onCreateBrush: () => void;
   onDeleteSelection: () => void;
   onDuplicateSelection: () => void;
+  onGroupSelection: () => void;
   onClearSelection: () => void;
   onExportEngine: () => void;
   onExportGltf: () => void;
@@ -175,6 +176,7 @@ export function EditorShell({
   onCreateBrush,
   onDeleteSelection,
   onDuplicateSelection,
+  onGroupSelection,
   onClearSelection,
   onExportEngine,
   onExportGltf,
@@ -344,6 +346,7 @@ export function EditorShell({
           onCreateBrush={onCreateBrush}
           onDeleteSelection={onDeleteSelection}
           onDuplicateSelection={onDuplicateSelection}
+          onGroupSelection={onGroupSelection}
           onExportEngine={onExportEngine}
           onExportGltf={onExportGltf}
           onFocusSelection={() => {

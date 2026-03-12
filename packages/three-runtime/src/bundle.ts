@@ -97,7 +97,7 @@ export function createWebHammerEngineBundleZip(
   const manifestPath = options.manifestPath ?? "scene.runtime.json";
   const encoder = new TextEncoder();
   const entries: Record<string, Uint8Array> = {
-    [manifestPath]: encoder.encode(JSON.stringify(bundle.manifest, null, 2))
+    [manifestPath]: encoder.encode(JSON.stringify(bundle.manifest))
   };
 
   bundle.files.forEach((file) => {

@@ -25,7 +25,15 @@ import type { MaterialRenderSide } from "@web-hammer/shared";
 import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { disableBvhRaycast, enableBvhRaycast, type DerivedEntityMarker, type DerivedLight, type DerivedRenderMesh, type DerivedRenderScene } from "@web-hammer/render-pipeline";
+import {
+  disableBvhRaycast,
+  enableBvhRaycast,
+  type DerivedEntityMarker,
+  type DerivedGroupMarker,
+  type DerivedLight,
+  type DerivedRenderMesh,
+  type DerivedRenderScene
+} from "@web-hammer/render-pipeline";
 import { createBlockoutTextureDataUri, resolveTransformPivot, toTuple } from "@web-hammer/shared";
 import { createIndexedGeometry } from "@/viewport/utils/geometry";
 import type { ViewportRenderMode } from "@/viewport/viewports";
@@ -183,6 +191,20 @@ export function ScenePreview({
         );
       })}
 
+      {renderScene.groups.map((group) => (
+        <RenderGroupNode
+          hovered={hoveredNodeId === group.nodeId}
+          interactive={interactive}
+          key={group.nodeId}
+          group={group}
+          onFocusNode={onFocusNode}
+          onHoverEnd={() => setHoveredNodeId(undefined)}
+          onHoverStart={setHoveredNodeId}
+          onSelectNodes={onSelectNode}
+          selected={selectedIdSet.has(group.nodeId)}
+        />
+      ))}
+
       {renderScene.lights.map((light) => (
         <RenderLightNode
           hovered={hoveredNodeId === light.nodeId}
@@ -198,6 +220,78 @@ export function ScenePreview({
         />
       ))}
     </>
+  );
+}
+
+function RenderGroupNode({
+  group,
+  hovered,
+  interactive,
+  onFocusNode,
+  onHoverEnd,
+  onHoverStart,
+  onSelectNodes,
+  selected
+}: {
+  group: DerivedGroupMarker;
+  hovered: boolean;
+  interactive: boolean;
+  onFocusNode: (nodeId: string) => void;
+  onHoverEnd: () => void;
+  onHoverStart: (nodeId: string) => void;
+  onSelectNodes: (nodeIds: string[]) => void;
+  selected: boolean;
+}) {
+  const markerColor = selected ? "#ffb35a" : hovered ? "#d8f4f0" : "#7dd3fc";
+
+  return (
+    <group
+      name={`node:${group.nodeId}`}
+      onClick={(event) => {
+        if (!interactive) {
+          return;
+        }
+
+        event.stopPropagation();
+        onSelectNodes([group.nodeId]);
+      }}
+      onDoubleClick={(event) => {
+        if (!interactive) {
+          return;
+        }
+
+        event.stopPropagation();
+        onFocusNode(group.nodeId);
+      }}
+      onPointerOut={(event) => {
+        if (!interactive) {
+          return;
+        }
+
+        event.stopPropagation();
+        onHoverEnd();
+      }}
+      onPointerOver={(event) => {
+        if (!interactive) {
+          return;
+        }
+
+        event.stopPropagation();
+        onHoverStart(group.nodeId);
+      }}
+      position={toTuple(group.position)}
+      rotation={toTuple(group.rotation)}
+      scale={toTuple(group.scale)}
+    >
+      <mesh>
+        <octahedronGeometry args={[0.18, 0]} />
+        <meshStandardMaterial color={markerColor} emissive={markerColor} emissiveIntensity={0.18} transparent opacity={0.85} />
+      </mesh>
+      <mesh visible={false}>
+        <sphereGeometry args={[0.4, 10, 10]} />
+        <meshBasicMaterial transparent opacity={0} />
+      </mesh>
+    </group>
   );
 }
 

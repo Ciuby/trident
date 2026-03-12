@@ -2,6 +2,7 @@ import type {
   Asset,
   BrushNode,
   Entity,
+  GroupNode,
   Layer,
   LightNode,
   MaterialRenderSide,
@@ -40,7 +41,7 @@ export type WebHammerEngineGeometryNode =
   | (MeshNode & { geometry: WebHammerExportGeometry })
   | (PrimitiveNode & { geometry: WebHammerExportGeometry });
 
-export type WebHammerEngineNode = WebHammerEngineGeometryNode | ModelNode | LightNode;
+export type WebHammerEngineNode = GroupNode | WebHammerEngineGeometryNode | ModelNode | LightNode;
 
 export type WebHammerEngineSceneMetadata = {
   exportedAt: string;

@@ -1,11 +1,11 @@
-import type { MeshNode, Vec3 } from "@web-hammer/shared";
+import type { Entity, MeshNode, NodeID, Vec3 } from "@web-hammer/shared";
 import { addVec3, isMeshNode } from "@web-hammer/shared";
 import type { Command } from "../command-stack";
 import type { SceneDocument } from "../../document/scene-document";
 import type { TransformAxis } from "./transform-commands";
 
 export function applyPositionDelta(scene: SceneDocument, nodeIds: string[], delta: Vec3) {
-  nodeIds.forEach((nodeId) => {
+  resolveTopLevelSelectionIds(scene, nodeIds).forEach((nodeId) => {
     const node = scene.getNode(nodeId);
 
     if (node) {
@@ -26,7 +26,7 @@ export function applyPositionDelta(scene: SceneDocument, nodeIds: string[], delt
 }
 
 export function flipScaleAxis(scene: SceneDocument, nodeIds: string[], axis: TransformAxis) {
-  nodeIds.forEach((nodeId) => {
+  resolveTopLevelSelectionIds(scene, nodeIds).forEach((nodeId) => {
     const node = scene.getNode(nodeId);
 
     if (!node) {
@@ -53,6 +53,92 @@ export function createDuplicateNodeId(scene: SceneDocument, sourceId: string): s
 
     attempt += 1;
   }
+}
+
+export function createDuplicateEntityId(scene: SceneDocument, sourceId: string): string {
+  let attempt = 1;
+
+  while (true) {
+    const entityId = `${sourceId}:copy:${attempt}`;
+
+    if (!scene.getEntity(entityId)) {
+      return entityId;
+    }
+
+    attempt += 1;
+  }
+}
+
+export function collectDescendantNodeIds(scene: SceneDocument, parentId: NodeID): NodeID[] {
+  const descendants: NodeID[] = [];
+  const queue = Array.from(scene.nodes.values())
+    .filter((node) => node.parentId === parentId)
+    .map((node) => node.id);
+
+  while (queue.length > 0) {
+    const nodeId = queue.shift()!;
+    descendants.push(nodeId);
+
+    scene.nodes.forEach((node) => {
+      if (node.parentId === nodeId) {
+        queue.push(node.id);
+      }
+    });
+  }
+
+  return descendants;
+}
+
+export function collectDescendantEntityIds(scene: SceneDocument, parentId: NodeID): Entity["id"][] {
+  const descendantNodeIds = new Set<NodeID>([parentId, ...collectDescendantNodeIds(scene, parentId)]);
+
+  return Array.from(scene.entities.values())
+    .filter((entity) => entity.parentId && descendantNodeIds.has(entity.parentId))
+    .map((entity) => entity.id);
+}
+
+export function resolveTopLevelSelectionIds(scene: SceneDocument, ids: string[]) {
+  const selectedIds = new Set(ids);
+
+  return Array.from(
+    new Set(
+      ids.filter((id) => {
+        const node = scene.getNode(id);
+
+        if (node) {
+          let currentParentId = node.parentId;
+
+          while (currentParentId) {
+            if (selectedIds.has(currentParentId)) {
+              return false;
+            }
+
+            currentParentId = scene.getNode(currentParentId)?.parentId;
+          }
+
+          return true;
+        }
+
+        const entity = scene.getEntity(id);
+
+        if (!entity) {
+          return false;
+        }
+
+        let currentParentId = entity.parentId;
+
+        while (currentParentId) {
+          if (selectedIds.has(currentParentId)) {
+            return false;
+          }
+
+          currentParentId = scene.getNode(currentParentId)?.parentId;
+        }
+
+        return true;
+      })
+    )
+  );
 }
 
 export function createMeshMutationCommand(
