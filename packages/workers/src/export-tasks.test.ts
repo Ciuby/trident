@@ -22,7 +22,17 @@ const settings: SceneSettings = {
     fogFar: 50,
     fogNear: 10,
     gravity: vec3(0, -9.81, 0),
-    physicsEnabled: true
+    physicsEnabled: true,
+    skybox: {
+      affectsLighting: false,
+      blur: 0,
+      enabled: false,
+      format: "image",
+      intensity: 1,
+      lightingIntensity: 1,
+      name: "",
+      source: ""
+    }
   }
 };
 
@@ -114,6 +124,35 @@ describe("exportEngineBundle", () => {
     const bundle = await exportEngineBundle(snapshot);
 
     expect(bundle.manifest.settings.events?.[0]?.name).toBe("mission.updated");
+  });
+
+  test("bundles scene skyboxes into runtime exports", async () => {
+    const snapshot: SceneDocumentSnapshot = {
+      assets: [],
+      entities: [],
+      layers: [],
+      materials: [],
+      nodes: [],
+      settings: {
+        ...settings,
+        world: {
+          ...settings.world,
+          skybox: {
+            ...settings.world.skybox,
+            enabled: true,
+            format: "image",
+            name: "sunset-sky.png",
+            source: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9sotW5kAAAAASUVORK5CYII="
+          }
+        }
+      },
+      textures: []
+    };
+
+    const bundle = await exportEngineBundle(snapshot);
+
+    expect(bundle.manifest.settings.world.skybox.source).toBe("assets/skyboxes/sunset-sky-png.png");
+    expect(bundle.files.some((file) => file.path === "assets/skyboxes/sunset-sky-png.png")).toBe(true);
   });
 
   test("preserves node hooks in exported manifests", async () => {

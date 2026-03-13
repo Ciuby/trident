@@ -20,6 +20,8 @@ That gives you a lean manifest plus normal external asset files instead of one h
 1. Build the level in the editor.
 2. Place a `Player Spawn` entity if you want gameplay/playback spawn support.
 3. Configure world and player settings in the inspector.
+   World skyboxes accept standard images or `.hdr` panoramas.
+   Leave `Affect Lighting` off when you only want a backdrop without image-based lighting.
 4. Use `File -> Export Runtime Bundle`.
 5. The editor downloads `scene.runtime.zip`.
 

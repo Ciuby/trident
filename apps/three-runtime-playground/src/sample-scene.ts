@@ -2,6 +2,7 @@ import type { WebHammerEngineScene, WebHammerExportMaterial } from "@web-hammer/
 import { BoxGeometry, BufferGeometry, ConeGeometry, CylinderGeometry, Float32BufferAttribute } from "three";
 
 const checkerTexture = createCheckerTexture("#f0e3c8", "#d8b881");
+const skyboxTexture = createSkyboxTexture("#f6d7a4", "#8ab6ff", "#fff8e6");
 const SAMPLE_MODEL_PATH = "sample:model:spire";
 
 export function createSampleScene(): WebHammerEngineScene {
@@ -408,7 +409,17 @@ export function createSampleScene(): WebHammerEngineScene {
         fogFar: 70,
         fogNear: 22,
         gravity: { x: 0, y: -9.81, z: 0 },
-        physicsEnabled: true
+        physicsEnabled: true,
+        skybox: {
+          affectsLighting: false,
+          blur: 0,
+          enabled: true,
+          format: "image",
+          intensity: 1,
+          lightingIntensity: 1,
+          name: "sample-sky.svg",
+          source: skyboxTexture
+        }
       }
     }
   };
@@ -450,6 +461,29 @@ function createCheckerTexture(a: string, b: string) {
       <rect width="128" height="128" fill="${a}" />
       <rect width="64" height="64" fill="${b}" />
       <rect x="64" y="64" width="64" height="64" fill="${b}" />
+    </svg>
+  `.trim();
+
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function createSkyboxTexture(horizon: string, zenith: string, sun: string) {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1024" viewBox="0 0 2048 1024">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${zenith}" />
+          <stop offset="58%" stop-color="${horizon}" />
+          <stop offset="100%" stop-color="#5f7cbb" />
+        </linearGradient>
+        <radialGradient id="sun" cx="50%" cy="36%" r="18%">
+          <stop offset="0%" stop-color="${sun}" stop-opacity="0.98" />
+          <stop offset="45%" stop-color="${sun}" stop-opacity="0.45" />
+          <stop offset="100%" stop-color="${sun}" stop-opacity="0" />
+        </radialGradient>
+      </defs>
+      <rect width="2048" height="1024" fill="url(#sky)" />
+      <rect width="2048" height="1024" fill="url(#sun)" />
     </svg>
   `.trim();
 

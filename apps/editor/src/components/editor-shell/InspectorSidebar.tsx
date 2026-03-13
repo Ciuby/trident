@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { BellRing, Cable, FolderTree, Globe2, SlidersHorizontal, SwatchBook, User } from "lucide-react";
 import {
   type EditableMesh,
@@ -29,6 +29,7 @@ import { EventsPanel, HooksPanel, PathsPanel } from "@/components/editor-shell/G
 import { MaterialLibraryPanel } from "@/components/editor-shell/MaterialLibraryPanel";
 import { SceneHierarchyPanel } from "@/components/editor-shell/SceneHierarchyPanel";
 import { rebaseTransformPivot } from "@/viewport/utils/geometry";
+import { readFileAsDataUrl } from "@/lib/model-assets";
 import { cn } from "@/lib/utils";
 import type { MeshEditMode } from "@/viewport/editing";
 import type { MeshEditToolbarActionRequest } from "@/viewport/types";
@@ -88,6 +89,10 @@ const RIGHT_PANEL_TAB_TRIGGER_CLASS =
   "!h-12 !gap-0.5 !px-0 !py-1 !text-foreground/70 data-active:!bg-emerald-500/14 data-active:!text-emerald-300 [&_svg]:size-3.5 [&_svg]:shrink-0 data-active:[&_svg]:!text-emerald-300";
 const RIGHT_PANEL_TAB_LABEL_CLASS =
   "!text-[7px] !leading-none !font-medium !tracking-normal !text-foreground/50 data-active:!text-emerald-300";
+
+function inferSkyboxFormat(file: File): SceneSettings["world"]["skybox"]["format"] {
+  return file.name.toLowerCase().endsWith(".hdr") ? "hdr" : "image";
+}
 
 export function InspectorSidebar({
   activeRightPanel,
@@ -226,6 +231,52 @@ export function InspectorSidebar({
       },
       sceneSettings
     );
+  };
+
+  const commitWorldSettingsDraft = (nextWorldSettings: SceneSettings["world"]) => {
+    setDraftWorldSettings(nextWorldSettings);
+    onUpdateSceneSettings(
+      {
+        ...sceneSettings,
+        world: structuredClone(nextWorldSettings)
+      },
+      sceneSettings
+    );
+  };
+
+  const handleSkyboxFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    const nextSource = await readFileAsDataUrl(file);
+    const nextWorldSettings = {
+      ...draftWorldSettings,
+      skybox: {
+        ...draftWorldSettings.skybox,
+        enabled: true,
+        format: inferSkyboxFormat(file),
+        name: file.name,
+        source: nextSource
+      }
+    };
+
+    commitWorldSettingsDraft(nextWorldSettings);
+  };
+
+  const handleRemoveSkybox = () => {
+    commitWorldSettingsDraft({
+      ...draftWorldSettings,
+      skybox: {
+        ...draftWorldSettings.skybox,
+        enabled: false,
+        name: "",
+        source: ""
+      }
+    });
   };
 
   const commitPlayerSettings = () => {
@@ -386,6 +437,115 @@ export function InspectorSidebar({
                     step={0.05}
                     value={draftWorldSettings.ambientIntensity}
                   />
+                </ToolSection>
+
+                <ToolSection title="Skybox">
+                  <BooleanField
+                    label="Enabled"
+                    onCheckedChange={(checked) =>
+                      commitWorldSettingsDraft({
+                        ...draftWorldSettings,
+                        skybox: {
+                          ...draftWorldSettings.skybox,
+                          enabled: checked
+                        }
+                      })
+                    }
+                    checked={draftWorldSettings.skybox.enabled}
+                  />
+                  <div className="rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-[11px] text-foreground/56">
+                    HDRs are best when you want image-based lighting. Leave `Affect Lighting` off to use the skybox as backdrop only.
+                  </div>
+                  <Input
+                    accept=".hdr,image/*"
+                    className="h-9 rounded-xl border-white/8 bg-white/5 text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-2 file:py-1 file:text-[11px] file:font-medium"
+                    onChange={(event) => {
+                      void handleSkyboxFileChange(event);
+                    }}
+                    type="file"
+                  />
+                  <div className="rounded-xl bg-white/3 px-3 py-2 text-xs text-foreground/72">
+                    {draftWorldSettings.skybox.name || "No skybox selected"}
+                  </div>
+                  <BooleanField
+                    label="Affect Lighting"
+                    onCheckedChange={(checked) =>
+                      commitWorldSettingsDraft({
+                        ...draftWorldSettings,
+                        skybox: {
+                          ...draftWorldSettings.skybox,
+                          affectsLighting: checked
+                        }
+                      })
+                    }
+                    checked={draftWorldSettings.skybox.affectsLighting}
+                  />
+                  <DragInput
+                    className="w-full"
+                    compact
+                    label="Backdrop Intensity"
+                    min={0}
+                    onChange={(value) =>
+                      setDraftWorldSettings((current) => ({
+                        ...current,
+                        skybox: {
+                          ...current.skybox,
+                          intensity: Math.max(0, value)
+                        }
+                      }))
+                    }
+                    onValueCommit={commitWorldSettings}
+                    precision={2}
+                    step={0.05}
+                    value={draftWorldSettings.skybox.intensity}
+                  />
+                  <DragInput
+                    className="w-full"
+                    compact
+                    label="Lighting Intensity"
+                    min={0}
+                    onChange={(value) =>
+                      setDraftWorldSettings((current) => ({
+                        ...current,
+                        skybox: {
+                          ...current.skybox,
+                          lightingIntensity: Math.max(0, value)
+                        }
+                      }))
+                    }
+                    onValueCommit={commitWorldSettings}
+                    precision={2}
+                    step={0.05}
+                    value={draftWorldSettings.skybox.lightingIntensity}
+                  />
+                  <DragInput
+                    className="w-full"
+                    compact
+                    label="Blur"
+                    max={1}
+                    min={0}
+                    onChange={(value) =>
+                      setDraftWorldSettings((current) => ({
+                        ...current,
+                        skybox: {
+                          ...current.skybox,
+                          blur: Math.max(0, Math.min(1, value))
+                        }
+                      }))
+                    }
+                    onValueCommit={commitWorldSettings}
+                    precision={2}
+                    step={0.05}
+                    value={draftWorldSettings.skybox.blur}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button disabled={!draftWorldSettings.skybox.source} onClick={handleRemoveSkybox} size="xs" variant="ghost">
+                      Remove Skybox
+                    </Button>
+                    <Button onClick={commitWorldSettings} size="xs" variant="ghost">
+                      Save Skybox
+                    </Button>
+                  </div>
                 </ToolSection>
 
                 <ToolSection title="Fog">

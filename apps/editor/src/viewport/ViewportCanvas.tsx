@@ -1,4 +1,4 @@
-import { Canvas, type RootState } from "@react-three/fiber";
+import { Canvas, useThree, type RootState } from "@react-three/fiber";
 import {
   arcEditableMeshEdges,
   bevelEditableMeshEdges,
@@ -18,6 +18,10 @@ import {
   sculptEditableMeshSamples,
   subdivideEditableMeshFace
 } from "@web-hammer/geometry-kernel";
+import {
+  applyWebHammerWorldSettings,
+  clearWebHammerWorldSettings
+} from "@web-hammer/three-runtime";
 import {
   addVec3,
   averageVec3,
@@ -89,7 +93,7 @@ import {
 import { composeTransformRotation, rebaseTransformPivot } from "@/viewport/utils/geometry";
 import { resolveViewportSnapSize } from "@/viewport/utils/snap";
 import { useEffect, useMemo, useRef, useState, type PointerEventHandler } from "react";
-import { BufferGeometry, Camera, Float32BufferAttribute, Matrix4, Object3D, Plane, Raycaster, Vector2, Vector3 } from "three";
+import { BufferGeometry, Camera, Color, Float32BufferAttribute, Matrix4, Object3D, Plane, Raycaster, Vector2, Vector3 } from "three";
 import type {
   ArcState,
   BevelState,
@@ -122,6 +126,31 @@ type SculptBrushState = {
   strokeVertexNormals?: ReadonlyMap<string, Vec3>;
   strength: number;
 };
+
+function ViewportWorldSettings({ renderMode, sceneSettings }: Pick<ViewportCanvasProps, "renderMode" | "sceneSettings">) {
+  const { scene } = useThree();
+
+  useEffect(() => {
+    if (renderMode !== "lit") {
+      clearWebHammerWorldSettings(scene);
+      scene.background = new Color("#091018");
+      scene.environment = null;
+      return;
+    }
+
+    scene.background = new Color(sceneSettings.world.fogColor);
+
+    void applyWebHammerWorldSettings(scene, { settings: sceneSettings });
+
+    return () => {
+      clearWebHammerWorldSettings(scene);
+      scene.background = null;
+      scene.environment = null;
+    };
+  }, [renderMode, scene, sceneSettings]);
+
+  return null;
+}
 
 export function ViewportCanvas({
   activeBrushShape,
@@ -2903,17 +2932,7 @@ export function ViewportCanvas({
         }}
         shadows={renderMode === "lit"}
       >
-        <color attach="background" args={[renderMode === "lit" ? "#0b1118" : "#091018"]} />
-        {renderMode === "lit" ? (
-          <fog
-            attach="fog"
-            args={[
-              sceneSettings.world.fogColor,
-              Math.max(0, sceneSettings.world.fogNear),
-              Math.max(sceneSettings.world.fogNear + 0.01, sceneSettings.world.fogFar),
-            ]}
-          />
-        ) : null}
+        <ViewportWorldSettings renderMode={renderMode} sceneSettings={sceneSettings} />
         {renderMode === "lit" ? (
           <ambientLight color={sceneSettings.world.ambientColor} intensity={sceneSettings.world.ambientIntensity} />
         ) : null}

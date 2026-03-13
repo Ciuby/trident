@@ -80,7 +80,17 @@ describe("loadWebHammerEngineScene", () => {
           fogFar: 50,
           fogNear: 10,
           gravity: vec3(0, -9.81, 0),
-          physicsEnabled: true
+          physicsEnabled: true,
+          skybox: {
+            affectsLighting: false,
+            blur: 0,
+            enabled: false,
+            format: "image",
+            intensity: 1,
+            lightingIntensity: 1,
+            name: "",
+            source: ""
+          }
         }
       }
     };

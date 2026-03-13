@@ -9,6 +9,7 @@ import {
   Physics,
   RigidBody,
   TrimeshCollider,
+  useBeforePhysicsStep,
   type RapierRigidBody
 } from "@react-three/rapier";
 import { useEffect, useMemo, useRef, useState, type MutableRefObject, type RefObject } from "react";
@@ -18,6 +19,7 @@ import {
   BoxGeometry,
   BufferGeometry,
   CapsuleGeometry,
+  Color,
   ConeGeometry,
   CylinderGeometry,
   DoubleSide,
@@ -28,6 +30,7 @@ import {
   Mesh,
   MeshStandardMaterial,
   Object3D,
+  Quaternion,
   RepeatWrapping,
   SphereGeometry,
   SRGBColorSpace,
@@ -41,12 +44,14 @@ import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import type { DerivedEntityMarker, DerivedLight, DerivedRenderMesh, DerivedRenderScene } from "@web-hammer/render-pipeline";
 import { createBlockoutTextureDataUri, resolveTransformPivot, toTuple, vec3, type MaterialRenderSide, type SceneSettings, type Vec3 } from "@web-hammer/shared";
 import type { GameplayRuntime } from "@web-hammer/gameplay-runtime";
+import { applyWebHammerWorldSettings, clearWebHammerWorldSettings } from "@web-hammer/three-runtime";
 
 const previewTextureCache = new Map<string, ReturnType<TextureLoader["load"]>>();
 const modelSceneCache = new Map<string, Object3D>();
 const gltfLoader = new GLTFLoader();
 const mtlLoader = new MTLLoader();
 const modelTextureLoader = new TextureLoader();
+const PHYSICS_STEP_SECONDS = 1 / 60;
 
 type AssetPathResolver = (path: string) => Promise<string> | string;
 type OrbitControlsHandle = {
@@ -92,8 +97,7 @@ export function PlaybackScene({
 
   return (
     <Canvas dpr={0.5} camera={{ far: 2000, fov: 60, near: 0.1, position: [18, 12, 18] }} shadows>
-      <color args={[effectiveSettings.world.fogColor]} attach="background" />
-      <fog attach="fog" args={[effectiveSettings.world.fogColor, effectiveSettings.world.fogNear, effectiveSettings.world.fogFar]} />
+      <PlaybackWorldSettings resolveAssetPath={resolveAssetPath} sceneSettings={effectiveSettings} />
       <ambientLight color={effectiveSettings.world.ambientColor} intensity={effectiveSettings.world.ambientIntensity} />
       <GameplayRuntimeTicker gameplayRuntime={gameplayRuntime} />
       <FrameSceneCamera active={physicsPlayback === "stopped"} controlsRef={controlsRef} worldRootRef={worldRootRef} />
@@ -112,6 +116,36 @@ export function PlaybackScene({
       <OrbitControls enabled={physicsPlayback === "stopped"} makeDefault ref={controlsRef as never} />
     </Canvas>
   );
+}
+
+function PlaybackWorldSettings({
+  resolveAssetPath,
+  sceneSettings
+}: {
+  resolveAssetPath: AssetPathResolver;
+  sceneSettings: SceneSettings;
+}) {
+  const { scene } = useThree();
+
+  useEffect(() => {
+    scene.background = new Color(sceneSettings.world.fogColor);
+
+    void applyWebHammerWorldSettings(
+      scene,
+      { settings: sceneSettings },
+      {
+        resolveAssetUrl: (context) => resolveAssetPath(context.path)
+      }
+    );
+
+    return () => {
+      clearWebHammerWorldSettings(scene);
+      scene.background = null;
+      scene.environment = null;
+    };
+  }, [resolveAssetPath, scene, sceneSettings]);
+
+  return null;
 }
 
 function PlaybackWorld({
@@ -149,6 +183,7 @@ function PlaybackWorld({
       {physicsActive ? (
         <Physics
           gravity={toTuple(sceneSettings.world.gravity)}
+          interpolate={false}
           key={`physics:${physicsRevision}`}
           paused={physicsPlayback !== "running"}
           timeStep={1 / 60}
@@ -248,8 +283,10 @@ function RuntimePlayer({
   const jumpQueuedRef = useRef(false);
   const groundedColliderHandlesRef = useRef(new Set<number>());
   const groundedBodiesRef = useRef(new Map<number, RapierRigidBody>());
+  const activeSupportHandleRef = useRef<number | null>(null);
   const yawRef = useRef(spawn.rotation.y);
   const pitchRef = useRef(sceneSettings.player.cameraMode === "fps" ? 0 : -0.2);
+  const renderRootRef = useRef<Group | null>(null);
   const eyeAnchorRef = useRef<Object3D | null>(null);
   const visualRef = useRef<Object3D | null>(null);
   const cameraPositionRef = useRef(new Vector3());
@@ -261,6 +298,20 @@ function RuntimePlayer({
   const forwardRef = useRef(new Vector3());
   const rightRef = useRef(new Vector3());
   const moveRef = useRef(new Vector3());
+  const supportVelocityRef = useRef(new Vector3());
+  const supportPointRef = useRef(new Vector3());
+  const supportBodyPositionRef = useRef(new Vector3());
+  const supportBodyNextPositionRef = useRef(new Vector3());
+  const supportLocalPointRef = useRef(new Vector3());
+  const supportMovedPointRef = useRef(new Vector3());
+  const supportAngularVelocityRef = useRef(new Vector3());
+  const supportRotationRef = useRef(new Quaternion());
+  const supportNextRotationRef = useRef(new Quaternion());
+  const supportInverseRotationRef = useRef(new Quaternion());
+  const smoothedTranslationRef = useRef(new Vector3());
+  const rawTranslationRef = useRef(new Vector3());
+  const renderOffsetRef = useRef(new Vector3());
+  const renderTranslationInitializedRef = useRef(false);
   const { camera, gl } = useThree();
 
   const standingHeight = Math.max(1.2, sceneSettings.player.height);
@@ -282,6 +333,10 @@ function RuntimePlayer({
   useEffect(() => {
     yawRef.current = spawn.rotation.y;
     pitchRef.current = sceneSettings.player.cameraMode === "fps" ? 0 : sceneSettings.player.cameraMode === "third-person" ? -0.22 : -0.78;
+    smoothedTranslationRef.current.set(...spawnPosition);
+    rawTranslationRef.current.set(...spawnPosition);
+    renderOffsetRef.current.set(0, 0, 0);
+    renderTranslationInitializedRef.current = false;
   }, [sceneSettings.player.cameraMode, spawn.rotation.y]);
 
   useEffect(() => {
@@ -307,6 +362,7 @@ function RuntimePlayer({
       jumpQueuedRef.current = false;
       groundedColliderHandlesRef.current.clear();
       groundedBodiesRef.current.clear();
+      activeSupportHandleRef.current = null;
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -367,7 +423,7 @@ function RuntimePlayer({
     onActorChange?.(null);
   }, [onActorChange]);
 
-  useFrame((_, delta) => {
+  useBeforePhysicsStep(() => {
     const body = bodyRef.current;
 
     if (!body) {
@@ -377,11 +433,8 @@ function RuntimePlayer({
     const running = physicsPlayback === "running";
     const translation = body.translation();
     const linearVelocity = body.linvel();
-    const supportBody = groundedBodiesRef.current.values().next().value;
-    const supportVelocity = supportBody?.linvel();
     const keyState = keyStateRef.current;
     const crouching = running && sceneSettings.player.canCrouch && (keyState.has("ControlLeft") || keyState.has("ControlRight") || keyState.has("KeyC"));
-    const currentHeight = crouchHeight && crouching ? crouchHeight : standingHeight;
     const speed = sceneSettings.player.canRun && running && (keyState.has("ShiftLeft") || keyState.has("ShiftRight"))
       ? sceneSettings.player.runningSpeed
       : sceneSettings.player.movementSpeed;
@@ -401,6 +454,35 @@ function RuntimePlayer({
     rightDirection.set(-forwardDirection.z, 0, forwardDirection.x).normalize();
     moveDirection.addScaledVector(rightDirection, moveInputX).addScaledVector(forwardDirection, moveInputZ);
 
+    const supportBody = resolveActiveSupportBody(
+      groundedBodiesRef.current,
+      groundedColliderHandlesRef.current,
+      activeSupportHandleRef
+    );
+    const grounded = groundedColliderHandlesRef.current.size > 0;
+    const supportVelocity = supportVelocityRef.current;
+
+    if (grounded && supportBody) {
+      resolveSupportVelocityAtPoint(
+        supportBody,
+        supportPointRef.current.set(translation.x, translation.y - footOffset, translation.z),
+        PHYSICS_STEP_SECONDS,
+        {
+          angularVelocity: supportAngularVelocityRef.current,
+          bodyPosition: supportBodyPositionRef.current,
+          bodyNextPosition: supportBodyNextPositionRef.current,
+          inverseRotation: supportInverseRotationRef.current,
+          localPoint: supportLocalPointRef.current,
+          movedPoint: supportMovedPointRef.current,
+          nextRotation: supportNextRotationRef.current,
+          rotation: supportRotationRef.current
+        },
+        supportVelocity
+      );
+    } else {
+      supportVelocity.set(0, 0, 0);
+    }
+
     if (running) {
       if (moveDirection.lengthSq() > 0) {
         moveDirection.normalize().multiplyScalar(crouching ? speed * 0.58 : speed);
@@ -408,15 +490,15 @@ function RuntimePlayer({
 
       body.setLinvel(
         {
-          x: moveDirection.x + (supportVelocity?.x ?? 0),
-          y: linearVelocity.y,
-          z: moveDirection.z + (supportVelocity?.z ?? 0)
+          x: moveDirection.x + supportVelocity.x,
+          y: grounded ? supportVelocity.y : linearVelocity.y,
+          z: moveDirection.z + supportVelocity.z
         },
         true
       );
 
       if (jumpQueuedRef.current) {
-        if (sceneSettings.player.canJump && groundedColliderHandlesRef.current.size > 0) {
+        if (sceneSettings.player.canJump && grounded) {
           const gravityMagnitude = Math.max(
             0.001,
             Math.hypot(sceneSettings.world.gravity.x, sceneSettings.world.gravity.y, sceneSettings.world.gravity.z)
@@ -424,18 +506,51 @@ function RuntimePlayer({
 
           body.setLinvel(
             {
-              x: moveDirection.x + (supportVelocity?.x ?? 0),
-              y: Math.sqrt(2 * gravityMagnitude * sceneSettings.player.jumpHeight),
-              z: moveDirection.z + (supportVelocity?.z ?? 0)
+              x: moveDirection.x + supportVelocity.x,
+              y: supportVelocity.y + Math.sqrt(2 * gravityMagnitude * sceneSettings.player.jumpHeight),
+              z: moveDirection.z + supportVelocity.z
             },
             true
           );
           groundedColliderHandlesRef.current.clear();
           groundedBodiesRef.current.clear();
+          activeSupportHandleRef.current = null;
         }
 
         jumpQueuedRef.current = false;
       }
+    } else if (jumpQueuedRef.current) {
+      jumpQueuedRef.current = false;
+    }
+  });
+
+  useFrame((_, delta) => {
+    const body = bodyRef.current;
+
+    if (!body) {
+      return;
+    }
+
+    const translation = body.translation();
+    const keyState = keyStateRef.current;
+    const crouching =
+      physicsPlayback === "running" &&
+      sceneSettings.player.canCrouch &&
+      (keyState.has("ControlLeft") || keyState.has("ControlRight") || keyState.has("KeyC"));
+    const currentHeight = crouchHeight && crouching ? crouchHeight : standingHeight;
+    const viewDirection = resolveViewDirection(yawRef.current, pitchRef.current, directionRef.current);
+    const rawTranslation = rawTranslationRef.current.set(translation.x, translation.y, translation.z);
+    const smoothedTranslation = smoothedTranslationRef.current;
+
+    if (!renderTranslationInitializedRef.current) {
+      smoothedTranslation.copy(rawTranslation);
+      renderTranslationInitializedRef.current = true;
+    } else {
+      smoothedTranslation.lerp(rawTranslation, 1 - Math.exp(-delta * 18));
+    }
+
+    if (renderRootRef.current) {
+      renderRootRef.current.position.copy(renderOffsetRef.current.copy(smoothedTranslation).sub(rawTranslation));
     }
 
     if (visualRef.current) {
@@ -509,16 +624,24 @@ function RuntimePlayer({
 
           if (payload.other.rigidBody) {
             groundedBodiesRef.current.set(payload.other.collider.handle, payload.other.rigidBody);
+
+            if (activeSupportHandleRef.current === null) {
+              activeSupportHandleRef.current = payload.other.collider.handle;
+            }
           }
         }}
         onIntersectionExit={(payload) => {
           groundedColliderHandlesRef.current.delete(payload.other.collider.handle);
           groundedBodiesRef.current.delete(payload.other.collider.handle);
+
+          if (activeSupportHandleRef.current === payload.other.collider.handle) {
+            activeSupportHandleRef.current = null;
+          }
         }}
         position={[0, -(footOffset + 0.04), 0]}
         sensor
       />
-      <group>
+      <group ref={renderRootRef}>
         <object3D ref={eyeAnchorRef} />
         <group ref={visualRef} visible={sceneSettings.player.cameraMode !== "fps"}>
           <mesh castShadow receiveShadow>
@@ -1038,6 +1161,77 @@ function resolveMeshPivot(mesh: DerivedRenderMesh) {
     rotation: mesh.rotation,
     scale: mesh.scale
   });
+}
+
+function resolveActiveSupportBody(
+  groundedBodies: Map<number, RapierRigidBody>,
+  groundedColliderHandles: Set<number>,
+  activeSupportHandleRef: MutableRefObject<number | null>
+) {
+  const activeHandle = activeSupportHandleRef.current;
+
+  if (activeHandle !== null && groundedColliderHandles.has(activeHandle)) {
+    const activeBody = groundedBodies.get(activeHandle);
+
+    if (activeBody) {
+      return activeBody;
+    }
+  }
+
+  for (const [handle, body] of groundedBodies) {
+    if (groundedColliderHandles.has(handle)) {
+      activeSupportHandleRef.current = handle;
+      return body;
+    }
+  }
+
+  activeSupportHandleRef.current = null;
+  return undefined;
+}
+
+function resolveSupportVelocityAtPoint(
+  supportBody: RapierRigidBody,
+  worldPoint: Vector3,
+  stepSeconds: number,
+  temps: {
+    angularVelocity: Vector3;
+    bodyNextPosition: Vector3;
+    bodyPosition: Vector3;
+    inverseRotation: Quaternion;
+    localPoint: Vector3;
+    movedPoint: Vector3;
+    nextRotation: Quaternion;
+    rotation: Quaternion;
+  },
+  target: Vector3
+) {
+  if (supportBody.isKinematic()) {
+    const currentTranslation = supportBody.translation();
+    const nextTranslation = supportBody.nextTranslation();
+    const currentRotation = supportBody.rotation();
+    const nextRotation = supportBody.nextRotation();
+
+    temps.bodyPosition.set(currentTranslation.x, currentTranslation.y, currentTranslation.z);
+    temps.bodyNextPosition.set(nextTranslation.x, nextTranslation.y, nextTranslation.z);
+    temps.rotation.set(currentRotation.x, currentRotation.y, currentRotation.z, currentRotation.w);
+    temps.nextRotation.set(nextRotation.x, nextRotation.y, nextRotation.z, nextRotation.w);
+    temps.inverseRotation.copy(temps.rotation).invert();
+    temps.localPoint.copy(worldPoint).sub(temps.bodyPosition).applyQuaternion(temps.inverseRotation);
+    temps.movedPoint.copy(temps.localPoint).applyQuaternion(temps.nextRotation).add(temps.bodyNextPosition);
+
+    return target.copy(temps.movedPoint).sub(worldPoint).multiplyScalar(1 / stepSeconds);
+  }
+
+  const translation = supportBody.translation();
+  const linearVelocity = supportBody.linvel();
+  const angularVelocity = supportBody.angvel();
+
+  temps.bodyPosition.set(translation.x, translation.y, translation.z);
+  temps.angularVelocity.set(angularVelocity.x, angularVelocity.y, angularVelocity.z);
+
+  return target
+    .set(linearVelocity.x, linearVelocity.y, linearVelocity.z)
+    .add(temps.angularVelocity.cross(temps.localPoint.copy(worldPoint).sub(temps.bodyPosition)));
 }
 
 function createPreviewMaterial(spec: DerivedRenderMesh["material"]) {

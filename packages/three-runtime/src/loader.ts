@@ -1,4 +1,4 @@
-import type { Asset, MaterialRenderSide, PropPhysics, Transform, Vec3 } from "@web-hammer/shared";
+import type { Asset, MaterialRenderSide, PropPhysics, SceneSkyboxSettings, Transform, Vec3 } from "@web-hammer/shared";
 import { resolveSceneGraph } from "@web-hammer/shared";
 import {
   AmbientLight,
@@ -9,6 +9,7 @@ import {
   Color,
   DirectionalLight,
   DoubleSide,
+  EquirectangularReflectionMapping,
   Fog,
   Float32BufferAttribute,
   FrontSide,
@@ -27,6 +28,7 @@ import {
   Vector3
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { HDRLoader } from "three/examples/jsm/loaders/HDRLoader.js";
 import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import type {
@@ -52,6 +54,11 @@ export type WebHammerAssetResolverContext =
       material: WebHammerExportMaterial;
       path: string;
       slot: TextureSlot;
+    }
+  | {
+      kind: "skybox";
+      path: string;
+      skybox: SceneSkyboxSettings;
     };
 
 export type WebHammerSceneLoaderOptions = {
@@ -76,6 +83,7 @@ export type WebHammerLoadedScene = {
 
 const textureLoader = new TextureLoader();
 const gltfLoader = new GLTFLoader();
+const hdrLoader = new HDRLoader();
 const mtlLoader = new MTLLoader();
 
 export function isWebHammerEngineScene(value: unknown): value is WebHammerEngineScene {
@@ -148,7 +156,7 @@ export async function loadWebHammerEngineScene(
   };
 
   if (options.applyToScene) {
-    applyWebHammerWorldSettings(options.applyToScene, engineScene);
+    await applyWebHammerWorldSettings(options.applyToScene, engineScene, options);
   }
 
   const worldAmbient = createWorldAmbientLight(engineScene);
@@ -249,9 +257,66 @@ export async function loadWebHammerEngineSceneFromUrl(
   return loadWebHammerEngineScene(scene, options);
 }
 
-export function applyWebHammerWorldSettings(target: Scene, engineScene: Pick<WebHammerEngineScene, "settings">) {
+type AppliedWorldSettingsState = {
+  requestId: number;
+  skyboxTexture?: Texture;
+};
+
+const APPLIED_WORLD_SETTINGS_KEY = "__webHammerWorldSettings";
+
+export async function applyWebHammerWorldSettings(
+  target: Scene,
+  engineScene: Pick<WebHammerEngineScene, "settings">,
+  options: Pick<WebHammerSceneLoaderOptions, "resolveAssetUrl"> = {}
+) {
+  const state = getAppliedWorldSettingsState(target);
+  state.requestId += 1;
+  disposeAppliedSkybox(target, state);
+
   const { fogColor, fogFar, fogNear } = engineScene.settings.world;
   target.fog = fogFar > fogNear ? new Fog(new Color(fogColor), fogNear, fogFar) : null;
+
+  const skybox = engineScene.settings.world.skybox;
+
+  if (!skybox.enabled || !skybox.source) {
+    return;
+  }
+
+  const requestId = state.requestId;
+
+  try {
+    const resolvedPath = options.resolveAssetUrl
+      ? await options.resolveAssetUrl({
+          kind: "skybox",
+          path: skybox.source,
+          skybox
+        })
+      : skybox.source;
+    const texture = await loadSkyboxTexture(resolvedPath, skybox);
+
+    if (getAppliedWorldSettingsState(target).requestId !== requestId) {
+      texture.dispose();
+      return;
+    }
+
+    target.background = texture;
+    target.backgroundBlurriness = skybox.blur;
+    target.backgroundIntensity = skybox.intensity;
+    target.environment = skybox.affectsLighting ? texture : null;
+    target.environmentIntensity = skybox.affectsLighting ? skybox.lightingIntensity : 1;
+    state.skyboxTexture = texture;
+  } catch {
+    if (getAppliedWorldSettingsState(target).requestId === requestId) {
+      disposeAppliedSkybox(target, state);
+    }
+  }
+}
+
+export function clearWebHammerWorldSettings(target: Scene) {
+  const state = getAppliedWorldSettingsState(target);
+  state.requestId += 1;
+  disposeAppliedSkybox(target, state);
+  target.fog = null;
 }
 
 function createWorldAmbientLight(engineScene: WebHammerEngineScene) {
@@ -268,6 +333,54 @@ function createWorldAmbientLight(engineScene: WebHammerEngineScene) {
   };
 
   return light;
+}
+
+function getAppliedWorldSettingsState(target: Scene): AppliedWorldSettingsState {
+  const userData = target.userData as Record<string, AppliedWorldSettingsState | undefined>;
+  const existing = userData[APPLIED_WORLD_SETTINGS_KEY];
+
+  if (existing) {
+    return existing;
+  }
+
+  const created: AppliedWorldSettingsState = {
+    requestId: 0
+  };
+  userData[APPLIED_WORLD_SETTINGS_KEY] = created;
+  return created;
+}
+
+function disposeAppliedSkybox(target: Scene, state: AppliedWorldSettingsState) {
+  if (state.skyboxTexture) {
+    if (target.background === state.skyboxTexture) {
+      target.background = null;
+    }
+
+    if (target.environment === state.skyboxTexture) {
+      target.environment = null;
+    }
+
+    state.skyboxTexture.dispose();
+    state.skyboxTexture = undefined;
+  }
+
+  target.backgroundBlurriness = 0;
+  target.backgroundIntensity = 1;
+  target.environmentIntensity = 1;
+}
+
+async function loadSkyboxTexture(path: string, skybox: SceneSkyboxSettings) {
+  const texture = skybox.format === "hdr"
+    ? await hdrLoader.loadAsync(path)
+    : await textureLoader.loadAsync(path);
+
+  texture.mapping = EquirectangularReflectionMapping;
+
+  if (skybox.format === "image") {
+    texture.colorSpace = SRGBColorSpace;
+  }
+
+  return texture;
 }
 
 async function createObjectForNode(

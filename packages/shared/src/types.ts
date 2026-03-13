@@ -276,6 +276,19 @@ export type PlayerSettings = {
   runningSpeed: number;
 };
 
+export type SceneSkyboxFormat = "hdr" | "image";
+
+export type SceneSkyboxSettings = {
+  affectsLighting: boolean;
+  blur: number;
+  enabled: boolean;
+  format: SceneSkyboxFormat;
+  intensity: number;
+  lightingIntensity: number;
+  name: string;
+  source: string;
+};
+
 export type WorldSettings = {
   ambientColor: string;
   ambientIntensity: number;
@@ -284,6 +297,7 @@ export type WorldSettings = {
   fogNear: number;
   gravity: Vec3;
   physicsEnabled: boolean;
+  skybox: SceneSkyboxSettings;
 };
 
 export type SceneSettings = {

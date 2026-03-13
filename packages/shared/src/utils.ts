@@ -320,7 +320,17 @@ export function createDefaultSceneSettings(): SceneSettings {
       fogFar: 2000,
       fogNear: 500,
       gravity: vec3(0, -9.81, 0),
-      physicsEnabled: true
+      physicsEnabled: true,
+      skybox: {
+        affectsLighting: false,
+        blur: 0,
+        enabled: false,
+        format: "image",
+        intensity: 1,
+        lightingIntensity: 1,
+        name: "",
+        source: ""
+      }
     }
   };
 }
@@ -346,6 +356,7 @@ function normalizeWorldSettings(world?: Partial<WorldSettings> | WorldSettings):
   const fogNear = clampFiniteNumber(world?.fogNear, defaults.fogNear);
   const fogFar = clampFiniteNumber(world?.fogFar, defaults.fogFar);
   const resolvedFogNear = Math.max(0, fogNear);
+  const skybox = normalizeSceneSkybox(world?.skybox);
 
   return {
     ...defaults,
@@ -353,6 +364,25 @@ function normalizeWorldSettings(world?: Partial<WorldSettings> | WorldSettings):
     fogNear: resolvedFogNear,
     fogFar: Math.max(resolvedFogNear + 0.01, fogFar),
     gravity: world?.gravity ?? defaults.gravity,
+    skybox,
+  };
+}
+
+function normalizeSceneSkybox(skybox?: Partial<WorldSettings["skybox"]> | WorldSettings["skybox"]): WorldSettings["skybox"] {
+  const defaults = createDefaultSceneSettings().world.skybox;
+  const format = skybox?.format === "hdr" ? "hdr" : "image";
+
+  return {
+    ...defaults,
+    ...skybox,
+    affectsLighting: Boolean(skybox?.affectsLighting),
+    blur: Math.min(1, Math.max(0, clampFiniteNumber(skybox?.blur, defaults.blur))),
+    enabled: Boolean(skybox?.enabled),
+    format,
+    intensity: Math.max(0, clampFiniteNumber(skybox?.intensity, defaults.intensity)),
+    lightingIntensity: Math.max(0, clampFiniteNumber(skybox?.lightingIntensity, defaults.lightingIntensity)),
+    name: typeof skybox?.name === "string" ? skybox.name.trim() : defaults.name,
+    source: typeof skybox?.source === "string" ? skybox.source.trim() : defaults.source
   };
 }
 

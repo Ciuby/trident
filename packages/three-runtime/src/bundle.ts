@@ -84,6 +84,23 @@ export async function externalizeWebHammerEngineScene(
     }
   }
 
+  const skyboxSource = manifest.settings.world.skybox.source;
+
+  if (skyboxSource) {
+    const bundledSkyboxPath = await materializeSource(skyboxSource, {
+      copyExternalAssets,
+      files,
+      pathBySource,
+      preferredExtension: manifest.settings.world.skybox.format === "hdr" ? "hdr" : inferExtensionFromPath(skyboxSource),
+      preferredStem: `${assetDir}/skyboxes/${slugify(manifest.settings.world.skybox.name || "skybox")}`,
+      usedPaths
+    });
+
+    if (bundledSkyboxPath) {
+      manifest.settings.world.skybox.source = bundledSkyboxPath;
+    }
+  }
+
   return {
     files,
     manifest
@@ -289,6 +306,10 @@ function inferExtension(mimeType: string | undefined, fallback?: string) {
     return "svg";
   }
 
+  if (normalized === "image/vnd.radiance") {
+    return "hdr";
+  }
+
   if (normalized === "model/gltf+json") {
     return "gltf";
   }
@@ -315,6 +336,8 @@ function inferMimeTypeFromPath(path: string) {
       return "image/jpeg";
     case "svg":
       return "image/svg+xml";
+    case "hdr":
+      return "image/vnd.radiance";
     case "glb":
       return "model/gltf-binary";
     case "gltf":
