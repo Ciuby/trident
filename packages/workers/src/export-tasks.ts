@@ -24,10 +24,34 @@ import {
   type WebHammerEngineScene,
   type WebHammerExportGeometry,
   type WebHammerExportGeometryLod,
+  type WebHammerExportModelLod,
   type WebHammerExportMaterial
 } from "@web-hammer/three-runtime";
 import { MeshBVH } from "three-mesh-bvh";
-import { Box3, BoxGeometry, BufferGeometry, ConeGeometry, CylinderGeometry, Euler, Float32BufferAttribute, Quaternion, SphereGeometry, Vector3 } from "three";
+import {
+  Box3,
+  BoxGeometry,
+  BufferGeometry,
+  ConeGeometry,
+  CylinderGeometry,
+  Euler,
+  Float32BufferAttribute,
+  Group,
+  Mesh,
+  MeshStandardMaterial,
+  Object3D,
+  Quaternion,
+  RepeatWrapping,
+  Scene,
+  SphereGeometry,
+  SRGBColorSpace,
+  TextureLoader,
+  Vector3
+} from "three";
+import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
+import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 
 export type WorkerExportKind = "whmap-load" | "whmap-save" | "engine-export" | "gltf-export" | "ai-model-generate";
 
@@ -66,6 +90,11 @@ export type WorkerResponse =
       ok: false;
       error: string;
     };
+
+const gltfLoader = new GLTFLoader();
+const gltfExporter = new GLTFExporter();
+const mtlLoader = new MTLLoader();
+const modelTextureLoader = new TextureLoader();
 
 export async function executeWorkerRequest(request: WorkerRequest): Promise<WorkerResponse> {
   try {
@@ -184,114 +213,137 @@ async function buildEngineScene(snapshot: SceneDocumentSnapshot): Promise<WebHam
   const materialsById = new Map(snapshot.materials.map((material) => [material.id, material]));
   const exportedMaterials = await Promise.all(snapshot.materials.map((material) => resolveExportMaterial(material)));
   const shouldBakeLods = snapshot.settings.world.lod.enabled;
+  const exportedAt = new Date().toISOString();
+  const exportedSettings = shouldBakeLods
+    ? {
+        ...snapshot.settings,
+        world: {
+          ...snapshot.settings.world,
+          lod: {
+            ...snapshot.settings.world.lod,
+            bakedAt: exportedAt
+          }
+        }
+      }
+    : snapshot.settings;
+  const generatedAssets: Asset[] = [];
+  const exportedNodes: WebHammerEngineScene["nodes"] = [];
+
+  for (const node of snapshot.nodes) {
+    if (isGroupNode(node)) {
+      exportedNodes.push({
+        data: node.data,
+        hooks: node.hooks,
+        id: node.id,
+        kind: "group",
+        metadata: node.metadata,
+        name: node.name,
+        parentId: node.parentId,
+        tags: node.tags,
+        transform: node.transform
+      } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "group" }>);
+      continue;
+    }
+
+    if (isBrushNode(node)) {
+      const geometry = await buildExportGeometry(node, materialsById);
+      exportedNodes.push({
+        data: node.data,
+        geometry,
+        hooks: node.hooks,
+        id: node.id,
+        kind: "brush",
+        lods: shouldBakeLods ? await buildGeometryLods(geometry, snapshot.settings.world.lod) : undefined,
+        metadata: node.metadata,
+        name: node.name,
+        parentId: node.parentId,
+        tags: node.tags,
+        transform: node.transform
+      } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "brush" }>);
+      continue;
+    }
+
+    if (isMeshNode(node)) {
+      const geometry = await buildExportGeometry(node, materialsById);
+      exportedNodes.push({
+        data: node.data,
+        geometry,
+        hooks: node.hooks,
+        id: node.id,
+        kind: "mesh",
+        lods: shouldBakeLods ? await buildGeometryLods(geometry, snapshot.settings.world.lod) : undefined,
+        metadata: node.metadata,
+        name: node.name,
+        parentId: node.parentId,
+        tags: node.tags,
+        transform: node.transform
+      } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "mesh" }>);
+      continue;
+    }
+
+    if (isPrimitiveNode(node)) {
+      const geometry = await buildExportGeometry(node, materialsById);
+      exportedNodes.push({
+        data: node.data,
+        geometry,
+        hooks: node.hooks,
+        id: node.id,
+        kind: "primitive",
+        lods: shouldBakeLods ? await buildGeometryLods(geometry, snapshot.settings.world.lod) : undefined,
+        metadata: node.metadata,
+        name: node.name,
+        parentId: node.parentId,
+        tags: node.tags,
+        transform: node.transform
+      } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "primitive" }>);
+      continue;
+    }
+
+    if (isModelNode(node)) {
+      const modelLodBake = shouldBakeLods
+        ? await buildModelLods(node.name, assetsById.get(node.data.assetId), node.id, snapshot.settings.world.lod)
+        : undefined;
+
+      generatedAssets.push(...(modelLodBake?.assets ?? []));
+      exportedNodes.push({
+        data: node.data,
+        hooks: node.hooks,
+        id: node.id,
+        kind: "model",
+        lods: modelLodBake?.lods,
+        metadata: node.metadata,
+        name: node.name,
+        parentId: node.parentId,
+        tags: node.tags,
+        transform: node.transform
+      } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "model" }>);
+      continue;
+    }
+
+    exportedNodes.push({
+      data: node.data,
+      id: node.id,
+      kind: "light",
+      metadata: node.metadata,
+      name: node.name,
+      parentId: node.parentId,
+      tags: node.tags,
+      transform: node.transform
+    } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "light" }>);
+  }
+
   const engineScene = {
-    assets: snapshot.assets,
+    assets: [...snapshot.assets, ...generatedAssets],
     entities: snapshot.entities,
     layers: snapshot.layers,
     materials: exportedMaterials,
     metadata: {
-      exportedAt: new Date().toISOString(),
+      exportedAt,
       format: "web-hammer-engine",
       version: 5
     },
-    settings: snapshot.settings,
-    nodes: await Promise.all(
-      snapshot.nodes.map(async (node) => {
-        if (isGroupNode(node)) {
-          return {
-            data: node.data,
-            hooks: node.hooks,
-            id: node.id,
-            kind: "group",
-            metadata: node.metadata,
-            name: node.name,
-            parentId: node.parentId,
-            tags: node.tags,
-            transform: node.transform
-          } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "group" }>;
-        }
-
-        if (isBrushNode(node)) {
-          const geometry = await buildExportGeometry(node, materialsById);
-
-          return {
-            data: node.data,
-            geometry,
-            hooks: node.hooks,
-            id: node.id,
-            kind: "brush",
-            lods: shouldBakeLods ? await buildGeometryLods(geometry, snapshot.settings.world.lod) : undefined,
-            metadata: node.metadata,
-            name: node.name,
-            parentId: node.parentId,
-            tags: node.tags,
-            transform: node.transform
-          } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "brush" }>;
-        }
-
-        if (isMeshNode(node)) {
-          const geometry = await buildExportGeometry(node, materialsById);
-
-          return {
-            data: node.data,
-            geometry,
-            hooks: node.hooks,
-            id: node.id,
-            kind: "mesh",
-            lods: shouldBakeLods ? await buildGeometryLods(geometry, snapshot.settings.world.lod) : undefined,
-            metadata: node.metadata,
-            name: node.name,
-            parentId: node.parentId,
-            tags: node.tags,
-            transform: node.transform
-          } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "mesh" }>;
-        }
-
-        if (isPrimitiveNode(node)) {
-          const geometry = await buildExportGeometry(node, materialsById);
-
-          return {
-            data: node.data,
-            geometry,
-            hooks: node.hooks,
-            id: node.id,
-            kind: "primitive",
-            lods: shouldBakeLods ? await buildGeometryLods(geometry, snapshot.settings.world.lod) : undefined,
-            metadata: node.metadata,
-            name: node.name,
-            parentId: node.parentId,
-            tags: node.tags,
-            transform: node.transform
-          } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "primitive" }>;
-        }
-
-        if (isModelNode(node)) {
-          return {
-            data: node.data,
-            hooks: node.hooks,
-            id: node.id,
-            kind: "model",
-            lods: shouldBakeLods ? await buildModelLods(node.name, assetsById.get(node.data.assetId), node.id) : undefined,
-            metadata: node.metadata,
-            name: node.name,
-            parentId: node.parentId,
-            tags: node.tags,
-            transform: node.transform
-          } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "model" }>;
-        }
-
-        return {
-          data: node.data,
-          id: node.id,
-          kind: "light",
-          metadata: node.metadata,
-          name: node.name,
-          parentId: node.parentId,
-          tags: node.tags,
-          transform: node.transform
-        } satisfies Extract<WebHammerEngineScene["nodes"][number], { kind: "light" }>;
-      })
-    )
+    settings: exportedSettings,
+    nodes: exportedNodes
   } satisfies WebHammerEngineScene;
 
   return engineScene;
@@ -727,60 +779,384 @@ async function buildGeometryLods(
   return lods.length ? lods : undefined;
 }
 
-async function buildModelLods(name: string, asset: Asset | undefined, nodeId: string): Promise<WebHammerExportGeometryLod[] | undefined> {
-  const previewColor = typeof asset?.metadata.previewColor === "string" ? asset.metadata.previewColor : "#7f8ea3";
-  const fallbackMaterial = await resolveExportMaterial({
-    color: previewColor,
-    id: `material:model-lod:${nodeId}`,
-    metalness: 0.08,
-    name: `${name} LOD`,
-    roughness: 0.76
-  });
-  const size = resolveAssetBoundsSize(asset);
+async function buildModelLods(
+  name: string,
+  asset: Asset | undefined,
+  nodeId: string,
+  settings: SceneDocumentSnapshot["settings"]["world"]["lod"]
+): Promise<{ assets: Asset[]; lods?: WebHammerExportModelLod[] }> {
+  if (!asset?.path) {
+    return { assets: [], lods: undefined };
+  }
 
-  return [
-    {
-      geometry: {
-        primitives: [
-          createProxyPrimitive(buildPrimitiveGeometry("cylinder", size, 10), fallbackMaterial)
-        ]
-      },
-      level: "mid"
-    },
-    {
-      geometry: {
-        primitives: [
-          createProxyPrimitive(buildPrimitiveGeometry("cube", size, 1), fallbackMaterial)
-        ]
-      },
-      level: "low"
+  const source = await loadModelSceneForLodBake(asset);
+  const bakedLevels: Array<{ asset: Asset; level: WebHammerExportModelLod["level"] }> = [];
+
+  for (const [level, ratio] of [
+    ["mid", settings.midDetailRatio],
+    ["low", settings.lowDetailRatio]
+  ] as const) {
+    const simplified = simplifyModelSceneForRatio(source, ratio);
+
+    if (!simplified) {
+      continue;
     }
-  ];
-}
 
-function createProxyPrimitive(
-  primitive: ReturnType<typeof buildPrimitiveGeometry>,
-  material: WebHammerExportMaterial
-): WebHammerExportGeometry["primitives"][number] {
+    const bytes = await exportModelSceneAsGlb(simplified);
+    bakedLevels.push({
+      asset: createGeneratedModelLodAsset(asset, name, nodeId, level, bytes),
+      level
+    });
+  }
+
   return {
-    indices: primitive.indices,
-    material,
-    normals: primitive.normals,
-    positions: primitive.positions,
-    uvs: primitive.uvs
+    assets: bakedLevels.map((entry) => entry.asset),
+    lods: bakedLevels.length
+      ? bakedLevels.map((entry) => ({
+          assetId: entry.asset.id,
+          level: entry.level
+        }))
+      : undefined
   };
 }
 
-function resolveAssetBoundsSize(asset: Asset | undefined): Vec3 {
-  const sizeX = typeof asset?.metadata.nativeSizeX === "number" ? asset.metadata.nativeSizeX : 1.4;
-  const sizeY = typeof asset?.metadata.nativeSizeY === "number" ? asset.metadata.nativeSizeY : 1.4;
-  const sizeZ = typeof asset?.metadata.nativeSizeZ === "number" ? asset.metadata.nativeSizeZ : 1.4;
+async function loadModelSceneForLodBake(asset: Asset) {
+  const format = resolveModelAssetFormat(asset);
 
-  return vec3(
-    Math.max(sizeX, 0.001),
-    Math.max(sizeY, 0.001),
-    Math.max(sizeZ, 0.001)
+  if (format === "obj") {
+    const objLoader = new OBJLoader();
+    const texturePath = readModelAssetString(asset, "texturePath");
+    const resolvedTexturePath = typeof texturePath === "string" && texturePath.length > 0 ? texturePath : undefined;
+    const mtlText = readModelAssetString(asset, "materialMtlText");
+
+    if (mtlText) {
+      const materialCreator = mtlLoader.parse(patchMtlTextureReferences(mtlText, resolvedTexturePath), "");
+      materialCreator.preload();
+      objLoader.setMaterials(materialCreator);
+    } else {
+      objLoader.setMaterials(undefined as never);
+    }
+
+    const object = await objLoader.loadAsync(asset.path);
+
+    if (!mtlText && resolvedTexturePath) {
+      const texture = await modelTextureLoader.loadAsync(resolvedTexturePath);
+      texture.wrapS = RepeatWrapping;
+      texture.wrapT = RepeatWrapping;
+      texture.colorSpace = SRGBColorSpace;
+
+      object.traverse((child: Object3D) => {
+        if (child instanceof Mesh) {
+          child.material = new MeshStandardMaterial({
+            map: texture,
+            metalness: 0.12,
+            roughness: 0.76
+          });
+        }
+      });
+    }
+
+    return object;
+  }
+
+  return (await gltfLoader.loadAsync(asset.path)).scene;
+}
+
+function simplifyModelSceneForRatio(source: Object3D, ratio: number) {
+  if (ratio >= 0.98) {
+    return undefined;
+  }
+
+  const simplifiedRoot = source.clone(true);
+  expandGroupedModelMeshesForLodBake(simplifiedRoot);
+  let simplifiedMeshCount = 0;
+
+  simplifiedRoot.traverse((child) => {
+    if (!(child instanceof Mesh)) {
+      return;
+    }
+
+    if ("isSkinnedMesh" in child && child.isSkinnedMesh) {
+      return;
+    }
+
+    const simplifiedGeometry = simplifyModelGeometry(child.geometry, ratio);
+
+    if (!simplifiedGeometry) {
+      return;
+    }
+
+    child.geometry = simplifiedGeometry;
+    simplifiedMeshCount += 1;
+  });
+
+  return simplifiedMeshCount > 0 ? simplifiedRoot : undefined;
+}
+
+function expandGroupedModelMeshesForLodBake(root: Object3D) {
+  const replacements: Array<{ container: Group; mesh: Mesh; parent: Object3D }> = [];
+
+  root.traverse((child) => {
+    if (!(child instanceof Mesh) || !Array.isArray(child.material) || child.geometry.groups.length <= 1 || !child.parent) {
+      return;
+    }
+
+    const container = new Group();
+    container.name = child.name ? `${child.name}:lod-groups` : "lod-groups";
+    container.position.copy(child.position);
+    container.quaternion.copy(child.quaternion);
+    container.scale.copy(child.scale);
+    container.visible = child.visible;
+    container.renderOrder = child.renderOrder;
+    container.userData = structuredClone(child.userData ?? {});
+
+    child.geometry.groups.forEach((group: { count: number; materialIndex: number; start: number }, groupIndex: number) => {
+      const material = child.material[group.materialIndex] ?? child.material[0];
+
+      if (!material) {
+        return;
+      }
+
+      const partGeometry = extractGeometryGroup(child.geometry, group.start, group.count);
+      const partMesh = new Mesh(partGeometry, material);
+      partMesh.name = child.name ? `${child.name}:group:${groupIndex}` : `group:${groupIndex}`;
+      partMesh.castShadow = child.castShadow;
+      partMesh.receiveShadow = child.receiveShadow;
+      partMesh.userData = structuredClone(child.userData ?? {});
+      container.add(partMesh);
+    });
+
+    replacements.push({
+      container,
+      mesh: child,
+      parent: child.parent
+    });
+  });
+
+  replacements.forEach(({ container, mesh, parent }) => {
+    parent.add(container);
+    parent.remove(mesh);
+  });
+}
+
+function extractGeometryGroup(geometry: BufferGeometry, start: number, count: number) {
+  const groupGeometry = new BufferGeometry();
+  const index = geometry.getIndex();
+  const attributes = geometry.attributes;
+
+  Object.entries(attributes).forEach(([name, attribute]) => {
+    groupGeometry.setAttribute(name, attribute);
+  });
+
+  if (index) {
+    groupGeometry.setIndex(Array.from(index.array as ArrayLike<number>).slice(start, start + count));
+  } else {
+    groupGeometry.setIndex(Array.from({ length: count }, (_, offset) => start + offset));
+  }
+
+  groupGeometry.computeBoundingBox();
+  groupGeometry.computeBoundingSphere();
+  return groupGeometry;
+}
+
+function simplifyModelGeometry(geometry: BufferGeometry, ratio: number) {
+  const positionAttribute = geometry.getAttribute("position");
+  const vertexCount = positionAttribute?.count ?? 0;
+
+  if (!positionAttribute || vertexCount < 12 || ratio >= 0.98) {
+    return undefined;
+  }
+
+  const workingGeometry = geometry.getAttribute("normal") ? geometry : geometry.clone();
+
+  if (!workingGeometry.getAttribute("normal")) {
+    workingGeometry.computeVertexNormals();
+  }
+
+  workingGeometry.computeBoundingBox();
+  const bounds = workingGeometry.boundingBox?.clone();
+
+  if (!bounds) {
+    if (workingGeometry !== geometry) {
+      workingGeometry.dispose();
+    }
+    return undefined;
+  }
+
+  const normalAttribute = workingGeometry.getAttribute("normal");
+  const uvAttribute = workingGeometry.getAttribute("uv");
+  const index = workingGeometry.getIndex();
+  const simplified = simplifyPrimitiveWithVertexClustering(
+    {
+      indices: index ? Array.from(index.array as ArrayLike<number>) : Array.from({ length: vertexCount }, (_, value) => value),
+      material: {
+        color: "#ffffff",
+        id: "material:model-simplify",
+        metallicFactor: 0,
+        name: "Model Simplify",
+        roughnessFactor: 1
+      },
+      normals: Array.from(normalAttribute.array as ArrayLike<number>),
+      positions: Array.from(positionAttribute.array as ArrayLike<number>),
+      uvs: uvAttribute ? Array.from(uvAttribute.array as ArrayLike<number>) : []
+    },
+    ratio,
+    bounds
   );
+
+  if (workingGeometry !== geometry) {
+    workingGeometry.dispose();
+  }
+
+  if (!simplified) {
+    return undefined;
+  }
+
+  const simplifiedGeometry = createBufferGeometryFromPrimitive(simplified);
+  simplifiedGeometry.computeBoundingBox();
+  simplifiedGeometry.computeBoundingSphere();
+  return simplifiedGeometry;
+}
+
+async function exportModelSceneAsGlb(object: Object3D) {
+  try {
+    return await exportGlbBytesFromObject(object);
+  } catch {
+    return await exportGlbBytesFromObject(stripTextureReferencesFromObject(object.clone(true)));
+  }
+}
+
+async function exportGlbBytesFromObject(object: Object3D) {
+  const scene = new Scene();
+  scene.add(object);
+  const exported = await gltfExporter.parseAsync(scene, {
+    binary: true,
+    includeCustomExtensions: false
+  });
+
+  if (!(exported instanceof ArrayBuffer)) {
+    throw new Error("Expected GLB binary output for baked model LOD.");
+  }
+
+  return new Uint8Array(exported);
+}
+
+function stripTextureReferencesFromObject(object: Object3D) {
+  object.traverse((child) => {
+    if (!(child instanceof Mesh)) {
+      return;
+    }
+
+    const strip = (material: MeshStandardMaterial) => {
+      const clone = material.clone();
+      clone.alphaMap = null;
+      clone.aoMap = null;
+      clone.bumpMap = null;
+      clone.displacementMap = null;
+      clone.emissiveMap = null;
+      clone.lightMap = null;
+      clone.map = null;
+      clone.metalnessMap = null;
+      clone.normalMap = null;
+      clone.roughnessMap = null;
+      return clone;
+    };
+
+    if (Array.isArray(child.material)) {
+      child.material = child.material.map((material) =>
+        material instanceof MeshStandardMaterial
+          ? strip(material)
+          : new MeshStandardMaterial({
+              color: "color" in material ? material.color : "#7f8ea3",
+              metalness: "metalness" in material && typeof material.metalness === "number" ? material.metalness : 0.1,
+              roughness: "roughness" in material && typeof material.roughness === "number" ? material.roughness : 0.8
+            })
+      );
+      return;
+    }
+
+    child.material = child.material instanceof MeshStandardMaterial
+      ? strip(child.material)
+      : new MeshStandardMaterial({
+          color: "color" in child.material ? child.material.color : "#7f8ea3",
+          metalness: "metalness" in child.material && typeof child.material.metalness === "number" ? child.material.metalness : 0.1,
+          roughness: "roughness" in child.material && typeof child.material.roughness === "number" ? child.material.roughness : 0.8
+        });
+  });
+
+  return object;
+}
+
+function createGeneratedModelLodAsset(
+  asset: Asset,
+  name: string,
+  nodeId: string,
+  level: WebHammerExportModelLod["level"],
+  bytes: Uint8Array
+): Asset {
+  return {
+    id: `asset:model-lod:${slugify(`${name}-${nodeId}`)}:${level}`,
+    metadata: {
+      ...asset.metadata,
+      lodGenerated: true,
+      lodLevel: level,
+      lodSourceAssetId: asset.id,
+      materialMtlText: "",
+      modelFormat: "glb",
+      texturePath: ""
+    },
+    path: createBinaryDataUrl(bytes, "model/gltf-binary"),
+    type: "model"
+  };
+}
+
+function createBinaryDataUrl(bytes: Uint8Array, mimeType: string) {
+  let binary = "";
+  const chunkSize = 0x8000;
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+
+  return `data:${mimeType};base64,${btoa(binary)}`;
+}
+
+function resolveModelAssetFormat(asset: Asset) {
+  const format = readModelAssetString(asset, "modelFormat")?.toLowerCase();
+  return format === "obj" || asset.path.toLowerCase().endsWith(".obj") ? "obj" : "gltf";
+}
+
+function readModelAssetString(asset: Asset | undefined, key: string) {
+  const value = asset?.metadata[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function patchMtlTextureReferences(mtlText: string, texturePath?: string) {
+  if (!texturePath) {
+    return mtlText;
+  }
+
+  const mapPattern = /^(map_Ka|map_Kd|map_d|map_Bump|bump)\s+.+$/gm;
+  const hasDiffuseMap = /^map_Kd\s+.+$/m.test(mtlText);
+  const normalized = mtlText.replace(mapPattern, (line) => {
+    if (line.startsWith("map_Kd ")) {
+      return `map_Kd ${texturePath}`;
+    }
+
+    return line;
+  });
+
+  return hasDiffuseMap ? normalized : `${normalized.trim()}\nmap_Kd ${texturePath}\n`;
+}
+
+function slugify(value: string) {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return normalized || "model";
 }
 
 function simplifyExportGeometry(geometry: WebHammerExportGeometry, ratio: number): WebHammerExportGeometry | undefined {

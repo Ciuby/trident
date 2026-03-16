@@ -40,6 +40,7 @@ import type {
   WebHammerEngineScene,
   WebHammerExportGeometry,
   WebHammerExportGeometryLod,
+  WebHammerExportModelLod,
   WebHammerExportMaterial
 } from "./types";
 
@@ -433,7 +434,7 @@ async function createObjectForNode(
 
   if (node.kind === "model") {
     const modelObject = await createModelObject(node, assetsById.get(node.data.assetId), options);
-    const lodObject = await createLodObjectForModelNode(node, modelObject, materialCache, textureCache, options);
+    const lodObject = await createLodObjectForModelNode(node, modelObject, assetsById, options);
     content.add(lodObject ?? modelObject);
     return anchor;
   }
@@ -485,8 +486,7 @@ async function createLodObjectForGeometryNode(
 async function createLodObjectForModelNode(
   node: WebHammerEngineModelNode,
   baseModel: Object3D,
-  materialCache: Map<string, MeshStandardMaterial>,
-  textureCache: Map<string, Promise<Texture>>,
+  assetsById: Map<string, Asset>,
   options: WebHammerSceneLoaderOptions
 ) {
   const lodOptions = resolveSceneLodOptions(options.lod);
@@ -501,9 +501,9 @@ async function createLodObjectForModelNode(
   lod.addLevel(baseModel, 0);
 
   for (const level of node.lods) {
-    const levelGroup = await createGeometryObject(level.geometry, node, materialCache, textureCache, options, level);
+    const levelModel = await createModelObject(node, assetsById.get(level.assetId), options, level);
     const distance = level.level === "mid" ? lodOptions.midDistance : lodOptions.lowDistance;
-    lod.addLevel(levelGroup, distance);
+    lod.addLevel(levelModel, distance);
   }
 
   lod.userData.webHammer = {
@@ -659,7 +659,8 @@ async function loadTexture(
 async function createModelObject(
   node: Extract<WebHammerEngineNode, { kind: "model" }>,
   asset: Asset | undefined,
-  options: WebHammerSceneLoaderOptions
+  options: WebHammerSceneLoaderOptions,
+  lodLevel?: WebHammerExportModelLod
 ) {
   const fallback = createMissingModelFallback(asset);
   const modelPath = asset?.path ?? node.data.path;
@@ -696,12 +697,25 @@ async function createModelObject(
       : texturePath;
 
   try {
-    if (format === "obj") {
-      return await loadObjModel(asset, resolvedPath, resolvedTexturePath);
-    }
+    const object =
+      format === "obj"
+        ? await loadObjModel(asset, resolvedPath, resolvedTexturePath)
+        : await loadGltfModel(asset, resolvedPath);
 
-    return await loadGltfModel(asset, resolvedPath);
+    object.name = `${node.name}:${lodLevel?.level ?? "high"}`;
+    object.userData.webHammer = {
+      ...(object.userData.webHammer ?? {}),
+      lodLevel: lodLevel?.level ?? "high",
+      nodeId: node.id
+    };
+    return object;
   } catch {
+    fallback.name = `${node.name}:${lodLevel?.level ?? "high"}:fallback`;
+    fallback.userData.webHammer = {
+      ...(fallback.userData.webHammer ?? {}),
+      lodLevel: lodLevel?.level ?? "high",
+      nodeId: node.id
+    };
     return fallback;
   }
 }

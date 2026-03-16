@@ -263,5 +263,6 @@ describe("exportEngineBundle", () => {
 
     expect(sphere && "lods" in sphere ? sphere.lods?.map((lod) => lod.level) : []).toEqual(["mid", "low"]);
     expect(sphere && "lods" in sphere ? sphere.lods?.[0]?.geometry.primitives[0]?.indices.length : 0).toBeGreaterThan(0);
+    expect(bundle.manifest.settings.world.lod.bakedAt).toBe(bundle.manifest.metadata.exportedAt);
   });
 });

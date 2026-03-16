@@ -250,4 +250,133 @@ describe("loadWebHammerEngineScene", () => {
     expect(lodObject).toBeInstanceOf(LOD);
     expect((lodObject as LOD | undefined)?.levels.map((level) => level.distance)).toEqual([0, 10, 30]);
   });
+
+  test("creates model lod objects from referenced baked model assets", async () => {
+    const scene: WebHammerEngineScene = {
+      assets: [
+        {
+          id: "asset:model:high",
+          metadata: {
+            modelFormat: "glb",
+            nativeCenterX: 0,
+            nativeCenterY: 0,
+            nativeCenterZ: 0,
+            nativeSizeX: 2,
+            nativeSizeY: 3,
+            nativeSizeZ: 2
+          },
+          path: "missing-high.glb",
+          type: "model"
+        },
+        {
+          id: "asset:model:mid",
+          metadata: {
+            modelFormat: "glb",
+            nativeCenterX: 0,
+            nativeCenterY: 0,
+            nativeCenterZ: 0,
+            nativeSizeX: 2,
+            nativeSizeY: 3,
+            nativeSizeZ: 2
+          },
+          path: "missing-mid.glb",
+          type: "model"
+        },
+        {
+          id: "asset:model:low",
+          metadata: {
+            modelFormat: "glb",
+            nativeCenterX: 0,
+            nativeCenterY: 0,
+            nativeCenterZ: 0,
+            nativeSizeX: 2,
+            nativeSizeY: 3,
+            nativeSizeZ: 2
+          },
+          path: "missing-low.glb",
+          type: "model"
+        }
+      ],
+      entities: [],
+      layers: [],
+      materials: [],
+      metadata: {
+        exportedAt: new Date("2026-03-16T10:00:00.000Z").toISOString(),
+        format: "web-hammer-engine",
+        version: 5
+      },
+      nodes: [
+        {
+          data: {
+            assetId: "asset:model:high",
+            path: "missing-high.glb"
+          },
+          id: "node:lod-model",
+          kind: "model",
+          lods: [
+            {
+              assetId: "asset:model:mid",
+              level: "mid"
+            },
+            {
+              assetId: "asset:model:low",
+              level: "low"
+            }
+          ],
+          name: "LOD Model",
+          transform: makeTransform(vec3(0, 0, 0))
+        }
+      ],
+      settings: {
+        player: {
+          cameraMode: "fps",
+          canCrouch: true,
+          canJump: true,
+          canRun: true,
+          crouchHeight: 1.2,
+          height: 1.8,
+          jumpHeight: 1,
+          movementSpeed: 4,
+          runningSpeed: 6
+        },
+        world: {
+          ambientColor: "#ffffff",
+          ambientIntensity: 0,
+          fogColor: "#000000",
+          fogFar: 50,
+          fogNear: 10,
+          gravity: vec3(0, -9.81, 0),
+          lod: {
+            bakedAt: "2026-03-16T10:00:00.000Z",
+            enabled: true,
+            lowDetailRatio: 0.2,
+            midDetailRatio: 0.5
+          },
+          physicsEnabled: true,
+          skybox: {
+            affectsLighting: false,
+            blur: 0,
+            enabled: false,
+            format: "image",
+            intensity: 1,
+            lightingIntensity: 1,
+            name: "",
+            source: ""
+          }
+        }
+      }
+    };
+
+    const loaded = await loadWebHammerEngineScene(scene, {
+      lod: {
+        lowDistance: 30,
+        midDistance: 10
+      }
+    });
+    const lodNode = loaded.nodes.get("node:lod-model");
+    const lodObject = lodNode?.children[0]?.children[0];
+
+    expect(lodObject).toBeInstanceOf(LOD);
+    expect((lodObject as LOD | undefined)?.levels.map((level) => level.distance)).toEqual([0, 10, 30]);
+  });
 });

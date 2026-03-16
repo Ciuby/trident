@@ -279,17 +279,6 @@ export function InspectorSidebar({
     });
   };
 
-  const handleBakeWorldLod = () => {
-    commitWorldSettingsDraft({
-      ...draftWorldSettings,
-      lod: {
-        ...draftWorldSettings.lod,
-        bakedAt: new Date().toISOString(),
-        enabled: true
-      }
-    });
-  };
-
   const commitPlayerSettings = () => {
     onUpdateSceneSettings(
       {
@@ -465,7 +454,8 @@ export function InspectorSidebar({
                     checked={draftWorldSettings.lod.enabled}
                   />
                   <div className="rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-[11px] text-foreground/56">
-                    Runtime exports keep the authored mesh as high detail and bake `mid` + `low` variants. Games choose the switch distances at load time.
+                    Runtime bundle export keeps the authored mesh as high detail and generates `mid` + `low` variants from
+                    these ratios. Games choose the switch distances at load time.
                   </div>
                   <DragInput
                     className="w-full"
@@ -508,16 +498,11 @@ export function InspectorSidebar({
                     value={draftWorldSettings.lod.lowDetailRatio}
                   />
                   <div className="rounded-xl bg-white/3 px-3 py-2 text-[11px] text-foreground/60">
-                    {draftWorldSettings.lod.bakedAt
-                      ? `Last bake: ${new Date(draftWorldSettings.lod.bakedAt).toLocaleString()}`
-                      : "Not baked yet"}
+                    There is no separate editor bake step. The runtime export writes the baked LOD tiers into the bundle.
                   </div>
-                  <div className="flex justify-end gap-2">
+                  <div className="flex justify-end">
                     <Button onClick={commitWorldSettings} size="xs" variant="ghost">
                       Save LOD Settings
-                    </Button>
-                    <Button onClick={handleBakeWorldLod} size="xs" variant="ghost">
-                      Bake LOD For World
                     </Button>
                   </div>
                 </ToolSection>

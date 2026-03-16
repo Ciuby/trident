@@ -44,12 +44,13 @@ import {
 import {
   applyWebHammerWorldSettings,
   clearWebHammerWorldSettings,
+  type WebHammerEngineModelNode,
   type WebHammerEngineGeometryNode,
   type WebHammerEngineNode,
   type WebHammerExportGeometry,
   type WebHammerExportMaterial
 } from "@web-hammer/three-runtime";
-import { createBlockoutTextureDataUri, resolveTransformPivot, vec3, type MaterialRenderSide } from "@web-hammer/shared";
+import { createBlockoutTextureDataUri, resolveTransformPivot, vec3, type Asset, type MaterialRenderSide } from "@web-hammer/shared";
 import type { DerivedLight, DerivedRenderMesh } from "@web-hammer/render-pipeline";
 import type { PlaybackGameplayHost } from "../gameplay-host";
 import type { AssetPathResolver, PlayerActor, SceneRuntimeConfig } from "../types";
@@ -92,6 +93,8 @@ const textureLoader = new TextureLoader();
 const modelTextureLoader = new TextureLoader();
 const FIXED_PHYSICS_STEP_SECONDS = 1 / 60;
 const MAX_PHYSICS_CATCH_UP_STEPS = 5;
+const PLAYGROUND_MID_LOD_DISTANCE = 100;
+const PLAYGROUND_LOW_LOD_DISTANCE = 130;
 const PLAYER_GROUND_PROBE_HEIGHT = 0.08;
 const PLAYER_GROUND_PROBE_DISTANCE = 0.16;
 const PLAYER_JUMP_GROUND_LOCK_SECONDS = 0.12;
@@ -219,6 +222,7 @@ export class PlaybackSceneController {
     }
 
     const physicsActive = config.physicsPlayback !== "stopped" && config.sceneSettings.world.physicsEnabled;
+    const assetsById = new Map(config.scene.assets.map((asset) => [asset.id, asset]));
     const runtimeNodeById = new Map(config.scene.nodes.map((node) => [node.id, node]));
     const physicsMeshes = physicsActive ? config.renderScene.meshes.filter((mesh) => mesh.physics?.enabled) : [];
     const staticMeshes = physicsActive
@@ -230,8 +234,9 @@ export class PlaybackSceneController {
         createMeshObject(
           mesh,
           config.resolveAssetPath,
+          assetsById,
           runtimeNodeById.get(mesh.nodeId),
-          !physicsActive
+          true
         )
       )
     );
@@ -346,6 +351,8 @@ export class PlaybackSceneController {
     }
 
     this.world = new RAPIER.World(config.sceneSettings.world.gravity);
+    const assetsById = new Map(config.scene.assets.map((asset) => [asset.id, asset]));
+    const runtimeNodeById = new Map(config.scene.nodes.map((node) => [node.id, node]));
 
     staticMeshes.forEach((mesh) => {
       const body = createStaticRigidBody(this.world!, mesh);
@@ -354,7 +361,15 @@ export class PlaybackSceneController {
     });
 
     const dynamicObjects = await Promise.all(
-      physicsMeshes.map((mesh) => createMeshObject(mesh, config.resolveAssetPath))
+      physicsMeshes.map((mesh) =>
+        createMeshObject(
+          mesh,
+          config.resolveAssetPath,
+          assetsById,
+          runtimeNodeById.get(mesh.nodeId),
+          true
+        )
+      )
     );
 
     if (version !== this.loadVersion || !this.world) {
@@ -630,6 +645,7 @@ function createLightObject(light: DerivedLight): RuntimeNodeObject | undefined {
 async function createMeshObject(
   mesh: DerivedRenderMesh,
   resolveAssetPath: AssetPathResolver,
+  assetsById: Map<string, Asset>,
   runtimeNode?: WebHammerEngineNode,
   enableLod = false
 ) {
@@ -659,9 +675,14 @@ async function createMeshObject(
         lod.addLevel(model, 0);
 
         for (const level of runtimeNode.lods) {
-          const runtimeLevel = await createRuntimeGeometryObject(level.geometry, resolveAssetPath);
-          cleanupTasks.push(runtimeLevel.cleanup);
-          lod.addLevel(runtimeLevel.object, level.level === "mid" ? lodDistances.midDistance : lodDistances.lowDistance);
+          const asset = assetsById.get(level.assetId);
+
+          if (!asset) {
+            continue;
+          }
+
+          const runtimeLevel = await createModelObjectFromAsset(asset, resolveAssetPath);
+          lod.addLevel(runtimeLevel, level.level === "mid" ? lodDistances.midDistance : lodDistances.lowDistance);
         }
 
         content.add(lod);
@@ -803,59 +824,11 @@ async function createRuntimeMaterial(spec: WebHammerExportMaterial, resolveAsset
   return new MeshStandardMaterial(materialOptions);
 }
 
-function resolveMeshLodDistances(mesh: DerivedRenderMesh) {
-  const extent = resolveMeshLodExtent(mesh);
-  const midDistance = Math.max(4, extent * 6);
-  const lowDistance = Math.max(midDistance + 2, extent * 16);
-
+function resolveMeshLodDistances(_mesh: DerivedRenderMesh) {
   return {
-    lowDistance,
-    midDistance
+    lowDistance: PLAYGROUND_LOW_LOD_DISTANCE,
+    midDistance: PLAYGROUND_MID_LOD_DISTANCE
   };
-}
-
-function resolveMeshLodExtent(mesh: DerivedRenderMesh) {
-  if (mesh.modelSize) {
-    return Math.max(mesh.modelSize.x, mesh.modelSize.y, mesh.modelSize.z);
-  }
-
-  if (mesh.primitive?.kind === "box") {
-    return Math.max(mesh.primitive.size.x, mesh.primitive.size.y, mesh.primitive.size.z);
-  }
-
-  if (mesh.primitive?.kind === "sphere") {
-    return mesh.primitive.radius * 2;
-  }
-
-  if (mesh.primitive?.kind === "cylinder") {
-    return Math.max(mesh.primitive.height, mesh.primitive.radiusTop * 2, mesh.primitive.radiusBottom * 2);
-  }
-
-  if (mesh.primitive?.kind === "cone") {
-    return Math.max(mesh.primitive.height, mesh.primitive.radius * 2);
-  }
-
-  if (mesh.surface?.positions.length) {
-    let minX = Number.POSITIVE_INFINITY;
-    let minY = Number.POSITIVE_INFINITY;
-    let minZ = Number.POSITIVE_INFINITY;
-    let maxX = Number.NEGATIVE_INFINITY;
-    let maxY = Number.NEGATIVE_INFINITY;
-    let maxZ = Number.NEGATIVE_INFINITY;
-
-    for (let index = 0; index < mesh.surface.positions.length; index += 3) {
-      minX = Math.min(minX, mesh.surface.positions[index]);
-      minY = Math.min(minY, mesh.surface.positions[index + 1]);
-      minZ = Math.min(minZ, mesh.surface.positions[index + 2]);
-      maxX = Math.max(maxX, mesh.surface.positions[index]);
-      maxY = Math.max(maxY, mesh.surface.positions[index + 1]);
-      maxZ = Math.max(maxZ, mesh.surface.positions[index + 2]);
-    }
-
-    return Math.max(maxX - minX, maxY - minY, maxZ - minZ, 1);
-  }
-
-  return 1;
 }
 
 function createStaticRigidBody(world: RAPIER.World, mesh: DerivedRenderMesh) {
@@ -1113,19 +1086,52 @@ async function createModelObject(mesh: DerivedRenderMesh, resolveAssetPath: Asse
     return undefined;
   }
 
-  const resolvedPath = await Promise.resolve(resolveAssetPath(mesh.modelPath));
-  const resolvedTexturePath = mesh.modelTexturePath
-    ? await Promise.resolve(resolveAssetPath(mesh.modelTexturePath))
+  return createResolvedModelObject({
+    center: mesh.modelCenter,
+    format: mesh.modelFormat === "obj" ? "obj" : "glb",
+    modelMtlText: mesh.modelMtlText,
+    modelPath: mesh.modelPath,
+    modelTexturePath: mesh.modelTexturePath
+  }, resolveAssetPath);
+}
+
+async function createModelObjectFromAsset(asset: Asset, resolveAssetPath: AssetPathResolver) {
+  if (typeof asset.path !== "string" || asset.path.length === 0) {
+    return new Group();
+  }
+
+  return createResolvedModelObject({
+    center: readAssetVec3(asset, "nativeCenter"),
+    format: readAssetString(asset, "modelFormat") === "obj" ? "obj" : "glb",
+    modelMtlText: readAssetString(asset, "materialMtlText"),
+    modelPath: asset.path,
+    modelTexturePath: readAssetString(asset, "texturePath")
+  }, resolveAssetPath);
+}
+
+async function createResolvedModelObject(
+  reference: {
+    center?: { x: number; y: number; z: number };
+    format: "glb" | "obj";
+    modelMtlText?: string;
+    modelPath: string;
+    modelTexturePath?: string;
+  },
+  resolveAssetPath: AssetPathResolver
+) {
+  const resolvedPath = await Promise.resolve(resolveAssetPath(reference.modelPath));
+  const resolvedTexturePath = reference.modelTexturePath
+    ? await Promise.resolve(resolveAssetPath(reference.modelTexturePath))
     : undefined;
-  const cacheKey = `${mesh.modelFormat ?? "glb"}:${resolvedPath}:${resolvedTexturePath ?? ""}:${mesh.modelMtlText ?? ""}`;
+  const cacheKey = `${reference.format}:${resolvedPath}:${resolvedTexturePath ?? ""}:${reference.modelMtlText ?? ""}`;
   let loadedScene = modelSceneCache.get(cacheKey);
 
   if (!loadedScene) {
     loadedScene = await loadModelScene(
       resolvedPath,
-      mesh.modelFormat === "obj" ? "obj" : "glb",
+      reference.format,
       resolvedTexturePath,
-      mesh.modelMtlText
+      reference.modelMtlText
     );
     modelSceneCache.set(cacheKey, loadedScene);
   }
@@ -1139,7 +1145,7 @@ async function createModelObject(mesh: DerivedRenderMesh, resolveAssetPath: Asse
   });
 
   const bounds = computeModelBounds(loadedScene);
-  const center = bounds?.center ?? mesh.modelCenter ?? { x: 0, y: 0, z: 0 };
+  const center = bounds?.center ?? reference.center ?? { x: 0, y: 0, z: 0 };
   clone.position.set(-center.x, -center.y, -center.z);
   return clone;
 }
@@ -1254,6 +1260,27 @@ function patchMtlTextureReferences(mtlText: string, texturePath?: string) {
   });
 
   return hasDiffuseMap ? normalized : `${normalized.trim()}\nmap_Kd ${texturePath}\n`;
+}
+
+function readAssetString(asset: Asset | undefined, key: string) {
+  const value = asset?.metadata[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function readAssetVec3(asset: Asset | undefined, keyPrefix: "nativeCenter" | "nativeSize") {
+  if (!asset) {
+    return undefined;
+  }
+
+  const x = asset.metadata[`${keyPrefix}X`];
+  const y = asset.metadata[`${keyPrefix}Y`];
+  const z = asset.metadata[`${keyPrefix}Z`];
+
+  if (typeof x !== "number" || typeof y !== "number" || typeof z !== "number") {
+    return undefined;
+  }
+
+  return { x, y, z };
 }
 
 function resolveMeshPivot(mesh: DerivedRenderMesh) {

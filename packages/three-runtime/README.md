@@ -22,7 +22,8 @@ That gives you a lean manifest plus normal external asset files instead of one h
 3. Configure world and player settings in the inspector.
    World skyboxes accept standard images or `.hdr` panoramas.
    Leave `Affect Lighting` off when you only want a backdrop without image-based lighting.
-   If you want runtime LODs, enable `Bake Runtime LODs` under World and run `Bake LOD For World`.
+   If you want runtime LODs, enable `Bake Runtime LODs` under World and save the LOD ratios.
+   The actual `mid` and `low` geometry tiers are generated during `Export Runtime Bundle`.
 4. Use `File -> Export Runtime Bundle`.
 5. The editor downloads `scene.runtime.zip`.
 
@@ -108,7 +109,7 @@ When baked LODs are present:
 - `midDistance..lowDistance`: baked `mid` tier
 - `lowDistance+`: baked `low` tier
 
-Authored brushes, meshes, and primitives get simplified geometry tiers. Imported model assets keep the original model for the high tier and use generated proxy geometry for `mid` and `low`, because the editor does not currently export the model’s source triangles.
+Authored brushes, meshes, and primitives get simplified geometry tiers. Imported model assets keep the original model for the high tier and export generated `mid` and `low` model assets so runtime loaders can swap between real mesh variants instead of fake proxy primitives.
 
 ## Streaming And Keeping Worlds Lean
 
