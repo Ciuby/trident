@@ -36,12 +36,23 @@ export type WebHammerExportGeometry = {
   primitives: WebHammerExportPrimitive[];
 };
 
-export type WebHammerEngineGeometryNode =
-  | (BrushNode & { geometry: WebHammerExportGeometry })
-  | (MeshNode & { geometry: WebHammerExportGeometry })
-  | (PrimitiveNode & { geometry: WebHammerExportGeometry });
+export type WebHammerLodLevel = "mid" | "low";
 
-export type WebHammerEngineNode = GroupNode | WebHammerEngineGeometryNode | ModelNode | LightNode;
+export type WebHammerExportGeometryLod = {
+  geometry: WebHammerExportGeometry;
+  level: WebHammerLodLevel;
+};
+
+export type WebHammerEngineGeometryNode =
+  | (BrushNode & { geometry: WebHammerExportGeometry; lods?: WebHammerExportGeometryLod[] })
+  | (MeshNode & { geometry: WebHammerExportGeometry; lods?: WebHammerExportGeometryLod[] })
+  | (PrimitiveNode & { geometry: WebHammerExportGeometry; lods?: WebHammerExportGeometryLod[] });
+
+export type WebHammerEngineModelNode = ModelNode & {
+  lods?: WebHammerExportGeometryLod[];
+};
+
+export type WebHammerEngineNode = GroupNode | WebHammerEngineGeometryNode | WebHammerEngineModelNode | LightNode;
 
 export type WebHammerEngineSceneMetadata = {
   exportedAt: string;

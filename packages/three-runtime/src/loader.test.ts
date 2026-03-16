@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { loadWebHammerEngineScene } from "./loader";
 import type { WebHammerEngineScene } from "./types";
 import { makeTransform, vec3 } from "@web-hammer/shared";
-import { Vector3 } from "three";
+import { LOD, Vector3 } from "three";
 
 describe("loadWebHammerEngineScene", () => {
   test("rebuilds grouped runtime hierarchies and resolves entity world transforms", async () => {
@@ -73,16 +73,22 @@ describe("loadWebHammerEngineScene", () => {
           movementSpeed: 4,
           runningSpeed: 6
         },
-        world: {
-          ambientColor: "#ffffff",
-          ambientIntensity: 0,
-          fogColor: "#000000",
-          fogFar: 50,
-          fogNear: 10,
-          gravity: vec3(0, -9.81, 0),
-          physicsEnabled: true,
-          skybox: {
-            affectsLighting: false,
+      world: {
+        ambientColor: "#ffffff",
+        ambientIntensity: 0,
+        fogColor: "#000000",
+        fogFar: 50,
+        fogNear: 10,
+        gravity: vec3(0, -9.81, 0),
+        lod: {
+          bakedAt: "",
+          enabled: false,
+          lowDetailRatio: 0.22,
+          midDetailRatio: 0.52
+        },
+        physicsEnabled: true,
+        skybox: {
+          affectsLighting: false,
             blur: 0,
             enabled: false,
             format: "image",
@@ -107,5 +113,141 @@ describe("loadWebHammerEngineScene", () => {
     expect(worldPosition?.z).toBeCloseTo(-1, 5);
     expect(loaded.entities[0]?.transform.position.x).toBeCloseTo(11, 5);
     expect(loaded.entities[0]?.transform.position.z).toBeCloseTo(1, 5);
+  });
+
+  test("creates three lod objects when baked lod geometry and distances are provided", async () => {
+    const scene: WebHammerEngineScene = {
+      assets: [],
+      entities: [],
+      layers: [],
+      materials: [],
+      metadata: {
+        exportedAt: new Date("2026-03-12T10:00:00.000Z").toISOString(),
+        format: "web-hammer-engine",
+        version: 5
+      },
+      nodes: [
+        {
+          data: {
+            role: "prop",
+            shape: "cube",
+            size: vec3(2, 2, 2)
+          },
+          geometry: {
+            primitives: [
+              {
+                indices: [0, 1, 2, 0, 2, 3],
+                material: {
+                  color: "#ffffff",
+                  id: "material:test",
+                  metallicFactor: 0,
+                  name: "Test",
+                  roughnessFactor: 1
+                },
+                normals: [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
+                positions: [-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0],
+                uvs: [0, 0, 1, 0, 1, 1, 0, 1]
+              }
+            ]
+          },
+          id: "node:lod-cube",
+          kind: "primitive",
+          lods: [
+            {
+              geometry: {
+                primitives: [
+                  {
+                    indices: [0, 1, 2],
+                    material: {
+                      color: "#ffffff",
+                      id: "material:test",
+                      metallicFactor: 0,
+                      name: "Test",
+                      roughnessFactor: 1
+                    },
+                    normals: [0, 0, 1, 0, 0, 1, 0, 0, 1],
+                    positions: [-1, -1, 0, 1, -1, 0, 0, 1, 0],
+                    uvs: [0, 0, 1, 0, 0.5, 1]
+                  }
+                ]
+              },
+              level: "mid"
+            },
+            {
+              geometry: {
+                primitives: [
+                  {
+                    indices: [0, 1, 2],
+                    material: {
+                      color: "#ffffff",
+                      id: "material:test",
+                      metallicFactor: 0,
+                      name: "Test",
+                      roughnessFactor: 1
+                    },
+                    normals: [0, 0, 1, 0, 0, 1, 0, 0, 1],
+                    positions: [-1, -1, 0, 1, -1, 0, 0, 1, 0],
+                    uvs: [0, 0, 1, 0, 0.5, 1]
+                  }
+                ]
+              },
+              level: "low"
+            }
+          ],
+          name: "LOD Cube",
+          transform: makeTransform(vec3(0, 0, 0))
+        }
+      ],
+      settings: {
+        player: {
+          cameraMode: "fps",
+          canCrouch: true,
+          canJump: true,
+          canRun: true,
+          crouchHeight: 1.2,
+          height: 1.8,
+          jumpHeight: 1,
+          movementSpeed: 4,
+          runningSpeed: 6
+        },
+        world: {
+          ambientColor: "#ffffff",
+          ambientIntensity: 0,
+          fogColor: "#000000",
+          fogFar: 50,
+          fogNear: 10,
+          gravity: vec3(0, -9.81, 0),
+          lod: {
+            bakedAt: "2026-03-15T12:00:00.000Z",
+            enabled: true,
+            lowDetailRatio: 0.2,
+            midDetailRatio: 0.5
+          },
+          physicsEnabled: true,
+          skybox: {
+            affectsLighting: false,
+            blur: 0,
+            enabled: false,
+            format: "image",
+            intensity: 1,
+            lightingIntensity: 1,
+            name: "",
+            source: ""
+          }
+        }
+      }
+    };
+
+    const loaded = await loadWebHammerEngineScene(scene, {
+      lod: {
+        lowDistance: 30,
+        midDistance: 10
+      }
+    });
+    const lodNode = loaded.nodes.get("node:lod-cube");
+    const lodObject = lodNode?.children[0]?.children[0];
+
+    expect(lodObject).toBeInstanceOf(LOD);
+    expect((lodObject as LOD | undefined)?.levels.map((level) => level.distance)).toEqual([0, 10, 30]);
   });
 });

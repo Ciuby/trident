@@ -13,12 +13,14 @@ import {
   Color,
   ConeGeometry,
   CylinderGeometry,
+  DirectionalLight,
   DoubleSide,
   Euler,
   Float32BufferAttribute,
   FrontSide,
   Group,
   HemisphereLight,
+  LOD,
   MathUtils,
   Mesh,
   MeshStandardMaterial,
@@ -36,9 +38,17 @@ import {
   Vector3,
   WebGLRenderer,
   type Material,
+  type MeshStandardMaterialParameters,
   type Side
 } from "three";
-import { applyWebHammerWorldSettings, clearWebHammerWorldSettings } from "@web-hammer/three-runtime";
+import {
+  applyWebHammerWorldSettings,
+  clearWebHammerWorldSettings,
+  type WebHammerEngineGeometryNode,
+  type WebHammerEngineNode,
+  type WebHammerExportGeometry,
+  type WebHammerExportMaterial
+} from "@web-hammer/three-runtime";
 import { createBlockoutTextureDataUri, resolveTransformPivot, vec3, type MaterialRenderSide } from "@web-hammer/shared";
 import type { DerivedLight, DerivedRenderMesh } from "@web-hammer/render-pipeline";
 import type { PlaybackGameplayHost } from "../gameplay-host";
@@ -62,21 +72,71 @@ type DynamicBodyBinding = {
   object: Object3D;
 };
 
+type VanillaDebugEvent = {
+  label: string;
+  payload: unknown;
+  timestamp: string;
+};
+
+type VanillaDebugStore = {
+  enabled: boolean;
+  events: VanillaDebugEvent[];
+  lastFrame?: unknown;
+};
+
 const previewTextureCache = new Map<string, Texture>();
 const modelSceneCache = new Map<string, Object3D>();
 const gltfLoader = new GLTFLoader();
 const mtlLoader = new MTLLoader();
 const textureLoader = new TextureLoader();
 const modelTextureLoader = new TextureLoader();
+const FIXED_PHYSICS_STEP_SECONDS = 1 / 60;
+const MAX_PHYSICS_CATCH_UP_STEPS = 5;
 const PLAYER_GROUND_PROBE_HEIGHT = 0.08;
 const PLAYER_GROUND_PROBE_DISTANCE = 0.16;
+const PLAYER_JUMP_GROUND_LOCK_SECONDS = 0.12;
+const PLAYER_GROUND_MIN_NORMAL_Y = 0.6;
 const scratchBounds = new Box3();
 const scratchCenter = new Vector3();
 const scratchSize = new Vector3();
 const scratchFitPosition = new Vector3();
 const scratchLookTarget = new Vector3();
+const VANILLA_DEBUG_PREFIX = "[three-vanilla-debug]";
 
 let rapierReady: Promise<void> | undefined;
+
+function getVanillaDebugStore() {
+  const debugGlobal = globalThis as typeof globalThis & { __WEB_HAMMER_VANILLA_DEBUG__?: VanillaDebugStore };
+
+  debugGlobal.__WEB_HAMMER_VANILLA_DEBUG__ ??= {
+    enabled: true,
+    events: []
+  };
+
+  return debugGlobal.__WEB_HAMMER_VANILLA_DEBUG__;
+}
+
+function publishVanillaDebug(label: string, payload: unknown) {
+  const store = getVanillaDebugStore();
+
+  if (!store.enabled) {
+    return;
+  }
+
+  const event: VanillaDebugEvent = {
+    label,
+    payload,
+    timestamp: new Date().toISOString()
+  };
+
+  store.events = [event, ...store.events].slice(0, 80);
+
+  if (label === "frame") {
+    store.lastFrame = payload;
+  }
+
+  console.debug(VANILLA_DEBUG_PREFIX, label, payload);
+}
 
 export class PlaybackSceneController {
   private readonly camera = new PerspectiveCamera(60, 1, 0.1, 2000);
@@ -98,7 +158,9 @@ export class PlaybackSceneController {
   private dynamicBodies: DynamicBodyBinding[] = [];
   private fitFramesRemaining = 90;
   private frameHandle = 0;
+  private debugFrameCooldown = 0;
   private loadVersion = 0;
+  private physicsAccumulator = 0;
   private player?: RuntimePlayerController;
   private sceneError?: string;
   private staticBodies: Array<{ body: RAPIER.RigidBody; nodeId: string }> = [];
@@ -157,13 +219,21 @@ export class PlaybackSceneController {
     }
 
     const physicsActive = config.physicsPlayback !== "stopped" && config.sceneSettings.world.physicsEnabled;
+    const runtimeNodeById = new Map(config.scene.nodes.map((node) => [node.id, node]));
     const physicsMeshes = physicsActive ? config.renderScene.meshes.filter((mesh) => mesh.physics?.enabled) : [];
     const staticMeshes = physicsActive
       ? config.renderScene.meshes.filter((mesh) => !physicsMeshes.some((candidate) => candidate.nodeId === mesh.nodeId))
       : config.renderScene.meshes;
 
     const staticObjects = await Promise.all(
-      staticMeshes.map((mesh) => createMeshObject(mesh, config.resolveAssetPath))
+      staticMeshes.map((mesh) =>
+        createMeshObject(
+          mesh,
+          config.resolveAssetPath,
+          runtimeNodeById.get(mesh.nodeId),
+          !physicsActive
+        )
+      )
     );
 
     if (version !== this.loadVersion) {
@@ -219,6 +289,7 @@ export class PlaybackSceneController {
     this.controls.enabled = nextPlayback === "stopped";
     this.autoFitEnabled = nextPlayback === "stopped";
     this.fitFramesRemaining = nextPlayback === "stopped" ? 90 : 0;
+    this.physicsAccumulator = 0;
 
     if (nextPlayback !== "running") {
       this.player?.releasePointerLock();
@@ -326,6 +397,20 @@ export class PlaybackSceneController {
       });
       this.dynamicMeshRoot.add(this.player.object);
     }
+
+    publishVanillaDebug("scene-load", {
+      gravity: config.sceneSettings.world.gravity,
+      physicsPlayback: config.physicsPlayback,
+      player: config.sceneSettings.player,
+      playerSpawn: playerSpawn
+        ? {
+            position: playerSpawn.position,
+            rotationY: playerSpawn.rotation.y
+          }
+        : null,
+      staticMeshCount: staticMeshes.length,
+      physicsMeshCount: physicsMeshes.length
+    });
   }
 
   private disposeRuntimeBindings() {
@@ -343,6 +428,7 @@ export class PlaybackSceneController {
     });
     this.staticBodies = [];
     this.world = undefined;
+    this.physicsAccumulator = 0;
 
     this.staticObjects.forEach((entry) => {
       this.options.host.bindNodeObject(entry.nodeId, null);
@@ -374,6 +460,7 @@ export class PlaybackSceneController {
     this.frameHandle = window.requestAnimationFrame(this.renderFrame);
     const delta = Math.min(this.clock.getDelta(), 0.05);
     const config = this.config;
+    let stepsThisFrame = 0;
 
     if (config?.gameplayRuntime) {
       config.gameplayRuntime.update(delta);
@@ -381,9 +468,20 @@ export class PlaybackSceneController {
 
     if (this.world) {
       if (config?.physicsPlayback === "running") {
-        this.player?.updateBeforeStep(delta);
-        this.world.timestep = 1 / 60;
-        this.world.step();
+        this.physicsAccumulator = Math.min(
+          this.physicsAccumulator + delta,
+          FIXED_PHYSICS_STEP_SECONDS * MAX_PHYSICS_CATCH_UP_STEPS
+        );
+
+        while (this.physicsAccumulator >= FIXED_PHYSICS_STEP_SECONDS) {
+          this.player?.updateBeforeStep(FIXED_PHYSICS_STEP_SECONDS);
+          this.world.timestep = FIXED_PHYSICS_STEP_SECONDS;
+          this.world.step();
+          this.physicsAccumulator -= FIXED_PHYSICS_STEP_SECONDS;
+          stepsThisFrame += 1;
+        }
+      } else {
+        this.physicsAccumulator = 0;
       }
 
       this.dynamicBodies.forEach(({ body, object }) => {
@@ -393,6 +491,21 @@ export class PlaybackSceneController {
         object.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
       });
       this.player?.updateAfterStep(delta, config?.physicsPlayback ?? "stopped", config?.cameraMode ?? "third-person");
+    }
+
+    if (config?.physicsPlayback === "running") {
+      this.debugFrameCooldown = Math.max(0, this.debugFrameCooldown - delta);
+
+      if (this.debugFrameCooldown === 0) {
+        publishVanillaDebug("frame", {
+          accumulator: this.physicsAccumulator,
+          delta,
+          player: this.player?.getDebugState() ?? null,
+          stepsThisFrame,
+          worldTimestep: this.world?.timestep ?? null
+        });
+        this.debugFrameCooldown = 0.25;
+      }
     }
 
     if (config?.physicsPlayback === "stopped") {
@@ -460,6 +573,7 @@ function createLightObject(light: DerivedLight): RuntimeNodeObject | undefined {
   }
 
   const group = new Group();
+  let target: Object3D | undefined;
   group.position.set(light.position.x, light.position.y, light.position.z);
   group.rotation.set(light.rotation.x, light.rotation.y, light.rotation.z);
 
@@ -477,6 +591,16 @@ function createLightObject(light: DerivedLight): RuntimeNodeObject | undefined {
     group.add(point);
   }
 
+  if (light.data.type === "directional") {
+    const directional = new DirectionalLight(light.data.color, light.data.intensity);
+    directional.castShadow = light.data.castShadow;
+    target = new Object3D();
+    target.position.set(0, 0, -6);
+    group.add(target);
+    group.add(directional);
+    directional.target = target;
+  }
+
   if (light.data.type === "spot") {
     const spot = new SpotLight(
       light.data.color,
@@ -487,12 +611,15 @@ function createLightObject(light: DerivedLight): RuntimeNodeObject | undefined {
       light.data.decay
     );
     spot.castShadow = light.data.castShadow;
-    const target = new Object3D();
+    target = new Object3D();
     target.position.set(0, 0, -6);
     group.add(target);
     group.add(spot);
     spot.target = target;
   }
+
+  group.updateMatrixWorld(true);
+  target?.updateMatrixWorld(true);
 
   return {
     nodeId: light.nodeId,
@@ -500,7 +627,12 @@ function createLightObject(light: DerivedLight): RuntimeNodeObject | undefined {
   };
 }
 
-async function createMeshObject(mesh: DerivedRenderMesh, resolveAssetPath: AssetPathResolver) {
+async function createMeshObject(
+  mesh: DerivedRenderMesh,
+  resolveAssetPath: AssetPathResolver,
+  runtimeNode?: WebHammerEngineNode,
+  enableLod = false
+) {
   if (!mesh.surface && !mesh.primitive && !mesh.modelPath) {
     return undefined;
   }
@@ -514,13 +646,58 @@ async function createMeshObject(mesh: DerivedRenderMesh, resolveAssetPath: Asset
   content.position.set(-pivot.x, -pivot.y, -pivot.z);
   group.add(content);
 
+  const lodDistances = resolveMeshLodDistances(mesh);
+
   if (mesh.modelPath) {
     const model = await createModelObject(mesh, resolveAssetPath);
 
     if (model) {
+      if (enableLod && runtimeNode?.kind === "model" && runtimeNode.lods?.length) {
+        const lod = new LOD();
+        const cleanupTasks: Array<() => void> = [];
+
+        lod.addLevel(model, 0);
+
+        for (const level of runtimeNode.lods) {
+          const runtimeLevel = await createRuntimeGeometryObject(level.geometry, resolveAssetPath);
+          cleanupTasks.push(runtimeLevel.cleanup);
+          lod.addLevel(runtimeLevel.object, level.level === "mid" ? lodDistances.midDistance : lodDistances.lowDistance);
+        }
+
+        content.add(lod);
+        return {
+          cleanup: () => {
+            cleanupTasks.forEach((task) => task());
+          },
+          object: group
+        };
+      }
+
       content.add(model);
       return { object: group };
     }
+  }
+
+  if (enableLod && runtimeNode && isRuntimeGeometryNode(runtimeNode) && runtimeNode.lods?.length) {
+    const lod = new LOD();
+    const cleanupTasks: Array<() => void> = [];
+    const highLevel = await createRuntimeGeometryObject(runtimeNode.geometry, resolveAssetPath);
+    cleanupTasks.push(highLevel.cleanup);
+    lod.addLevel(highLevel.object, 0);
+
+    for (const level of runtimeNode.lods) {
+      const runtimeLevel = await createRuntimeGeometryObject(level.geometry, resolveAssetPath);
+      cleanupTasks.push(runtimeLevel.cleanup);
+      lod.addLevel(runtimeLevel.object, level.level === "mid" ? lodDistances.midDistance : lodDistances.lowDistance);
+    }
+
+    content.add(lod);
+    return {
+      cleanup: () => {
+        cleanupTasks.forEach((task) => task());
+      },
+      object: group
+    };
   }
 
   const geometry = createRenderableGeometry(mesh);
@@ -546,6 +723,139 @@ async function createMeshObject(mesh: DerivedRenderMesh, resolveAssetPath: Asset
 
 function disposeCreatedObject(created?: { cleanup?: () => void; object: Object3D }) {
   created?.cleanup?.();
+}
+
+function isRuntimeGeometryNode(node: WebHammerEngineNode): node is WebHammerEngineGeometryNode {
+  return node.kind === "brush" || node.kind === "mesh" || node.kind === "primitive";
+}
+
+async function createRuntimeGeometryObject(geometry: WebHammerExportGeometry, resolveAssetPath: AssetPathResolver) {
+  const group = new Group();
+  const cleanupTasks: Array<() => void> = [];
+
+  for (const primitive of geometry.primitives) {
+    const mesh = await createRuntimePrimitiveMesh(primitive, resolveAssetPath);
+    cleanupTasks.push(() => {
+      mesh.geometry.dispose();
+
+      if (Array.isArray(mesh.material)) {
+        mesh.material.forEach((material) => material.dispose());
+        return;
+      }
+
+      mesh.material.dispose();
+    });
+    group.add(mesh);
+  }
+
+  return {
+    cleanup: () => {
+      cleanupTasks.forEach((task) => task());
+    },
+    object: group
+  };
+}
+
+async function createRuntimePrimitiveMesh(
+  primitive: WebHammerExportGeometry["primitives"][number],
+  resolveAssetPath: AssetPathResolver
+) {
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(primitive.positions, 3));
+  geometry.setAttribute("normal", new Float32BufferAttribute(primitive.normals, 3));
+
+  if (primitive.uvs.length) {
+    geometry.setAttribute("uv", new Float32BufferAttribute(primitive.uvs, 2));
+  }
+
+  geometry.setIndex(primitive.indices);
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  const material = await createRuntimeMaterial(primitive.material, resolveAssetPath);
+  const mesh = new Mesh(geometry, material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+async function createRuntimeMaterial(spec: WebHammerExportMaterial, resolveAssetPath: AssetPathResolver) {
+  const materialOptions: MeshStandardMaterialParameters = {
+    color: spec.baseColorTexture ? "#ffffff" : spec.color,
+    metalness: spec.metallicFactor,
+    roughness: spec.roughnessFactor,
+    side: resolvePreviewMaterialSide(spec.side)
+  };
+
+  if (spec.baseColorTexture) {
+    materialOptions.map = await loadTexture(await Promise.resolve(resolveAssetPath(spec.baseColorTexture)), true);
+  }
+
+  if (spec.normalTexture) {
+    materialOptions.normalMap = await loadTexture(await Promise.resolve(resolveAssetPath(spec.normalTexture)), false);
+  }
+
+  if (spec.metallicRoughnessTexture) {
+    const orm = await loadTexture(await Promise.resolve(resolveAssetPath(spec.metallicRoughnessTexture)), false);
+    materialOptions.metalnessMap = orm;
+    materialOptions.roughnessMap = orm;
+  }
+
+  return new MeshStandardMaterial(materialOptions);
+}
+
+function resolveMeshLodDistances(mesh: DerivedRenderMesh) {
+  const extent = resolveMeshLodExtent(mesh);
+  const midDistance = Math.max(4, extent * 6);
+  const lowDistance = Math.max(midDistance + 2, extent * 16);
+
+  return {
+    lowDistance,
+    midDistance
+  };
+}
+
+function resolveMeshLodExtent(mesh: DerivedRenderMesh) {
+  if (mesh.modelSize) {
+    return Math.max(mesh.modelSize.x, mesh.modelSize.y, mesh.modelSize.z);
+  }
+
+  if (mesh.primitive?.kind === "box") {
+    return Math.max(mesh.primitive.size.x, mesh.primitive.size.y, mesh.primitive.size.z);
+  }
+
+  if (mesh.primitive?.kind === "sphere") {
+    return mesh.primitive.radius * 2;
+  }
+
+  if (mesh.primitive?.kind === "cylinder") {
+    return Math.max(mesh.primitive.height, mesh.primitive.radiusTop * 2, mesh.primitive.radiusBottom * 2);
+  }
+
+  if (mesh.primitive?.kind === "cone") {
+    return Math.max(mesh.primitive.height, mesh.primitive.radius * 2);
+  }
+
+  if (mesh.surface?.positions.length) {
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let minZ = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    let maxZ = Number.NEGATIVE_INFINITY;
+
+    for (let index = 0; index < mesh.surface.positions.length; index += 3) {
+      minX = Math.min(minX, mesh.surface.positions[index]);
+      minY = Math.min(minY, mesh.surface.positions[index + 1]);
+      minZ = Math.min(minZ, mesh.surface.positions[index + 2]);
+      maxX = Math.max(maxX, mesh.surface.positions[index]);
+      maxY = Math.max(maxY, mesh.surface.positions[index + 1]);
+      maxZ = Math.max(maxZ, mesh.surface.positions[index + 2]);
+    }
+
+    return Math.max(maxX - minX, maxY - minY, maxZ - minZ, 1);
+  }
+
+  return 1;
 }
 
 function createStaticRigidBody(world: RAPIER.World, mesh: DerivedRenderMesh) {
@@ -996,10 +1306,15 @@ class RuntimePlayerController {
 
   private cameraMode: SceneRuntimeConfig["cameraMode"];
   private jumpQueued = false;
+  private jumpGroundLockRemaining = 0;
+  private lastGroundNormalY: number | null = null;
+  private lastGroundProbeToi: number | null = null;
+  private lastGrounded = false;
   private pointerLocked = false;
   private readonly keyState = new Set<string>();
   private pitch = 0;
   private readonly rawTranslation = new Vector3();
+  private readonly renderOffset = new Vector3();
   private readonly smoothedTranslation = new Vector3();
   private readonly supportVelocity = new Vector3();
   private yaw = 0;
@@ -1063,11 +1378,14 @@ class RuntimePlayerController {
     this.pointerLocked = false;
   }
 
-  updateBeforeStep(_deltaSeconds: number) {
+  updateBeforeStep(deltaSeconds: number) {
+    this.jumpGroundLockRemaining = Math.max(0, this.jumpGroundLockRemaining - deltaSeconds);
     const translation = this.body.translation();
     const linearVelocity = this.body.linvel();
-    const groundedHit = this.resolveGroundHit(translation);
+    const groundedHit = this.jumpGroundLockRemaining > 0 ? undefined : this.resolveGroundHit(translation);
     const grounded = groundedHit !== undefined;
+    this.lastGroundProbeToi = groundedHit?.timeOfImpact ?? null;
+    this.lastGroundNormalY = groundedHit?.normal.y ?? null;
     const speed = this.sceneSettings.player.canRun && this.isRunning()
       ? this.sceneSettings.player.runningSpeed
       : this.sceneSettings.player.movementSpeed;
@@ -1100,10 +1418,22 @@ class RuntimePlayerController {
       this.supportVelocity.set(0, 0, 0);
     }
 
+    if (grounded !== this.lastGrounded) {
+      publishVanillaDebug("grounded-change", {
+        grounded,
+        groundNormalY: this.lastGroundNormalY,
+        jumpLockRemaining: this.jumpGroundLockRemaining,
+        position: { x: translation.x, y: translation.y, z: translation.z },
+        probeToi: this.lastGroundProbeToi,
+        velocity: { x: linearVelocity.x, y: linearVelocity.y, z: linearVelocity.z }
+      });
+      this.lastGrounded = grounded;
+    }
+
     this.body.setLinvel(
       {
         x: moveDirection.x + this.supportVelocity.x,
-        y: grounded ? this.supportVelocity.y : linearVelocity.y,
+        y: grounded && linearVelocity.y <= this.supportVelocity.y ? this.supportVelocity.y : linearVelocity.y,
         z: moveDirection.z + this.supportVelocity.z
       },
       true
@@ -1123,11 +1453,18 @@ class RuntimePlayerController {
         this.body.setLinvel(
           {
             x: currentVelocity.x,
-            y: Math.sqrt(2 * gravityMagnitude * this.sceneSettings.player.jumpHeight),
+            y: this.supportVelocity.y + Math.sqrt(2 * gravityMagnitude * this.sceneSettings.player.jumpHeight),
             z: currentVelocity.z
           },
           true
         );
+        this.jumpGroundLockRemaining = PLAYER_JUMP_GROUND_LOCK_SECONDS;
+        publishVanillaDebug("jump-applied", {
+          gravityMagnitude,
+          jumpHeight: this.sceneSettings.player.jumpHeight,
+          position: { x: translation.x, y: translation.y, z: translation.z },
+          supportVelocity: { x: this.supportVelocity.x, y: this.supportVelocity.y, z: this.supportVelocity.z }
+        });
       }
 
       this.jumpQueued = false;
@@ -1139,7 +1476,8 @@ class RuntimePlayerController {
     const translation = this.body.translation();
     this.rawTranslation.set(translation.x, translation.y, translation.z);
     this.smoothedTranslation.lerp(this.rawTranslation, 1 - Math.exp(-deltaSeconds * 18));
-    this.object.position.copy(this.smoothedTranslation);
+    this.object.position.copy(this.rawTranslation);
+    this.visual.position.copy(this.renderOffset.copy(this.smoothedTranslation).sub(this.rawTranslation));
     this.visual.rotation.set(0, this.yaw, 0);
     this.visual.visible = cameraMode !== "fps";
 
@@ -1178,6 +1516,24 @@ class RuntimePlayerController {
     }
   }
 
+  getDebugState() {
+    const translation = this.body.translation();
+    const velocity = this.body.linvel();
+
+    return {
+      grounded: this.lastGrounded,
+      groundNormalY: this.lastGroundNormalY,
+      jumpGroundLockRemaining: this.jumpGroundLockRemaining,
+      jumpQueued: this.jumpQueued,
+      pointerLocked: this.pointerLocked,
+      position: { x: translation.x, y: translation.y, z: translation.z },
+      probeToi: this.lastGroundProbeToi,
+      supportVelocity: { x: this.supportVelocity.x, y: this.supportVelocity.y, z: this.supportVelocity.z },
+      velocity: { x: velocity.x, y: velocity.y, z: velocity.z },
+      visualOffset: { x: this.visual.position.x, y: this.visual.position.y, z: this.visual.position.z }
+    };
+  }
+
   private resolveGroundHit(translation: ReturnType<RAPIER.RigidBody["translation"]>) {
     const ray = new RAPIER.Ray(
       {
@@ -1188,7 +1544,7 @@ class RuntimePlayerController {
       { x: 0, y: -1, z: 0 }
     );
 
-    return this.world.castRayAndGetNormal(
+    const hit = this.world.castRayAndGetNormal(
       ray,
       PLAYER_GROUND_PROBE_DISTANCE,
       false,
@@ -1197,6 +1553,12 @@ class RuntimePlayerController {
       undefined,
       this.body
     );
+
+    if (!hit || hit.normal.y < PLAYER_GROUND_MIN_NORMAL_Y) {
+      return undefined;
+    }
+
+    return hit;
   }
 
   private axis(primary: string, secondary: string) {
@@ -1239,6 +1601,9 @@ class RuntimePlayerController {
 
     if (event.code === "Space") {
       this.jumpQueued = true;
+      publishVanillaDebug("jump-input", {
+        pointerLocked: this.pointerLocked
+      });
       event.preventDefault();
     }
   };

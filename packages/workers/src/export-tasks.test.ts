@@ -22,6 +22,12 @@ const settings: SceneSettings = {
     fogFar: 50,
     fogNear: 10,
     gravity: vec3(0, -9.81, 0),
+    lod: {
+      bakedAt: "",
+      enabled: false,
+      lowDetailRatio: 0.22,
+      midDetailRatio: 0.52
+    },
     physicsEnabled: true,
     skybox: {
       affectsLighting: false,
@@ -91,7 +97,7 @@ describe("exportEngineBundle", () => {
     const group = bundle.manifest.nodes.find((node) => node.id === "node:group");
     const cube = bundle.manifest.nodes.find((node) => node.id === "node:cube");
 
-    expect(bundle.manifest.metadata.version).toBe(4);
+    expect(bundle.manifest.metadata.version).toBe(5);
     expect(group?.kind).toBe("group");
     expect(cube?.parentId).toBe("node:group");
     expect(bundle.manifest.entities[0]?.parentId).toBe("node:group");
@@ -216,5 +222,46 @@ describe("exportEngineBundle", () => {
 
     expect(platform?.hooks).toHaveLength(3);
     expect(platform?.hooks?.map((hook) => hook.type)).toEqual(["trigger_volume", "sequence", "path_mover"]);
+  });
+
+  test("bakes authored geometry lods into runtime manifests", async () => {
+    const snapshot: SceneDocumentSnapshot = {
+      assets: [],
+      entities: [],
+      layers: [],
+      materials: [],
+      nodes: [
+        {
+          data: {
+            role: "prop",
+            shape: "sphere",
+            size: vec3(3, 3, 3)
+          },
+          id: "node:sphere",
+          kind: "primitive",
+          name: "Sphere",
+          transform: makeTransform(vec3(0, 0, 0))
+        }
+      ],
+      settings: {
+        ...settings,
+        world: {
+          ...settings.world,
+          lod: {
+            bakedAt: "2026-03-15T12:00:00.000Z",
+            enabled: true,
+            lowDetailRatio: 0.18,
+            midDetailRatio: 0.48
+          }
+        }
+      },
+      textures: []
+    };
+
+    const bundle = await exportEngineBundle(snapshot);
+    const sphere = bundle.manifest.nodes.find((node) => node.id === "node:sphere" && node.kind === "primitive");
+
+    expect(sphere && "lods" in sphere ? sphere.lods?.map((lod) => lod.level) : []).toEqual(["mid", "low"]);
+    expect(sphere && "lods" in sphere ? sphere.lods?.[0]?.geometry.primitives[0]?.indices.length : 0).toBeGreaterThan(0);
   });
 });

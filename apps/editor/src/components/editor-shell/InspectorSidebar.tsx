@@ -279,6 +279,17 @@ export function InspectorSidebar({
     });
   };
 
+  const handleBakeWorldLod = () => {
+    commitWorldSettingsDraft({
+      ...draftWorldSettings,
+      lod: {
+        ...draftWorldSettings.lod,
+        bakedAt: new Date().toISOString(),
+        enabled: true
+      }
+    });
+  };
+
   const commitPlayerSettings = () => {
     onUpdateSceneSettings(
       {
@@ -437,6 +448,78 @@ export function InspectorSidebar({
                     step={0.05}
                     value={draftWorldSettings.ambientIntensity}
                   />
+                </ToolSection>
+
+                <ToolSection title="LOD Bake">
+                  <BooleanField
+                    label="Bake Runtime LODs"
+                    onCheckedChange={(checked) =>
+                      setDraftWorldSettings((current) => ({
+                        ...current,
+                        lod: {
+                          ...current.lod,
+                          enabled: checked
+                        }
+                      }))
+                    }
+                    checked={draftWorldSettings.lod.enabled}
+                  />
+                  <div className="rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-[11px] text-foreground/56">
+                    Runtime exports keep the authored mesh as high detail and bake `mid` + `low` variants. Games choose the switch distances at load time.
+                  </div>
+                  <DragInput
+                    className="w-full"
+                    compact
+                    label="Mid Detail"
+                    max={0.95}
+                    min={0.1}
+                    onChange={(value) =>
+                      setDraftWorldSettings((current) => ({
+                        ...current,
+                        lod: {
+                          ...current.lod,
+                          midDetailRatio: Math.max(Math.max(0.1, value), current.lod.lowDetailRatio)
+                        }
+                      }))
+                    }
+                    onValueCommit={commitWorldSettings}
+                    precision={2}
+                    step={0.02}
+                    value={draftWorldSettings.lod.midDetailRatio}
+                  />
+                  <DragInput
+                    className="w-full"
+                    compact
+                    label="Low Detail"
+                    max={draftWorldSettings.lod.midDetailRatio}
+                    min={0.05}
+                    onChange={(value) =>
+                      setDraftWorldSettings((current) => ({
+                        ...current,
+                        lod: {
+                          ...current.lod,
+                          lowDetailRatio: Math.min(current.lod.midDetailRatio, Math.max(0.05, value))
+                        }
+                      }))
+                    }
+                    onValueCommit={commitWorldSettings}
+                    precision={2}
+                    step={0.02}
+                    value={draftWorldSettings.lod.lowDetailRatio}
+                  />
+                  <div className="rounded-xl bg-white/3 px-3 py-2 text-[11px] text-foreground/60">
+                    {draftWorldSettings.lod.bakedAt
+                      ? `Last bake: ${new Date(draftWorldSettings.lod.bakedAt).toLocaleString()}`
+                      : "Not baked yet"}
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button onClick={commitWorldSettings} size="xs" variant="ghost">
+                      Save LOD Settings
+                    </Button>
+                    <Button onClick={handleBakeWorldLod} size="xs" variant="ghost">
+                      Bake LOD For World
+                    </Button>
+                  </div>
                 </ToolSection>
 
                 <ToolSection title="Skybox">

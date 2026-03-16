@@ -12,6 +12,7 @@ import {
   normalizeVec3,
   subVec3,
   vec3,
+  type Asset,
   type Material,
   type MaterialID,
   type Vec2,
@@ -21,9 +22,12 @@ import {
   externalizeWebHammerEngineScene,
   type WebHammerEngineBundle,
   type WebHammerEngineScene,
+  type WebHammerExportGeometry,
+  type WebHammerExportGeometryLod,
   type WebHammerExportMaterial
 } from "@web-hammer/three-runtime";
-import { BoxGeometry, ConeGeometry, CylinderGeometry, Euler, Quaternion, SphereGeometry } from "three";
+import { MeshBVH } from "three-mesh-bvh";
+import { Box3, BoxGeometry, BufferGeometry, ConeGeometry, CylinderGeometry, Euler, Float32BufferAttribute, Quaternion, SphereGeometry, Vector3 } from "three";
 
 export type WorkerExportKind = "whmap-load" | "whmap-save" | "engine-export" | "gltf-export" | "ai-model-generate";
 
@@ -176,8 +180,10 @@ export async function exportEngineBundle(snapshot: SceneDocumentSnapshot): Promi
 }
 
 async function buildEngineScene(snapshot: SceneDocumentSnapshot): Promise<WebHammerEngineScene> {
+  const assetsById = new Map(snapshot.assets.map((asset) => [asset.id, asset]));
   const materialsById = new Map(snapshot.materials.map((material) => [material.id, material]));
   const exportedMaterials = await Promise.all(snapshot.materials.map((material) => resolveExportMaterial(material)));
+  const shouldBakeLods = snapshot.settings.world.lod.enabled;
   const engineScene = {
     assets: snapshot.assets,
     entities: snapshot.entities,
@@ -186,7 +192,7 @@ async function buildEngineScene(snapshot: SceneDocumentSnapshot): Promise<WebHam
     metadata: {
       exportedAt: new Date().toISOString(),
       format: "web-hammer-engine",
-      version: 4
+      version: 5
     },
     settings: snapshot.settings,
     nodes: await Promise.all(
@@ -206,12 +212,15 @@ async function buildEngineScene(snapshot: SceneDocumentSnapshot): Promise<WebHam
         }
 
         if (isBrushNode(node)) {
+          const geometry = await buildExportGeometry(node, materialsById);
+
           return {
             data: node.data,
-            geometry: await buildExportGeometry(node, materialsById),
+            geometry,
             hooks: node.hooks,
             id: node.id,
             kind: "brush",
+            lods: shouldBakeLods ? await buildGeometryLods(geometry, snapshot.settings.world.lod) : undefined,
             metadata: node.metadata,
             name: node.name,
             parentId: node.parentId,
@@ -221,12 +230,15 @@ async function buildEngineScene(snapshot: SceneDocumentSnapshot): Promise<WebHam
         }
 
         if (isMeshNode(node)) {
+          const geometry = await buildExportGeometry(node, materialsById);
+
           return {
             data: node.data,
-            geometry: await buildExportGeometry(node, materialsById),
+            geometry,
             hooks: node.hooks,
             id: node.id,
             kind: "mesh",
+            lods: shouldBakeLods ? await buildGeometryLods(geometry, snapshot.settings.world.lod) : undefined,
             metadata: node.metadata,
             name: node.name,
             parentId: node.parentId,
@@ -236,12 +248,15 @@ async function buildEngineScene(snapshot: SceneDocumentSnapshot): Promise<WebHam
         }
 
         if (isPrimitiveNode(node)) {
+          const geometry = await buildExportGeometry(node, materialsById);
+
           return {
             data: node.data,
-            geometry: await buildExportGeometry(node, materialsById),
+            geometry,
             hooks: node.hooks,
             id: node.id,
             kind: "primitive",
+            lods: shouldBakeLods ? await buildGeometryLods(geometry, snapshot.settings.world.lod) : undefined,
             metadata: node.metadata,
             name: node.name,
             parentId: node.parentId,
@@ -256,6 +271,7 @@ async function buildEngineScene(snapshot: SceneDocumentSnapshot): Promise<WebHam
             hooks: node.hooks,
             id: node.id,
             kind: "model",
+            lods: shouldBakeLods ? await buildModelLods(node.name, assetsById.get(node.data.assetId), node.id) : undefined,
             metadata: node.metadata,
             name: node.name,
             parentId: node.parentId,
@@ -680,6 +696,333 @@ async function buildExportGeometry(
   return {
     primitives: Array.from(primitiveByMaterial.values())
   };
+}
+
+async function buildGeometryLods(
+  geometry: WebHammerExportGeometry,
+  settings: SceneDocumentSnapshot["settings"]["world"]["lod"]
+): Promise<WebHammerExportGeometryLod[] | undefined> {
+  if (!geometry.primitives.length) {
+    return undefined;
+  }
+
+  const midGeometry = simplifyExportGeometry(geometry, settings.midDetailRatio);
+  const lowGeometry = simplifyExportGeometry(geometry, settings.lowDetailRatio);
+  const lods: WebHammerExportGeometryLod[] = [];
+
+  if (midGeometry) {
+    lods.push({
+      geometry: midGeometry,
+      level: "mid"
+    });
+  }
+
+  if (lowGeometry) {
+    lods.push({
+      geometry: lowGeometry,
+      level: "low"
+    });
+  }
+
+  return lods.length ? lods : undefined;
+}
+
+async function buildModelLods(name: string, asset: Asset | undefined, nodeId: string): Promise<WebHammerExportGeometryLod[] | undefined> {
+  const previewColor = typeof asset?.metadata.previewColor === "string" ? asset.metadata.previewColor : "#7f8ea3";
+  const fallbackMaterial = await resolveExportMaterial({
+    color: previewColor,
+    id: `material:model-lod:${nodeId}`,
+    metalness: 0.08,
+    name: `${name} LOD`,
+    roughness: 0.76
+  });
+  const size = resolveAssetBoundsSize(asset);
+
+  return [
+    {
+      geometry: {
+        primitives: [
+          createProxyPrimitive(buildPrimitiveGeometry("cylinder", size, 10), fallbackMaterial)
+        ]
+      },
+      level: "mid"
+    },
+    {
+      geometry: {
+        primitives: [
+          createProxyPrimitive(buildPrimitiveGeometry("cube", size, 1), fallbackMaterial)
+        ]
+      },
+      level: "low"
+    }
+  ];
+}
+
+function createProxyPrimitive(
+  primitive: ReturnType<typeof buildPrimitiveGeometry>,
+  material: WebHammerExportMaterial
+): WebHammerExportGeometry["primitives"][number] {
+  return {
+    indices: primitive.indices,
+    material,
+    normals: primitive.normals,
+    positions: primitive.positions,
+    uvs: primitive.uvs
+  };
+}
+
+function resolveAssetBoundsSize(asset: Asset | undefined): Vec3 {
+  const sizeX = typeof asset?.metadata.nativeSizeX === "number" ? asset.metadata.nativeSizeX : 1.4;
+  const sizeY = typeof asset?.metadata.nativeSizeY === "number" ? asset.metadata.nativeSizeY : 1.4;
+  const sizeZ = typeof asset?.metadata.nativeSizeZ === "number" ? asset.metadata.nativeSizeZ : 1.4;
+
+  return vec3(
+    Math.max(sizeX, 0.001),
+    Math.max(sizeY, 0.001),
+    Math.max(sizeZ, 0.001)
+  );
+}
+
+function simplifyExportGeometry(geometry: WebHammerExportGeometry, ratio: number): WebHammerExportGeometry | undefined {
+  const primitives = geometry.primitives
+    .map((primitive) => simplifyExportPrimitive(primitive, ratio))
+    .filter((primitive): primitive is WebHammerExportGeometry["primitives"][number] => primitive !== undefined);
+
+  return primitives.length ? { primitives } : undefined;
+}
+
+function simplifyExportPrimitive(
+  primitive: WebHammerExportGeometry["primitives"][number],
+  ratio: number
+): WebHammerExportGeometry["primitives"][number] | undefined {
+  const vertexCount = Math.floor(primitive.positions.length / 3);
+  const triangleCount = Math.floor(primitive.indices.length / 3);
+
+  if (vertexCount < 12 || triangleCount < 8 || ratio >= 0.98) {
+    return undefined;
+  }
+
+  const geometry = createBufferGeometryFromPrimitive(primitive);
+  const boundsTree = new MeshBVH(geometry, { maxLeafSize: 12, setBoundingBox: true });
+  const bounds = boundsTree.getBoundingBox(new Box3());
+  const simplified = simplifyPrimitiveWithVertexClustering(primitive, ratio, bounds);
+
+  geometry.dispose();
+
+  if (!simplified) {
+    return undefined;
+  }
+
+  return simplified;
+}
+
+function createBufferGeometryFromPrimitive(primitive: WebHammerExportGeometry["primitives"][number]) {
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(primitive.positions, 3));
+  geometry.setAttribute("normal", new Float32BufferAttribute(primitive.normals, 3));
+
+  if (primitive.uvs.length) {
+    geometry.setAttribute("uv", new Float32BufferAttribute(primitive.uvs, 2));
+  }
+
+  geometry.setIndex(primitive.indices);
+  return geometry;
+}
+
+function simplifyPrimitiveWithVertexClustering(
+  primitive: WebHammerExportGeometry["primitives"][number],
+  ratio: number,
+  bounds: Box3
+): WebHammerExportGeometry["primitives"][number] | undefined {
+  const targetVertexCount = Math.max(8, Math.floor((primitive.positions.length / 3) * Math.max(0.04, ratio)));
+  const size = bounds.getSize(new Vector3());
+  let resolution = Math.max(1, Math.round(Math.cbrt(targetVertexCount)));
+  let best: WebHammerExportGeometry["primitives"][number] | undefined;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const simplified = clusterPrimitiveVertices(primitive, bounds, size, Math.max(1, resolution - attempt));
+
+    if (!simplified) {
+      continue;
+    }
+
+    best = simplified;
+
+    if ((simplified.positions.length / 3) <= targetVertexCount) {
+      break;
+    }
+  }
+
+  if (!best) {
+    return undefined;
+  }
+
+  if (best.positions.length >= primitive.positions.length || best.indices.length >= primitive.indices.length) {
+    return undefined;
+  }
+
+  return best;
+}
+
+function clusterPrimitiveVertices(
+  primitive: WebHammerExportGeometry["primitives"][number],
+  bounds: Box3,
+  size: Vector3,
+  resolution: number
+): WebHammerExportGeometry["primitives"][number] | undefined {
+  const min = bounds.min;
+  const cellSizeX = Math.max(size.x / resolution, 0.0001);
+  const cellSizeY = Math.max(size.y / resolution, 0.0001);
+  const cellSizeZ = Math.max(size.z / resolution, 0.0001);
+  const vertexCount = primitive.positions.length / 3;
+  const clusters = new Map<string, {
+    count: number;
+    normalX: number;
+    normalY: number;
+    normalZ: number;
+    positionX: number;
+    positionY: number;
+    positionZ: number;
+    uvX: number;
+    uvY: number;
+  }>();
+  const clusterKeyByVertex = new Array<string>(vertexCount);
+
+  for (let vertexIndex = 0; vertexIndex < vertexCount; vertexIndex += 1) {
+    const positionOffset = vertexIndex * 3;
+    const uvOffset = vertexIndex * 2;
+    const x = primitive.positions[positionOffset];
+    const y = primitive.positions[positionOffset + 1];
+    const z = primitive.positions[positionOffset + 2];
+    const normalX = primitive.normals[positionOffset];
+    const normalY = primitive.normals[positionOffset + 1];
+    const normalZ = primitive.normals[positionOffset + 2];
+    const cellX = Math.floor((x - min.x) / cellSizeX);
+    const cellY = Math.floor((y - min.y) / cellSizeY);
+    const cellZ = Math.floor((z - min.z) / cellSizeZ);
+    const clusterKey = `${cellX}:${cellY}:${cellZ}:${resolveNormalBucket(normalX, normalY, normalZ)}`;
+    const cluster = clusters.get(clusterKey) ?? {
+      count: 0,
+      normalX: 0,
+      normalY: 0,
+      normalZ: 0,
+      positionX: 0,
+      positionY: 0,
+      positionZ: 0,
+      uvX: 0,
+      uvY: 0
+    };
+
+    cluster.count += 1;
+    cluster.positionX += x;
+    cluster.positionY += y;
+    cluster.positionZ += z;
+    cluster.normalX += normalX;
+    cluster.normalY += normalY;
+    cluster.normalZ += normalZ;
+    cluster.uvX += primitive.uvs[uvOffset] ?? 0;
+    cluster.uvY += primitive.uvs[uvOffset + 1] ?? 0;
+    clusters.set(clusterKey, cluster);
+    clusterKeyByVertex[vertexIndex] = clusterKey;
+  }
+
+  const remappedIndices: number[] = [];
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+  const clusterIndexByKey = new Map<string, number>();
+
+  const ensureClusterIndex = (clusterKey: string) => {
+    const existing = clusterIndexByKey.get(clusterKey);
+
+    if (existing !== undefined) {
+      return existing;
+    }
+
+    const cluster = clusters.get(clusterKey);
+
+    if (!cluster || cluster.count === 0) {
+      return undefined;
+    }
+
+    const averagedNormal = normalizeVec3(vec3(cluster.normalX, cluster.normalY, cluster.normalZ));
+    const index = positions.length / 3;
+
+    positions.push(
+      cluster.positionX / cluster.count,
+      cluster.positionY / cluster.count,
+      cluster.positionZ / cluster.count
+    );
+    normals.push(averagedNormal.x, averagedNormal.y, averagedNormal.z);
+    uvs.push(cluster.uvX / cluster.count, cluster.uvY / cluster.count);
+    clusterIndexByKey.set(clusterKey, index);
+    return index;
+  };
+
+  for (let index = 0; index < primitive.indices.length; index += 3) {
+    const a = ensureClusterIndex(clusterKeyByVertex[primitive.indices[index]]);
+    const b = ensureClusterIndex(clusterKeyByVertex[primitive.indices[index + 1]]);
+    const c = ensureClusterIndex(clusterKeyByVertex[primitive.indices[index + 2]]);
+
+    if (a === undefined || b === undefined || c === undefined) {
+      continue;
+    }
+
+    if (a === b || b === c || a === c) {
+      continue;
+    }
+
+    if (triangleArea(positions, a, b, c) <= 0.000001) {
+      continue;
+    }
+
+    remappedIndices.push(a, b, c);
+  }
+
+  if (remappedIndices.length < 12 || positions.length >= primitive.positions.length) {
+    return undefined;
+  }
+
+  return {
+    indices: remappedIndices,
+    material: primitive.material,
+    normals,
+    positions,
+    uvs
+  };
+}
+
+function resolveNormalBucket(x: number, y: number, z: number) {
+  const ax = Math.abs(x);
+  const ay = Math.abs(y);
+  const az = Math.abs(z);
+
+  if (ax >= ay && ax >= az) {
+    return x >= 0 ? "xp" : "xn";
+  }
+
+  if (ay >= ax && ay >= az) {
+    return y >= 0 ? "yp" : "yn";
+  }
+
+  return z >= 0 ? "zp" : "zn";
+}
+
+function triangleArea(positions: number[], a: number, b: number, c: number) {
+  const ax = positions[a * 3];
+  const ay = positions[a * 3 + 1];
+  const az = positions[a * 3 + 2];
+  const bx = positions[b * 3];
+  const by = positions[b * 3 + 1];
+  const bz = positions[b * 3 + 2];
+  const cx = positions[c * 3];
+  const cy = positions[c * 3 + 1];
+  const cz = positions[c * 3 + 2];
+  const ab = vec3(bx - ax, by - ay, bz - az);
+  const ac = vec3(cx - ax, cy - ay, cz - az);
+  const cross = crossVec3(ab, ac);
+
+  return Math.sqrt(cross.x * cross.x + cross.y * cross.y + cross.z * cross.z) * 0.5;
 }
 
 function buildPrimitiveGeometry(shape: "cone" | "cube" | "cylinder" | "sphere", size: Vec3, radialSegments: number) {

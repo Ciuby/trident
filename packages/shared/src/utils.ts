@@ -320,6 +320,12 @@ export function createDefaultSceneSettings(): SceneSettings {
       fogFar: 2000,
       fogNear: 500,
       gravity: vec3(0, -9.81, 0),
+      lod: {
+        bakedAt: "",
+        enabled: false,
+        lowDetailRatio: 0.22,
+        midDetailRatio: 0.52
+      },
       physicsEnabled: true,
       skybox: {
         affectsLighting: false,
@@ -356,6 +362,7 @@ function normalizeWorldSettings(world?: Partial<WorldSettings> | WorldSettings):
   const fogNear = clampFiniteNumber(world?.fogNear, defaults.fogNear);
   const fogFar = clampFiniteNumber(world?.fogFar, defaults.fogFar);
   const resolvedFogNear = Math.max(0, fogNear);
+  const lod = normalizeWorldLodSettings(world?.lod);
   const skybox = normalizeSceneSkybox(world?.skybox);
 
   return {
@@ -364,7 +371,26 @@ function normalizeWorldSettings(world?: Partial<WorldSettings> | WorldSettings):
     fogNear: resolvedFogNear,
     fogFar: Math.max(resolvedFogNear + 0.01, fogFar),
     gravity: world?.gravity ?? defaults.gravity,
+    lod,
     skybox,
+  };
+}
+
+function normalizeWorldLodSettings(lod?: Partial<WorldSettings["lod"]> | WorldSettings["lod"]): WorldSettings["lod"] {
+  const defaults = createDefaultSceneSettings().world.lod;
+  const resolvedMidDetailRatio = clampUnitInterval(clampFiniteNumber(lod?.midDetailRatio, defaults.midDetailRatio));
+  const resolvedLowDetailRatio = Math.min(
+    clampUnitInterval(clampFiniteNumber(lod?.lowDetailRatio, defaults.lowDetailRatio)),
+    resolvedMidDetailRatio
+  );
+
+  return {
+    ...defaults,
+    ...lod,
+    bakedAt: typeof lod?.bakedAt === "string" ? lod.bakedAt : defaults.bakedAt,
+    enabled: Boolean(lod?.enabled),
+    lowDetailRatio: resolvedLowDetailRatio,
+    midDetailRatio: Math.max(resolvedMidDetailRatio, resolvedLowDetailRatio)
   };
 }
 
@@ -412,6 +438,10 @@ function normalizeScenePathPoints(points?: ScenePathDefinition["points"]): Scene
 
 function clampFiniteNumber(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function clampUnitInterval(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }
 
 export function isBrushNode(node: GeometryNode): node is BrushNode {

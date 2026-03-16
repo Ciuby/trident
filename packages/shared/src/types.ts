@@ -289,6 +289,13 @@ export type SceneSkyboxSettings = {
   source: string;
 };
 
+export type WorldLodSettings = {
+  bakedAt?: string;
+  enabled: boolean;
+  lowDetailRatio: number;
+  midDetailRatio: number;
+};
+
 export type WorldSettings = {
   ambientColor: string;
   ambientIntensity: number;
@@ -296,6 +303,7 @@ export type WorldSettings = {
   fogFar: number;
   fogNear: number;
   gravity: Vec3;
+  lod: WorldLodSettings;
   physicsEnabled: boolean;
   skybox: SceneSkyboxSettings;
 };

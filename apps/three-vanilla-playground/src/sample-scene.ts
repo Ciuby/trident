@@ -409,6 +409,12 @@ export function createSampleScene(): WebHammerEngineScene {
         fogFar: 70,
         fogNear: 22,
         gravity: { x: 0, y: -9.81, z: 0 },
+        lod: {
+          bakedAt: "2026-03-15T12:00:00.000Z",
+          enabled: true,
+          lowDetailRatio: 0.22,
+          midDetailRatio: 0.52
+        },
         physicsEnabled: true,
         skybox: {
           affectsLighting: false,

@@ -15,6 +15,7 @@ import {
   FrontSide,
   Group,
   HemisphereLight,
+  LOD,
   Mesh,
   MeshStandardMaterial,
   Object3D,
@@ -33,9 +34,12 @@ import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import type {
   WebHammerEngineBundle,
+  WebHammerEngineModelNode,
   WebHammerEngineGeometryNode,
   WebHammerEngineNode,
   WebHammerEngineScene,
+  WebHammerExportGeometry,
+  WebHammerExportGeometryLod,
   WebHammerExportMaterial
 } from "./types";
 
@@ -64,8 +68,14 @@ export type WebHammerAssetResolverContext =
 export type WebHammerSceneLoaderOptions = {
   applyToScene?: Scene;
   castShadow?: boolean;
+  lod?: WebHammerSceneLodOptions;
   receiveShadow?: boolean;
   resolveAssetUrl?: (context: WebHammerAssetResolverContext) => Promise<string> | string;
+};
+
+export type WebHammerSceneLodOptions = {
+  lowDistance: number;
+  midDistance: number;
 };
 
 export type WebHammerLoadedScene = {
@@ -423,7 +433,8 @@ async function createObjectForNode(
 
   if (node.kind === "model") {
     const modelObject = await createModelObject(node, assetsById.get(node.data.assetId), options);
-    content.add(modelObject);
+    const lodObject = await createLodObjectForModelNode(node, modelObject, materialCache, textureCache, options);
+    content.add(lodObject ?? modelObject);
     return anchor;
   }
 
@@ -431,24 +442,89 @@ async function createObjectForNode(
     return anchor;
   }
 
-  const meshes = await createGeometryMeshes(node, materialCache, textureCache, options);
+  const lodObject = await createLodObjectForGeometryNode(node, materialCache, textureCache, options);
 
-  meshes.forEach((mesh) => {
-    content.add(mesh);
-  });
+  if (lodObject) {
+    content.add(lodObject);
+  }
 
   return anchor;
 }
 
-async function createGeometryMeshes(
+async function createLodObjectForGeometryNode(
   node: WebHammerEngineGeometryNode,
   materialCache: Map<string, MeshStandardMaterial>,
   textureCache: Map<string, Promise<Texture>>,
   options: WebHammerSceneLoaderOptions
 ) {
+  const baseGroup = await createGeometryObject(node.geometry, node, materialCache, textureCache, options);
+  const lodOptions = resolveSceneLodOptions(options.lod);
+
+  if (!lodOptions || !node.lods?.length) {
+    return baseGroup;
+  }
+
+  const lod = new LOD();
+  lod.name = `${node.name}:LOD`;
+  lod.autoUpdate = true;
+  lod.addLevel(baseGroup, 0);
+
+  for (const level of node.lods) {
+    const levelGroup = await createGeometryObject(level.geometry, node, materialCache, textureCache, options, level);
+    const distance = level.level === "mid" ? lodOptions.midDistance : lodOptions.lowDistance;
+    lod.addLevel(levelGroup, distance);
+  }
+
+  lod.userData.webHammer = {
+    levelOrder: ["high", ...(node.lods ?? []).map((level) => level.level)],
+    nodeId: node.id
+  };
+  return lod;
+}
+
+async function createLodObjectForModelNode(
+  node: WebHammerEngineModelNode,
+  baseModel: Object3D,
+  materialCache: Map<string, MeshStandardMaterial>,
+  textureCache: Map<string, Promise<Texture>>,
+  options: WebHammerSceneLoaderOptions
+) {
+  const lodOptions = resolveSceneLodOptions(options.lod);
+
+  if (!lodOptions || !node.lods?.length) {
+    return undefined;
+  }
+
+  const lod = new LOD();
+  lod.name = `${node.name}:LOD`;
+  lod.autoUpdate = true;
+  lod.addLevel(baseModel, 0);
+
+  for (const level of node.lods) {
+    const levelGroup = await createGeometryObject(level.geometry, node, materialCache, textureCache, options, level);
+    const distance = level.level === "mid" ? lodOptions.midDistance : lodOptions.lowDistance;
+    lod.addLevel(levelGroup, distance);
+  }
+
+  lod.userData.webHammer = {
+    levelOrder: ["high", ...(node.lods ?? []).map((level) => level.level)],
+    nodeId: node.id
+  };
+  return lod;
+}
+
+async function createGeometryObject(
+  geometry: WebHammerExportGeometry,
+  node: Pick<WebHammerEngineNode, "id" | "name">,
+  materialCache: Map<string, MeshStandardMaterial>,
+  textureCache: Map<string, Promise<Texture>>,
+  options: WebHammerSceneLoaderOptions,
+  lodLevel?: WebHammerExportGeometryLod
+) {
+  const group = new Group();
   const meshes: Mesh[] = [];
 
-  for (const primitive of node.geometry.primitives) {
+  for (const primitive of geometry.primitives) {
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new Float32BufferAttribute(primitive.positions, 3));
     geometry.setAttribute("normal", new Float32BufferAttribute(primitive.normals, 3));
@@ -466,8 +542,9 @@ async function createGeometryMeshes(
 
     mesh.castShadow = options.castShadow ?? true;
     mesh.receiveShadow = options.receiveShadow ?? true;
-    mesh.name = `${node.name}:${primitive.material.name}`;
+    mesh.name = `${node.name}:${lodLevel?.level ?? "high"}:${primitive.material.name}`;
     mesh.userData.webHammer = {
+      lodLevel: lodLevel?.level ?? "high",
       materialId: primitive.material.id,
       nodeId: node.id
     };
@@ -475,7 +552,25 @@ async function createGeometryMeshes(
     meshes.push(mesh);
   }
 
-  return meshes;
+  meshes.forEach((mesh) => {
+    group.add(mesh);
+  });
+
+  return group;
+}
+
+function resolveSceneLodOptions(lod?: WebHammerSceneLodOptions): WebHammerSceneLodOptions | undefined {
+  if (!lod) {
+    return undefined;
+  }
+
+  const midDistance = Math.max(0, lod.midDistance);
+  const lowDistance = Math.max(midDistance + 0.01, lod.lowDistance);
+
+  return {
+    lowDistance,
+    midDistance
+  };
 }
 
 async function createThreeMaterial(
