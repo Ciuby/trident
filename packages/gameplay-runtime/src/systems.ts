@@ -521,9 +521,10 @@ export function createPathMoverSystemDefinition(resolvePath: GameplayPathResolve
               }
 
               const speed = Math.max(0.001, readNumber(target.hook.config.speed, 0.1));
+              const pathLength = Math.max(0.000001, path.length ?? 1);
               const loopEnabled = readBoolean(target.hook.config.loop, path.loop ?? false);
               const pingPong = loopEnabled && readBoolean(target.hook.config.reverse, false);
-              state.progress += deltaSeconds * speed * state.direction;
+              state.progress += (deltaSeconds * speed * state.direction) / pathLength;
 
               if (pingPong) {
                 if (state.progress >= 1) {
@@ -558,8 +559,11 @@ export function createPathMoverSystemDefinition(resolvePath: GameplayPathResolve
 
 export function createWaypointPath(points: Vec3[], loop = false): GameplayPathDefinition {
   const normalizedPoints = points.length > 0 ? points : [vec3(0, 0, 0)];
+  const segmentLengths = normalizedPoints.slice(0, -1).map((point, index) => lengthBetween(point, normalizedPoints[index + 1]));
+  const totalLength = segmentLengths.reduce((sum, length) => sum + length, 0);
 
   return {
+    length: totalLength,
     loop,
     sample(progress) {
       if (normalizedPoints.length === 1) {
@@ -567,12 +571,24 @@ export function createWaypointPath(points: Vec3[], loop = false): GameplayPathDe
       }
 
       const clampedProgress = clampProgress(progress);
-      const scaled = clampedProgress * (normalizedPoints.length - 1);
-      const index = Math.min(normalizedPoints.length - 2, Math.floor(scaled));
+      if (totalLength <= 0.000001) {
+        return normalizedPoints[0];
+      }
+
+      const targetDistance = clampedProgress * totalLength;
+      let traversedDistance = 0;
+      let index = 0;
+
+      while (index < segmentLengths.length - 1 && traversedDistance + segmentLengths[index] < targetDistance) {
+        traversedDistance += segmentLengths[index];
+        index += 1;
+      }
+
       const nextIndex = Math.min(normalizedPoints.length - 1, index + 1);
-      const alpha = scaled - index;
       const start = normalizedPoints[index];
       const end = normalizedPoints[nextIndex];
+      const segmentLength = segmentLengths[index] ?? 0;
+      const alpha = segmentLength <= 0.000001 ? 0 : (targetDistance - traversedDistance) / segmentLength;
 
       return vec3(
         start.x + (end.x - start.x) * alpha,
@@ -883,6 +899,10 @@ function distanceSquared(left: Vec3, right: Vec3) {
   const dz = left.z - right.z;
 
   return dx * dx + dy * dy + dz * dz;
+}
+
+function lengthBetween(left: Vec3, right: Vec3) {
+  return Math.sqrt(distanceSquared(left, right));
 }
 
 function distanceToSegmentSquared(point: Vec3, start: Vec3, end: Vec3) {

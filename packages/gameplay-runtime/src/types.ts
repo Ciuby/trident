@@ -149,6 +149,7 @@ export type GameplayRuntime = GameplayRuntimeApi & {
 };
 
 export type GameplayPathDefinition = {
+  length?: number;
   loop?: boolean;
   sample: (progress: number) => Vec3;
 };

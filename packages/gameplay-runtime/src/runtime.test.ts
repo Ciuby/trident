@@ -145,7 +145,7 @@ describe("gameplay runtime", () => {
     runtime.update(0.25);
 
     expect(runtime.getNodeWorldTransform(node.id)?.position.y).toBeCloseTo(3, 4);
-    expect(runtime.getNodeWorldTransform(node.id)?.position.z).toBeCloseTo(11, 4);
+    expect(runtime.getNodeWorldTransform(node.id)?.position.z).toBeCloseTo(10.25, 4);
   });
 
   test("ping-pongs path movers when loop and reverse are both enabled", () => {
@@ -185,10 +185,21 @@ describe("gameplay runtime", () => {
 
     runtime.start();
     runtime.update(1);
+    expect(runtime.getNodeWorldTransform(node.id)?.position.z).toBeCloseTo(1, 4);
+
+    runtime.update(3);
     expect(runtime.getNodeWorldTransform(node.id)?.position.z).toBeCloseTo(4, 4);
 
-    runtime.update(0.25);
+    runtime.update(1);
     expect(runtime.getNodeWorldTransform(node.id)?.position.z).toBeCloseTo(3, 4);
+  });
+
+  test("keeps path mover speed constant across uneven segments", () => {
+    const path = createWaypointPath([vec3(0, 0, 0), vec3(1, 0, 0), vec3(5, 0, 0)]);
+
+    expect(path.sample(0.1).x).toBeCloseTo(0.5, 4);
+    expect(path.sample(0.5).x).toBeCloseTo(2.5, 4);
+    expect(path.sample(0.9).x).toBeCloseTo(4.5, 4);
   });
 
   test("processes queued micro-phases in order within a frame", () => {
@@ -407,6 +418,6 @@ describe("gameplay runtime", () => {
     expect(events).toContain("trigger.enter");
     expect(events).toContain("sequence.started");
     expect(events).toContain("path.started");
-    expect(runtime.getNodeWorldTransform(node.id)?.position.z).toBeCloseTo(2, 4);
+    expect(runtime.getNodeWorldTransform(node.id)?.position.z).toBeCloseTo(0.5, 4);
   });
 });
