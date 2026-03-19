@@ -1,14 +1,14 @@
 import {
   createEditableMeshFromPolygons,
   type EditableMeshPolygon
-} from "@web-hammer/geometry-kernel";
+} from "@gg-ez/geometry-kernel";
 import {
   vec2,
   vec3,
   type PrimitiveNodeData,
   type MeshNode,
   type PrimitiveNode
-} from "@web-hammer/shared";
+} from "@gg-ez/shared";
 import {
   BoxGeometry,
   ConeGeometry,

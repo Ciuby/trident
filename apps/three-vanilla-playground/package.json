@@ -1,5 +1,5 @@
 {
-  "name": "@web-hammer/three-vanilla-playground",
+  "name": "@gg-ez/three-vanilla-playground",
   "private": true,
   "version": "0.0.0",
   "license": "MIT",
@@ -12,11 +12,11 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.2",
-    "@web-hammer/gameplay-runtime": "workspace:*",
-    "@web-hammer/render-pipeline": "workspace:*",
-    "@web-hammer/runtime-physics-rapier": "workspace:*",
-    "@web-hammer/shared": "workspace:*",
-    "@web-hammer/three-runtime": "workspace:*",
+    "@gg-ez/gameplay-runtime": "workspace:*",
+    "@gg-ez/render-pipeline": "workspace:*",
+    "@gg-ez/runtime-physics-rapier": "workspace:*",
+    "@gg-ez/shared": "workspace:*",
+    "@gg-ez/three-runtime": "workspace:*",
     "three": "^0.181.1"
   },
   "devDependencies": {

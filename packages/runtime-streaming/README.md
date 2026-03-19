@@ -1,4 +1,4 @@
-# @web-hammer/runtime-streaming
+# @gg-ez/runtime-streaming
 
 Optional world-streaming orchestration for Web Hammer runtime chunks.
 
@@ -12,13 +12,13 @@ This package owns:
 ## Install
 
 ```bash
-bun add @web-hammer/runtime-streaming
+bun add @gg-ez/runtime-streaming
 ```
 
 ## Example
 
 ```ts
-import { createRuntimeWorldManager } from "@web-hammer/runtime-streaming";
+import { createRuntimeWorldManager } from "@gg-ez/runtime-streaming";
 
 const manager = createRuntimeWorldManager({
   async loadChunk(chunk) {

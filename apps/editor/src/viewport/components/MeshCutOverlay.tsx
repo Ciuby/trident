@@ -1,7 +1,7 @@
-import { buildEditableMeshFaceCutPreview, cutEditableMeshFace } from "@web-hammer/geometry-kernel";
-import { type EditableMesh, type GeometryNode, type Vec3 } from "@web-hammer/shared";
+import { buildEditableMeshFaceCutPreview, cutEditableMeshFace } from "@gg-ez/geometry-kernel";
+import { type EditableMesh, type GeometryNode, type Vec3 } from "@gg-ez/shared";
 import { useEffect, useMemo, useState } from "react";
-import type { ViewportState } from "@web-hammer/render-pipeline";
+import type { ViewportState } from "@gg-ez/render-pipeline";
 import { NodeTransformGroup } from "@/viewport/components/NodeTransformGroup";
 import { createMeshEditHandles } from "@/viewport/editing";
 import { EditableFaceSelectionHitArea, PreviewLine } from "@/viewport/components/SelectionVisuals";

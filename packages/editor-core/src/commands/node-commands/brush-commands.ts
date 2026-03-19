@@ -5,9 +5,9 @@ import {
   splitAxisAlignedBrush,
   splitAxisAlignedBrushAtCoordinate,
   type BrushAxis
-} from "@web-hammer/geometry-kernel";
-import type { BrushNode, Transform } from "@web-hammer/shared";
-import { isBrushNode } from "@web-hammer/shared";
+} from "@gg-ez/geometry-kernel";
+import type { BrushNode, Transform } from "@gg-ez/shared";
+import { isBrushNode } from "@gg-ez/shared";
 import type { Command } from "../command-stack";
 import type { SceneDocument } from "../../document/scene-document";
 import { createSetBrushDataCommand } from "./data-commands";

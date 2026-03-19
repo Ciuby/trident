@@ -17,11 +17,11 @@ import {
   mergeEditableMeshVertices,
   sculptEditableMeshSamples,
   subdivideEditableMeshFace
-} from "@web-hammer/geometry-kernel";
+} from "@gg-ez/geometry-kernel";
 import {
   applyWebHammerWorldSettings,
   clearWebHammerWorldSettings
-} from "@web-hammer/three-runtime";
+} from "@gg-ez/three-runtime";
 import {
   addVec3,
   averageVec3,
@@ -38,7 +38,7 @@ import {
   type ScenePathDefinition,
   type EditableMesh,
   type Vec3
-} from "@web-hammer/shared";
+} from "@gg-ez/shared";
 import {
   applyBrushEditTransform,
   applyMeshEditTransform,

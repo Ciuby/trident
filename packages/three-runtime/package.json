@@ -1,5 +1,5 @@
 {
-  "name": "@web-hammer/three-runtime",
+  "name": "@gg-ez/three-runtime",
   "version": "0.0.0",
   "license": "MIT",
   "type": "module",
@@ -10,9 +10,9 @@
     "@types/three": "^0.181.0"
   },
   "dependencies": {
-    "@web-hammer/runtime-build": "workspace:*",
-    "@web-hammer/runtime-format": "workspace:*",
-    "@web-hammer/shared": "workspace:*",
+    "@gg-ez/runtime-build": "workspace:*",
+    "@gg-ez/runtime-format": "workspace:*",
+    "@gg-ez/shared": "workspace:*",
     "three": "^0.181.1"
   }
 }

@@ -1,5 +1,5 @@
-import { getFaceVertices, triangulateMeshFace } from "@web-hammer/geometry-kernel";
-import { type EditableMesh, type GeometryNode, type Vec3 } from "@web-hammer/shared";
+import { getFaceVertices, triangulateMeshFace } from "@gg-ez/geometry-kernel";
+import { type EditableMesh, type GeometryNode, type Vec3 } from "@gg-ez/shared";
 import { useEffect, useRef, useState } from "react";
 import { BufferGeometry, DoubleSide, Float32BufferAttribute, Uint32BufferAttribute } from "three";
 import { NodeTransformGroup } from "@/viewport/components/NodeTransformGroup";

@@ -9,8 +9,8 @@ import {
   scaleVec3,
   subVec3,
   vec3
-} from "@web-hammer/shared";
-import type { Vec3 } from "@web-hammer/shared";
+} from "@gg-ez/shared";
+import type { Vec3 } from "@gg-ez/shared";
 
 export function computePolygonNormal(vertices: Vec3[]): Vec3 {
   if (vertices.length < 3) {

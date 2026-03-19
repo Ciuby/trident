@@ -6,8 +6,8 @@ import {
   createSequenceSystemDefinition,
   createTriggerSystemDefinition,
   type GameplayRuntimeSystemDefinition
-} from "@web-hammer/gameplay-runtime";
-import type { WebHammerEngineScene } from "@web-hammer/three-runtime";
+} from "@gg-ez/gameplay-runtime";
+import type { WebHammerEngineScene } from "@gg-ez/three-runtime";
 
 export type PlaybackGameplaySystemsState = {
   mover: boolean;

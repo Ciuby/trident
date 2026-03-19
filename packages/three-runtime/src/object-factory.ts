@@ -1,5 +1,5 @@
-import type { Asset, PropPhysics, Transform, Vec3 } from "@web-hammer/shared";
-import { resolveInstancingSourceNode, resolveSceneGraph, vec3 } from "@web-hammer/shared";
+import type { Asset, PropPhysics, Transform, Vec3 } from "@gg-ez/shared";
+import { resolveInstancingSourceNode, resolveSceneGraph, vec3 } from "@gg-ez/shared";
 import {
   AmbientLight,
   BackSide,

@@ -10,7 +10,7 @@ Related guides:
 
 ## Build-Time Package
 
-Use `@web-hammer/runtime-build` for headless compilation.
+Use `@gg-ez/runtime-build` for headless compilation.
 
 Main APIs:
 
@@ -40,7 +40,7 @@ import {
   buildRuntimeBundleFromSnapshot,
   buildRuntimeSceneFromSnapshot,
   packRuntimeBundle
-} from "@web-hammer/runtime-build";
+} from "@gg-ez/runtime-build";
 
 const runtimeScene = await buildRuntimeSceneFromSnapshot(snapshot);
 

@@ -1,4 +1,4 @@
-import { executeWorkerRequest, type WorkerRequest, type WorkerResponse } from "@web-hammer/workers";
+import { executeWorkerRequest, type WorkerRequest, type WorkerResponse } from "@gg-ez/workers";
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const response: WorkerResponse = await executeWorkerRequest(event.data);

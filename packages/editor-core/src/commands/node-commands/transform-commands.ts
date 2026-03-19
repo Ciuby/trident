@@ -1,5 +1,5 @@
-import type { Transform, Vec3 } from "@web-hammer/shared";
-import { isInstancingNode, scaleVec3, vec3 } from "@web-hammer/shared";
+import type { Transform, Vec3 } from "@gg-ez/shared";
+import { isInstancingNode, scaleVec3, vec3 } from "@gg-ez/shared";
 import type { Command } from "../command-stack";
 import type { SceneDocument } from "../../document/scene-document";
 import { applyPositionDelta, flipScaleAxis } from "./helpers";

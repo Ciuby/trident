@@ -10,7 +10,7 @@ Related guides:
 
 ## World-Level Contract
 
-Use `RuntimeWorldIndex` from `@web-hammer/runtime-format` as the world-level contract.
+Use `RuntimeWorldIndex` from `@gg-ez/runtime-format` as the world-level contract.
 
 A runtime scene is one chunk.
 
@@ -18,7 +18,7 @@ A world index is the streaming contract that describes multiple chunks.
 
 ## Streaming Package
 
-Use `@web-hammer/runtime-streaming`.
+Use `@gg-ez/runtime-streaming`.
 
 Main APIs:
 
@@ -30,8 +30,8 @@ Main APIs:
 ## Basic Flow
 
 ```ts
-import { createRuntimeWorldManager } from "@web-hammer/runtime-streaming";
-import { createThreeRuntimeSceneInstance } from "@web-hammer/three-runtime";
+import { createRuntimeWorldManager } from "@gg-ez/runtime-streaming";
+import { createThreeRuntimeSceneInstance } from "@gg-ez/three-runtime";
 
 const manager = createRuntimeWorldManager({
   async loadChunk(chunk) {

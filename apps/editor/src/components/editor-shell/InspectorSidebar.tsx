@@ -17,8 +17,8 @@ import {
   type TextureRecord,
   type Transform,
   type Vec3
-} from "@web-hammer/shared";
-import type { ToolId } from "@web-hammer/tool-system";
+} from "@gg-ez/shared";
+import type { ToolId } from "@gg-ez/tool-system";
 import { Button } from "@/components/ui/button";
 import { DragInput } from "@/components/ui/drag-input";
 import { Input } from "@/components/ui/input";

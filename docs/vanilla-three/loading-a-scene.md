@@ -30,7 +30,7 @@ import {
   createThreeAssetResolver,
   createThreeRuntimeSceneInstance,
   parseWebHammerEngineBundleZip
-} from "@web-hammer/three-runtime";
+} from "@gg-ez/three-runtime";
 
 const response = await fetch("/world/chunks/hub.runtime.zip");
 const bytes = new Uint8Array(await response.arrayBuffer());
@@ -56,8 +56,8 @@ threeScene.add(instance.root);
 ```ts
 import {
   createThreeRuntimeSceneInstance
-} from "@web-hammer/three-runtime";
-import { parseRuntimeScene } from "@web-hammer/runtime-format";
+} from "@gg-ez/three-runtime";
+import { parseRuntimeScene } from "@gg-ez/runtime-format";
 
 const response = await fetch("/world/chunks/hub/scene.runtime.json");
 const manifest = parseRuntimeScene(await response.text());
@@ -87,7 +87,7 @@ If you want to apply or clear skybox/fog state manually:
 import {
   applyRuntimeWorldSettingsToThreeScene,
   clearRuntimeWorldSettingsFromThreeScene
-} from "@web-hammer/three-runtime";
+} from "@gg-ez/three-runtime";
 
 await applyRuntimeWorldSettingsToThreeScene(threeScene, {
   settings: manifest.settings

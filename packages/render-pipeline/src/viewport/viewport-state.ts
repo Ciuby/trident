@@ -1,4 +1,4 @@
-import { vec3 } from "@web-hammer/shared";
+import { vec3 } from "@gg-ez/shared";
 
 export const gridSnapValues = [1, 2, 4, 8, 16, 32, 64, 128] as const;
 

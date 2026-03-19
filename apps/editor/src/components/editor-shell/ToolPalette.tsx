@@ -1,6 +1,6 @@
-import type { GridSnapValue } from "@web-hammer/render-pipeline";
-import type { BrushShape, EntityType, LightType, PrimitiveShape } from "@web-hammer/shared";
-import type { ToolId } from "@web-hammer/tool-system";
+import type { GridSnapValue } from "@gg-ez/render-pipeline";
+import type { BrushShape, EntityType, LightType, PrimitiveShape } from "@gg-ez/shared";
+import type { ToolId } from "@gg-ez/tool-system";
 import { AnimatePresence, motion } from "motion/react";
 import { CreationToolBar } from "@/components/editor-shell/CreationToolBar";
 import { MeshEditToolBars } from "@/components/editor-shell/MeshEditToolBars";

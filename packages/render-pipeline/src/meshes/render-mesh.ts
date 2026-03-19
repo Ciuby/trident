@@ -1,5 +1,5 @@
-import { getFaceVertices, reconstructBrushFaces, triangulateMeshFace } from "@web-hammer/geometry-kernel";
-import type { Asset, AssetID, GeometryNode, Material, MaterialID, MaterialRenderSide, NodeID, PrimitiveRole, PropPhysics, Vec2, Vec3 } from "@web-hammer/shared";
+import { getFaceVertices, reconstructBrushFaces, triangulateMeshFace } from "@gg-ez/geometry-kernel";
+import type { Asset, AssetID, GeometryNode, Material, MaterialID, MaterialRenderSide, NodeID, PrimitiveRole, PropPhysics, Vec2, Vec3 } from "@gg-ez/shared";
 import {
   crossVec3,
   dotVec3,
@@ -10,7 +10,7 @@ import {
   normalizeVec3,
   subVec3,
   vec3
-} from "@web-hammer/shared";
+} from "@gg-ez/shared";
 
 export type RenderPrimitive =
   | {

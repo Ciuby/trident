@@ -1,7 +1,7 @@
 import type { RapierRigidBody } from "@react-three/rapier";
-import type { GameplayRuntime } from "@web-hammer/gameplay-runtime";
-import type { DerivedRenderScene } from "@web-hammer/render-pipeline";
-import type { SceneSettings, Vec3 } from "@web-hammer/shared";
+import type { GameplayRuntime } from "@gg-ez/gameplay-runtime";
+import type { DerivedRenderScene } from "@gg-ez/render-pipeline";
+import type { SceneSettings, Vec3 } from "@gg-ez/shared";
 import type { Object3D } from "three";
 
 export type AssetPathResolver = (path: string) => Promise<string> | string;

@@ -1,5 +1,5 @@
 {
-  "name": "@web-hammer/editor-core",
+  "name": "@gg-ez/editor-core",
   "version": "0.0.0",
   "license": "MIT",
   "type": "module",
@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@web-hammer/geometry-kernel": "workspace:*",
-    "@web-hammer/shared": "workspace:*"
+    "@gg-ez/geometry-kernel": "workspace:*",
+    "@gg-ez/shared": "workspace:*"
   }
 }

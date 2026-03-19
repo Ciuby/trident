@@ -1,21 +1,21 @@
-# @web-hammer/three-runtime
+# @gg-ez/three-runtime
 
 Three.js adapter for Web Hammer runtime content.
 
-`@web-hammer/three-runtime` no longer owns the runtime format or build pipeline.
+`@gg-ez/three-runtime` no longer owns the runtime format or build pipeline.
 
 Package split:
 
-- `@web-hammer/runtime-format`: runtime contracts, parsing, validation, migration
-- `@web-hammer/runtime-build`: `.whmap` compilation, asset externalization, bundle packing
-- `@web-hammer/three-runtime`: Three object creation and scene instances
-- `@web-hammer/runtime-streaming`: optional chunk/world orchestration
-- `@web-hammer/runtime-physics-rapier`: optional Rapier bindings
+- `@gg-ez/runtime-format`: runtime contracts, parsing, validation, migration
+- `@gg-ez/runtime-build`: `.whmap` compilation, asset externalization, bundle packing
+- `@gg-ez/three-runtime`: Three object creation and scene instances
+- `@gg-ez/runtime-streaming`: optional chunk/world orchestration
+- `@gg-ez/runtime-physics-rapier`: optional Rapier bindings
 
 ## Install
 
 ```bash
-bun add @web-hammer/three-runtime three
+bun add @gg-ez/three-runtime three
 ```
 
 ## Host Ownership
@@ -40,7 +40,7 @@ import {
   createThreeAssetResolver,
   createThreeRuntimeSceneInstance,
   parseWebHammerEngineBundleZip
-} from "@web-hammer/three-runtime";
+} from "@gg-ez/three-runtime";
 
 const response = await fetch("/levels/tutorial.runtime.zip");
 const zipBytes = new Uint8Array(await response.arrayBuffer());
@@ -77,7 +77,7 @@ If you still want the old convenience surface, `loadWebHammerEngineScene()` rema
 ## Lower-Level Object Factory
 
 ```ts
-import { createThreeRuntimeObjectFactory } from "@web-hammer/three-runtime";
+import { createThreeRuntimeObjectFactory } from "@gg-ez/three-runtime";
 
 const factory = createThreeRuntimeObjectFactory(scene, {
   lod: {
@@ -97,7 +97,7 @@ const instancingObjects = await factory.createInstancingObjects();
 import {
   applyRuntimeWorldSettingsToThreeScene,
   clearRuntimeWorldSettingsFromThreeScene
-} from "@web-hammer/three-runtime";
+} from "@gg-ez/three-runtime";
 
 await applyRuntimeWorldSettingsToThreeScene(threeScene, {
   settings: runtimeScene.settings
@@ -118,11 +118,11 @@ For production worlds, prefer unpacked manifests plus normal asset hosting and o
 
 Recommended stack:
 
-1. Build runtime artifacts with `@web-hammer/runtime-build`.
-2. Parse or fetch runtime manifests with `@web-hammer/runtime-format`.
-3. Instantiate Three content with `@web-hammer/three-runtime`.
-4. Add physics with `@web-hammer/runtime-physics-rapier` if needed.
-5. Add streaming with `@web-hammer/runtime-streaming` if your world is chunked.
+1. Build runtime artifacts with `@gg-ez/runtime-build`.
+2. Parse or fetch runtime manifests with `@gg-ez/runtime-format`.
+3. Instantiate Three content with `@gg-ez/three-runtime`.
+4. Add physics with `@gg-ez/runtime-physics-rapier` if needed.
+5. Add streaming with `@gg-ez/runtime-streaming` if your world is chunked.
 
 ## React Three Fiber Integration
 

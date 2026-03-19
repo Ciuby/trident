@@ -1,5 +1,5 @@
-import { computePolygonNormal, createEditableMeshFromPolygons } from "@web-hammer/geometry-kernel";
-import type { EditableMeshPolygon } from "@web-hammer/geometry-kernel";
+import { computePolygonNormal, createEditableMeshFromPolygons } from "@gg-ez/geometry-kernel";
+import type { EditableMeshPolygon } from "@gg-ez/geometry-kernel";
 import {
   addVec3,
   averageVec3,
@@ -13,7 +13,7 @@ import {
   vec3,
   type BrushShape,
   type Vec3
-} from "@web-hammer/shared";
+} from "@gg-ez/shared";
 import { createPrimitiveNodeData, createPrimitiveNodeLabel } from "@/lib/authoring";
 import { createEditableMeshFromPrimitiveData } from "@/lib/primitive-to-mesh";
 import type { BrushCreateBasis, BrushCreatePlacement, BrushCreateState } from "@/viewport/types";

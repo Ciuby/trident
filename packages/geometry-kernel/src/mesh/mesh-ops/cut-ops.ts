@@ -1,5 +1,5 @@
-import type { EditableMesh, FaceID, Vec3, VertexID } from "@web-hammer/shared";
-import { crossVec3, dotVec3, normalizeVec3, snapValue, subVec3, vec3 } from "@web-hammer/shared";
+import type { EditableMesh, FaceID, Vec3, VertexID } from "@gg-ez/shared";
+import { crossVec3, dotVec3, normalizeVec3, snapValue, subVec3, vec3 } from "@gg-ez/shared";
 import {
   areAdjacentEdgeIndices,
   createEditableMeshFromPolygons,

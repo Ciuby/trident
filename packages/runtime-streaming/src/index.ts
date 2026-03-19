@@ -1,5 +1,5 @@
-import type { RuntimeWorldChunk, RuntimeWorldIndex } from "@web-hammer/runtime-format";
-import type { Vec3 } from "@web-hammer/shared";
+import type { RuntimeWorldChunk, RuntimeWorldIndex } from "@gg-ez/runtime-format";
+import type { Vec3 } from "@gg-ez/shared";
 
 export type RuntimeChunkState = "error" | "idle" | "loaded" | "loading" | "unloading";
 

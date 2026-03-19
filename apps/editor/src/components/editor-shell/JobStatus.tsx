@@ -1,4 +1,4 @@
-import type { WorkerJob } from "@web-hammer/workers";
+import type { WorkerJob } from "@gg-ez/workers";
 import { Loader2Icon, MoonStarIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";

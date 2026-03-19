@@ -1,4 +1,4 @@
-import type { EditableMesh, FaceID, Vec3, VertexID } from "@web-hammer/shared";
+import type { EditableMesh, FaceID, Vec3, VertexID } from "@gg-ez/shared";
 import {
   createEditableMeshFromPolygons,
   getMeshPolygons,

@@ -5,8 +5,8 @@ import {
   polygonSignedArea,
   projectPolygonToPlane,
   reconstructBrushFaces
-} from "@web-hammer/geometry-kernel";
-import type { GeometryNode, MetadataValue, PrimitiveNode, Vec3 } from "@web-hammer/shared";
+} from "@gg-ez/geometry-kernel";
+import type { GeometryNode, MetadataValue, PrimitiveNode, Vec3 } from "@gg-ez/shared";
 import {
   averageVec3,
   isBrushNode,
@@ -18,7 +18,7 @@ import {
   subVec3,
   vec3,
   type Transform
-} from "@web-hammer/shared";
+} from "@gg-ez/shared";
 import type { SceneDocument, SceneDocumentSnapshot } from "../document/scene-document";
 
 export type Bounds3 = {

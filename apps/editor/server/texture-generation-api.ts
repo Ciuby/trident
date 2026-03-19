@@ -1,7 +1,7 @@
 import { fal } from "@fal-ai/client";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin, PreviewServer, ViteDevServer } from "vite";
-import type { TextureKind } from "@web-hammer/shared";
+import type { TextureKind } from "@gg-ez/shared";
 import {
   createAiTextureDraft,
   createColorPrompt,

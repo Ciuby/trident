@@ -1,4 +1,4 @@
-import type { EditableMesh, Vec3, VertexID } from "@web-hammer/shared";
+import type { EditableMesh, Vec3, VertexID } from "@gg-ez/shared";
 import {
   addVec3,
   averageVec3,
@@ -9,7 +9,7 @@ import {
   scaleVec3,
   subVec3,
   vec3
-} from "@web-hammer/shared";
+} from "@gg-ez/shared";
 import {
   createEditableMeshFromPolygons,
   findEdgeIndex,

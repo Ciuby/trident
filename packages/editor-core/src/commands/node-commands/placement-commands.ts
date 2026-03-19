@@ -8,8 +8,8 @@ import type {
   PrimitiveNode,
   Transform,
   Vec3
-} from "@web-hammer/shared";
-import { vec3 } from "@web-hammer/shared";
+} from "@gg-ez/shared";
+import { vec3 } from "@gg-ez/shared";
 import type { Command } from "../command-stack";
 import type { SceneDocument } from "../../document/scene-document";
 import { createDuplicateNodeId } from "./helpers";

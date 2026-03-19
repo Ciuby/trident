@@ -1,5 +1,5 @@
-import type { Brush } from "@web-hammer/shared";
-import { vec3 } from "@web-hammer/shared";
+import type { Brush } from "@gg-ez/shared";
+import { vec3 } from "@gg-ez/shared";
 
 export type BrushAxis = "x" | "y" | "z";
 

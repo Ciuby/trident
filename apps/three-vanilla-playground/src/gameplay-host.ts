@@ -1,6 +1,6 @@
 import { Euler, Quaternion, type Object3D } from "three";
-import type { GameplayRuntimeHost } from "@web-hammer/gameplay-runtime";
-import type { Transform } from "@web-hammer/shared";
+import type { GameplayRuntimeHost } from "@gg-ez/gameplay-runtime";
+import type { Transform } from "@gg-ez/shared";
 
 type KinematicPhysicsBody = {
   setNextKinematicRotation: (rotation: QuaternionLike) => void;

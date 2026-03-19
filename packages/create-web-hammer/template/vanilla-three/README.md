@@ -32,10 +32,10 @@ __PACKAGE_MANAGER__ run build
 
 ## Runtime Packages
 
-- `@web-hammer/three-runtime`
-- `@web-hammer/runtime-format`
-- `@web-hammer/gameplay-runtime`
-- `@web-hammer/runtime-physics-rapier`
+- `@gg-ez/three-runtime`
+- `@gg-ez/runtime-format`
+- `@gg-ez/gameplay-runtime`
+- `@gg-ez/runtime-physics-rapier`
 
 ## Notes
 

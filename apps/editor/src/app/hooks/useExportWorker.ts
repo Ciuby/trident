@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { SceneDocumentSnapshot } from "@web-hammer/editor-core";
-import type { WebHammerEngineBundle } from "@web-hammer/three-runtime";
-import type { WorkerJob, WorkerRequest, WorkerResponse } from "@web-hammer/workers";
+import type { SceneDocumentSnapshot } from "@gg-ez/editor-core";
+import type { WebHammerEngineBundle } from "@gg-ez/three-runtime";
+import type { WorkerJob, WorkerRequest, WorkerResponse } from "@gg-ez/workers";
 
 export type ExportWorkerRequest = WorkerRequest extends infer Request
   ? Request extends { id: string }

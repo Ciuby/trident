@@ -1,4 +1,4 @@
-import { addVec3, resolveSceneGraph, type Entity, type GameplayValue, type GeometryNode, type Transform, type Vec3 } from "@web-hammer/shared";
+import { addVec3, resolveSceneGraph, type Entity, type GameplayValue, type GeometryNode, type Transform, type Vec3 } from "@gg-ez/shared";
 import { type GameplayActor, type GameplayHookTarget, type GameplayRuntimeHost, type GameplayRuntimeScene, type GameplayRuntimeSceneStore } from "./types";
 
 export type GameplayWorldOptions = {

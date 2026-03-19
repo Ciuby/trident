@@ -11,8 +11,8 @@ import type {
   NodeID,
   SceneSettings,
   TextureRecord
-} from "@web-hammer/shared";
-import { createDefaultSceneSettings, isInstancingNode, makeTransform, normalizeSceneSettings, vec3 } from "@web-hammer/shared";
+} from "@gg-ez/shared";
+import { createDefaultSceneSettings, isInstancingNode, makeTransform, normalizeSceneSettings, vec3 } from "@gg-ez/shared";
 
 export type SceneDocument = {
   nodes: Map<NodeID, GeometryNode>;

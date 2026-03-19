@@ -1,5 +1,5 @@
-import { buildEditableMeshFaceSubdivisionPreview } from "@web-hammer/geometry-kernel";
-import { type EditableMesh, type GeometryNode } from "@web-hammer/shared";
+import { buildEditableMeshFaceSubdivisionPreview } from "@gg-ez/geometry-kernel";
+import { type EditableMesh, type GeometryNode } from "@gg-ez/shared";
 import { useMemo } from "react";
 import { NodeTransformGroup } from "@/viewport/components/NodeTransformGroup";
 import { BatchedHandleLineSegments, EditableFaceSelectionHitArea } from "@/viewport/components/SelectionVisuals";

@@ -5,10 +5,10 @@ import {
   reconstructBrushFaces,
   sortVerticesOnPlane,
   type ReconstructedBrushFace
-} from "@web-hammer/geometry-kernel";
-import type { BrushAxis } from "@web-hammer/geometry-kernel";
-import type { Brush, EditableMesh, Face, Plane, Transform, Vec3 } from "@web-hammer/shared";
-import { addVec3, averageVec3, crossVec3, dotVec3, lengthVec3, normalizeVec3, scaleVec3, snapValue, subVec3, vec3 } from "@web-hammer/shared";
+} from "@gg-ez/geometry-kernel";
+import type { BrushAxis } from "@gg-ez/geometry-kernel";
+import type { Brush, EditableMesh, Face, Plane, Transform, Vec3 } from "@gg-ez/shared";
+import { addVec3, averageVec3, crossVec3, dotVec3, lengthVec3, normalizeVec3, scaleVec3, snapValue, subVec3, vec3 } from "@gg-ez/shared";
 import { Euler, Matrix4, Quaternion, Vector3 } from "three";
 import { ConvexHull } from "three/examples/jsm/math/ConvexHull.js";
 

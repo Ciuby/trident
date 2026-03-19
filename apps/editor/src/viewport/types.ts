@@ -1,5 +1,5 @@
-import type { EdgeBevelProfile } from "@web-hammer/geometry-kernel";
-import type { DerivedRenderScene, ViewportState } from "@web-hammer/render-pipeline";
+import type { EdgeBevelProfile } from "@gg-ez/geometry-kernel";
+import type { DerivedRenderScene, ViewportState } from "@gg-ez/render-pipeline";
 import type {
   BrushShape,
   Brush,
@@ -10,8 +10,8 @@ import type {
   SceneSettings,
   Transform,
   Vec3
-} from "@web-hammer/shared";
-import type { ToolId } from "@web-hammer/tool-system";
+} from "@gg-ez/shared";
+import type { ToolId } from "@gg-ez/tool-system";
 import type { BrushExtrudeHandle, MeshEditMode, MeshExtrudeHandle } from "@/viewport/editing";
 import type { ConstructionPlane, ViewportPaneId, ViewportRenderMode } from "@/viewport/viewports";
 import type { Plane, Vector2 } from "three";

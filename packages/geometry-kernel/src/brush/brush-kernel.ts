@@ -5,8 +5,8 @@ import {
   normalizeVec3,
   scaleVec3,
   vec3
-} from "@web-hammer/shared";
-import type { Brush, Face, Plane, Vec3 } from "@web-hammer/shared";
+} from "@gg-ez/shared";
+import type { Brush, Face, Plane, Vec3 } from "@gg-ez/shared";
 import { computeFaceCenter, sortVerticesOnPlane, triangulatePolygon3D } from "../polygon/polygon-utils";
 
 export type ReconstructedBrushVertex = {

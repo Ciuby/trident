@@ -14,12 +14,12 @@ Read in this order:
 
 What this stack looks like:
 
-- `@web-hammer/runtime-format`: runtime manifest and world-index contracts
-- `@web-hammer/runtime-build`: build-time compilation from `.whmap` to runtime artifacts
-- `@web-hammer/three-runtime`: Three.js object creation and scene instances
-- `@web-hammer/gameplay-runtime`: headless authored hook runtime
-- `@web-hammer/runtime-physics-rapier`: optional Rapier bindings
-- `@web-hammer/runtime-streaming`: optional chunk/world orchestration
+- `@gg-ez/runtime-format`: runtime manifest and world-index contracts
+- `@gg-ez/runtime-build`: build-time compilation from `.whmap` to runtime artifacts
+- `@gg-ez/three-runtime`: Three.js object creation and scene instances
+- `@gg-ez/gameplay-runtime`: headless authored hook runtime
+- `@gg-ez/runtime-physics-rapier`: optional Rapier bindings
+- `@gg-ez/runtime-streaming`: optional chunk/world orchestration
 
 Core rule:
 

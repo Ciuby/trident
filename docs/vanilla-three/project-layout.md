@@ -92,8 +92,8 @@ export const mainScene = defineGameScene({
 ## Minimal Runtime Loader Module
 
 ```ts
-import { createThreeRuntimeSceneInstance } from "@web-hammer/three-runtime";
-import { parseRuntimeScene } from "@web-hammer/runtime-format";
+import { createThreeRuntimeSceneInstance } from "@gg-ez/three-runtime";
+import { parseRuntimeScene } from "@gg-ez/runtime-format";
 
 export async function loadRuntimeScene(chunkBaseUrl: string) {
   const response = await fetch(`${chunkBaseUrl}/scene.runtime.json`);
@@ -111,7 +111,7 @@ export async function loadRuntimeScene(chunkBaseUrl: string) {
 import {
   createGameplayRuntime,
   createGameplayRuntimeSceneFromRuntimeScene
-} from "@web-hammer/gameplay-runtime";
+} from "@gg-ez/gameplay-runtime";
 
 export function createChunkGameplay(instance: Awaited<ReturnType<typeof loadRuntimeScene>>) {
   return createGameplayRuntime({
@@ -124,7 +124,7 @@ export function createChunkGameplay(instance: Awaited<ReturnType<typeof loadRunt
 ## Minimal Streaming Module
 
 ```ts
-import { createRuntimeWorldManager } from "@web-hammer/runtime-streaming";
+import { createRuntimeWorldManager } from "@gg-ez/runtime-streaming";
 
 export function createWorldStreaming(worldIndex, threeScene) {
   return createRuntimeWorldManager({

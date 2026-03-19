@@ -6,7 +6,7 @@ import {
   vec3,
   type GeometryNode,
   type Vec3
-} from "@web-hammer/shared";
+} from "@gg-ez/shared";
 import type { BrushCreateBasis } from "@/viewport/types";
 import {
   Camera,

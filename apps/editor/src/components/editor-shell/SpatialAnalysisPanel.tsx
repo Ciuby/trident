@@ -1,4 +1,4 @@
-import type { SceneSpatialAnalysis } from "@web-hammer/editor-core";
+import type { SceneSpatialAnalysis } from "@gg-ez/editor-core";
 import { AlertTriangle, Layers3, Route, SquareStack } from "lucide-react";
 import { FloatingPanel } from "@/components/editor-shell/FloatingPanel";
 import { ScrollArea } from "@/components/ui/scroll-area";

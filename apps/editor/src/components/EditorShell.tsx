@@ -1,5 +1,5 @@
-import type { EditorCore, SceneSpatialAnalysis, TransformAxis } from "@web-hammer/editor-core";
-import type { GridSnapValue, DerivedRenderScene, ViewportState } from "@web-hammer/render-pipeline";
+import type { EditorCore, SceneSpatialAnalysis, TransformAxis } from "@gg-ez/editor-core";
+import type { GridSnapValue, DerivedRenderScene, ViewportState } from "@gg-ez/render-pipeline";
 import type {
   BrushShape,
   Brush,
@@ -14,10 +14,10 @@ import type {
   TextureRecord,
   Transform,
   Vec2
-} from "@web-hammer/shared";
-import type { PrimitiveNodeData, PrimitiveShape } from "@web-hammer/shared";
-import type { ToolId } from "@web-hammer/tool-system";
-import type { WorkerJob } from "@web-hammer/workers";
+} from "@gg-ez/shared";
+import type { PrimitiveNodeData, PrimitiveShape } from "@gg-ez/shared";
+import type { ToolId } from "@gg-ez/tool-system";
+import type { WorkerJob } from "@gg-ez/workers";
 import type { ReactNode } from "react";
 import type { CopilotSession } from "@/lib/copilot/types";
 import { AiModelPromptBar } from "@/components/editor-shell/AiModelPromptBar";

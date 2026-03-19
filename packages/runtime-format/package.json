@@ -1,5 +1,5 @@
 {
-  "name": "@web-hammer/runtime-format",
+  "name": "@gg-ez/runtime-format",
   "version": "0.0.0",
   "license": "MIT",
   "type": "module",
@@ -7,6 +7,6 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@web-hammer/shared": "workspace:*"
+    "@gg-ez/shared": "workspace:*"
   }
 }

@@ -1,7 +1,7 @@
-import { computePolygonNormal, createEditableMeshFromPolygons } from "@web-hammer/geometry-kernel";
-import type { EditableMeshPolygon } from "@web-hammer/geometry-kernel";
-import type { GeometryNode, MeshNode, MetadataValue, Vec3 } from "@web-hammer/shared";
-import { dotVec3, makeTransform, vec3 } from "@web-hammer/shared";
+import { computePolygonNormal, createEditableMeshFromPolygons } from "@gg-ez/geometry-kernel";
+import type { EditableMeshPolygon } from "@gg-ez/geometry-kernel";
+import type { GeometryNode, MeshNode, MetadataValue, Vec3 } from "@gg-ez/shared";
+import { dotVec3, makeTransform, vec3 } from "@gg-ez/shared";
 import type { Command } from "../command-stack";
 import type { SceneDocument } from "../../document/scene-document";
 import { createDuplicateNodeId } from "./helpers";

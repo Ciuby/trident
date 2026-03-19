@@ -14,8 +14,8 @@ import type {
   Vec3,
   Vec2,
   VertexID
-} from "@web-hammer/shared";
-import { almostEqual, vec3 } from "@web-hammer/shared";
+} from "@gg-ez/shared";
+import { almostEqual, vec3 } from "@gg-ez/shared";
 
 export type EditableMeshPolygon = {
   id?: FaceID;

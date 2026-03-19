@@ -1,4 +1,4 @@
-import type { Entity, GeometryNode, GroupNode, InstancingNode, Vec3 } from "@web-hammer/shared";
+import type { Entity, GeometryNode, GroupNode, InstancingNode, Vec3 } from "@gg-ez/shared";
 import {
   addVec3,
   isInstancingNode,
@@ -7,7 +7,7 @@ import {
   resolveInstancingSourceNode,
   resolveSceneGraph,
   vec3
-} from "@web-hammer/shared";
+} from "@gg-ez/shared";
 import type { Command } from "../command-stack";
 import type { SceneDocument } from "../../document/scene-document";
 import {

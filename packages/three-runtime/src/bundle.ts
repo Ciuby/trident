@@ -2,8 +2,8 @@ import {
   createWebHammerEngineBundleZip as packWebHammerEngineBundle,
   externalizeWebHammerEngineScene as externalizeWebHammerEngineSceneAssets,
   parseWebHammerEngineBundleZip as unpackWebHammerEngineBundle
-} from "@web-hammer/runtime-build";
-import type { RuntimeBundle, WebHammerEngineBundle } from "@web-hammer/runtime-format";
+} from "@gg-ez/runtime-build";
+import type { RuntimeBundle, WebHammerEngineBundle } from "@gg-ez/runtime-format";
 
 export {
   buildRuntimeBundle,
@@ -12,7 +12,7 @@ export {
   externalizeRuntimeAssets,
   packRuntimeBundle,
   unpackRuntimeBundle
-} from "@web-hammer/runtime-build";
+} from "@gg-ez/runtime-build";
 
 export function createThreeAssetResolver(bundle: RuntimeBundle) {
   const urlByPath = new Map<string, string>();

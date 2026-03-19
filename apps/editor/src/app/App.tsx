@@ -40,14 +40,14 @@ import {
   createUpsertMaterialCommand,
   createUpsertTextureCommand,
   type TransformAxis
-} from "@web-hammer/editor-core";
-import { convertBrushToEditableMesh, invertEditableMeshNormals } from "@web-hammer/geometry-kernel";
+} from "@gg-ez/editor-core";
+import { convertBrushToEditableMesh, invertEditableMeshNormals } from "@gg-ez/geometry-kernel";
 import {
   createDerivedRenderSceneCache,
   deriveRenderSceneCached,
   gridSnapValues,
   type ViewportState
-} from "@web-hammer/render-pipeline";
+} from "@gg-ez/render-pipeline";
 import {
   type BrushShape,
   type GeometryNode,
@@ -75,22 +75,22 @@ import {
   type Vec2,
   type Vec3,
   type SceneSettings
-} from "@web-hammer/shared";
-import type { PrimitiveShape } from "@web-hammer/shared";
-import { createToolSession, defaultToolId, defaultTools, type ToolId } from "@web-hammer/tool-system";
+} from "@gg-ez/shared";
+import type { PrimitiveShape } from "@gg-ez/shared";
+import { createToolSession, defaultToolId, defaultTools, type ToolId } from "@gg-ez/tool-system";
 import {
   createWorkerTaskManager,
   type WorkerJob
-} from "@web-hammer/workers";
+} from "@gg-ez/workers";
 import {
   createWebHammerEngineBundleZip,
   isWebHammerEngineBundle
-} from "@web-hammer/three-runtime";
-import { slugifyProjectName, type EditorFileMetadata } from "@web-hammer/dev-sync";
+} from "@gg-ez/three-runtime";
+import { slugifyProjectName, type EditorFileMetadata } from "@gg-ez/dev-sync";
 import { EditorShell } from "@/components/EditorShell";
 import { useGameConnection } from "@/app/hooks/useGameConnection";
 import { uiStore, type RightPanelId } from "@/state/ui-store";
-import type { Transform } from "@web-hammer/shared";
+import type { Transform } from "@gg-ez/shared";
 import type { MeshEditMode } from "@/viewport/editing";
 import { useAppHotkeys } from "@/app/hooks/useAppHotkeys";
 import { useCopilot } from "@/app/hooks/useCopilot";

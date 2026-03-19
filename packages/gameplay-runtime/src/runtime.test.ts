@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { makeTransform, vec3, type Entity, type GeometryNode } from "@web-hammer/shared";
+import { makeTransform, vec3, type Entity, type GeometryNode } from "@gg-ez/shared";
 import { GameplayGame, createGameplayRuntime } from "./runtime";
 import { GameplaySystem } from "./system";
 import {

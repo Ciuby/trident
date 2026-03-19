@@ -1,5 +1,5 @@
-import type { Brush, EditableMesh } from "@web-hammer/shared";
-import { isBrushNode, isMeshNode } from "@web-hammer/shared";
+import type { Brush, EditableMesh } from "@gg-ez/shared";
+import { isBrushNode, isMeshNode } from "@gg-ez/shared";
 import type { Command } from "../command-stack";
 import type { SceneDocument } from "../../document/scene-document";
 

@@ -1,4 +1,4 @@
-# @web-hammer/runtime-build
+# @gg-ez/runtime-build
 
 Headless runtime build utilities for Web Hammer.
 
@@ -13,7 +13,7 @@ This package owns:
 ## Install
 
 ```bash
-bun add @web-hammer/runtime-build
+bun add @gg-ez/runtime-build
 ```
 
 ## Build From A `.whmap` Snapshot
@@ -22,7 +22,7 @@ bun add @web-hammer/runtime-build
 import {
   buildRuntimeBundleFromSnapshot,
   buildRuntimeSceneFromSnapshot
-} from "@web-hammer/runtime-build";
+} from "@gg-ez/runtime-build";
 
 const runtimeScene = await buildRuntimeSceneFromSnapshot(snapshot);
 const runtimeBundle = await buildRuntimeBundleFromSnapshot(snapshot, {

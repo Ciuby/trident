@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { vec3 } from "@web-hammer/shared";
+import { vec3 } from "@gg-ez/shared";
 import { createRapierColliderDescFromRuntimePhysics, createRuntimePhysicsDescriptors } from "./index";
 
 describe("runtime-physics-rapier", () => {
