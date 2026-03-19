@@ -8,7 +8,7 @@ const packageName = packageDir.split("/").at(-1) ?? "package";
 const packageTsconfigPath = resolve(packageDir, "tsconfig.json");
 
 const nodePackages = new Set([
-  "create-web-hammer",
+  "create-ggez",
   "dev-sync",
   "game-dev",
   "runtime-build"

@@ -64,7 +64,7 @@ function collectInternalDependencies(manifest) {
     ...Object.keys(manifest.dependencies ?? {}),
     ...Object.keys(manifest.optionalDependencies ?? {}),
     ...Object.keys(manifest.peerDependencies ?? {})
-  ].filter((dependencyName) => dependencyName === "create-web-hammer" || dependencyName.startsWith("@ggez/"));
+  ].filter((dependencyName) => dependencyName === "create-ggez" || dependencyName.startsWith("@ggez/"));
 }
 
 function sortPackages(packagesToSort) {

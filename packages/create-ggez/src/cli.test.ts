@@ -6,12 +6,12 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-describe("create-web-hammer cli", () => {
+describe("create-ggez cli", () => {
   test("scaffolds a vanilla three starter project", async () => {
     const targetDir = join("/tmp", `web-hammer-starter-${Date.now()}`);
     await mkdir(targetDir, { recursive: true });
 
-    const cliPath = join(process.cwd(), "packages/create-web-hammer/src/cli.js");
+    const cliPath = join(process.cwd(), "packages/create-ggez/src/cli.js");
 
     await execFileAsync(process.execPath, [cliPath, join(targetDir, "app"), "--package-manager", "bun"]);
 

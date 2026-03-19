@@ -9,27 +9,27 @@ Related guides:
 
 ## CLI Package
 
-- package: `create-web-hammer`
-- command: `create-web-hammer`
+- package: `create-ggez`
+- command: `create-ggez`
 
 ## Create A Starter Project
 
 Using Bun:
 
 ```bash
-bunx create-web-hammer my-game
+bunx create-ggez my-game
 ```
 
 Using npm:
 
 ```bash
-npx create-web-hammer my-game --package-manager npm
+npx create-ggez my-game --package-manager npm
 ```
 
 Using pnpm:
 
 ```bash
-pnpm dlx create-web-hammer my-game --package-manager pnpm
+pnpm dlx create-ggez my-game --package-manager pnpm
 ```
 
 Inside this repository, create starters under `samples/*` so Bun can resolve the local `@ggez/*` workspace packages.

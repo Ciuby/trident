@@ -187,12 +187,12 @@ function printUsage() {
   process.stdout.write(
     [
       "Usage:",
-      "  create-web-hammer <project-dir> [--template vanilla-three] [--package-manager bun|npm|pnpm] [--force]",
+      "  create-ggez <project-dir> [--template vanilla-three] [--package-manager bun|npm|pnpm] [--force]",
       "",
       "Examples:",
-      "  bunx create-web-hammer my-game",
-      "  bunx create-web-hammer my-game --package-manager npm",
-      "  bunx create-web-hammer my-game --force",
+      "  bunx create-ggez my-game",
+      "  bunx create-ggez my-game --package-manager npm",
+      "  bunx create-ggez my-game --force",
       ""
     ].join("\n")
   );
