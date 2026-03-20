@@ -38,9 +38,9 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.2",
-    "@ggez/render-pipeline": "0.1.1",
-    "@ggez/runtime-format": "0.1.1",
-    "@ggez/shared": "0.1.1",
+    "@ggez/render-pipeline": "workspace:*",
+    "@ggez/runtime-format": "workspace:*",
+    "@ggez/shared": "workspace:*",
     "three": "^0.181.1"
   }
 }

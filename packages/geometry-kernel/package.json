@@ -34,7 +34,7 @@
   },
   "homepage": "https://github.com/vibe-stack/trident/tree/main/packages/geometry-kernel",
   "dependencies": {
-    "@ggez/shared": "0.1.1",
+    "@ggez/shared": "workspace:*",
     "clipper2-ts": "latest",
     "earcut": "^3.0.2"
   }
