@@ -14,4 +14,4 @@ const app = createGameApp({
   scenes
 });
 
-void app.loadScene(initialSceneId);
+void app.start();

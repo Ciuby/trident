@@ -45,7 +45,7 @@ export function createWebHammerGamePlugin(options = {}) {
       }
 
       if (id === RESOLVED_EDITOR_SYNC_ID) {
-        return createEditorSyncClientModule();
+        return createEditorSyncClientModule({ projectRoot });
       }
 
       return null;
@@ -59,6 +59,7 @@ export function createWebHammerGamePlugin(options = {}) {
         projectName: options.projectName ?? basename(projectRoot),
         sceneRoot
       });
+      registerSceneRegistryWatcher(server, absoluteSceneRoot);
     },
     transformIndexHtml(_html, context) {
       if (!context?.server) {
@@ -68,7 +69,7 @@ export function createWebHammerGamePlugin(options = {}) {
       return [
         {
           attrs: { type: "module" },
-          children: `import { startEditorSyncClient } from "${VIRTUAL_EDITOR_SYNC_ID}"; startEditorSyncClient();`,
+          children: createEditorSyncClientInlineScript({ projectRoot }),
           injectTo: "body",
           tag: "script"
         }
@@ -196,6 +197,7 @@ async function createSceneRegistryModule(options) {
   );
   const explicitCandidates = explicitModuleImports.map(({ importName }) => importName).join(", ");
   const sceneRootPattern = `/${normalizePath(options.sceneRoot)}/*`;
+  const editorSyncStorageNamespace = createEditorSyncStorageNamespace(options.projectRoot);
 
   return `
 import { createBundledRuntimeSceneSource, defineGameScene } from ${JSON.stringify("/src/game/runtime-scene-sources.ts")};
@@ -319,10 +321,10 @@ function resolveInitialSceneId(defaultSceneId, allScenes) {
     return defaultSceneId;
   }
 
-  const pendingSceneId = window.sessionStorage.getItem("web-hammer:editor-sync:pending-scene");
+  const pendingSceneId = window.sessionStorage.getItem(${JSON.stringify(`web-hammer:editor-sync:${editorSyncStorageNamespace}:pending-scene`)});
 
   if (pendingSceneId && pendingSceneId in allScenes) {
-    window.sessionStorage.removeItem("web-hammer:editor-sync:pending-scene");
+    window.sessionStorage.removeItem(${JSON.stringify(`web-hammer:editor-sync:${editorSyncStorageNamespace}:pending-scene`)});
     return pendingSceneId;
   }
 
@@ -331,12 +333,30 @@ function resolveInitialSceneId(defaultSceneId, allScenes) {
 `;
 }
 
-function createEditorSyncClientModule() {
-  return `
-const PENDING_SCENE_KEY = "web-hammer:editor-sync:pending-scene";
-const LAST_COMMAND_KEY = "web-hammer:editor-sync:last-command";
+function createEditorSyncClientModule(options) {
+  return `${createEditorSyncClientRuntimeSource(options, { enabled: true })}
 
-export function resolveEditorSyncInitialSceneId(defaultSceneId, sceneIds) {
+export { resolveEditorSyncInitialSceneId, startEditorSyncClient };
+`;
+}
+
+function createEditorSyncClientInlineScript(options) {
+  return `${createEditorSyncClientRuntimeSource(options, { enabled: true })}
+
+startEditorSyncClient();
+`;
+}
+
+function createEditorSyncClientRuntimeSource(options, runtimeOptions = {}) {
+  const storageNamespace = createEditorSyncStorageNamespace(options.projectRoot);
+  const enabled = runtimeOptions.enabled !== false;
+
+  return `
+const PENDING_SCENE_KEY = ${JSON.stringify(`web-hammer:editor-sync:${storageNamespace}:pending-scene`)};
+const LAST_COMMAND_KEY = ${JSON.stringify(`web-hammer:editor-sync:${storageNamespace}:last-command`)};
+const EDITOR_SYNC_ENABLED = ${JSON.stringify(enabled)};
+
+function resolveEditorSyncInitialSceneId(defaultSceneId, sceneIds) {
   if (typeof window === "undefined") {
     return defaultSceneId;
   }
@@ -351,8 +371,8 @@ export function resolveEditorSyncInitialSceneId(defaultSceneId, sceneIds) {
   return defaultSceneId;
 }
 
-export function startEditorSyncClient() {
-  if (!import.meta.env.DEV) {
+function startEditorSyncClient() {
+  if (!EDITOR_SYNC_ENABLED) {
     return () => {};
   }
 
@@ -408,6 +428,12 @@ export function startEditorSyncClient() {
 `;
 }
 
+function createEditorSyncStorageNamespace(projectRoot) {
+  return normalizePath(relative(process.cwd(), projectRoot) || projectRoot)
+    .replace(/[^a-zA-Z0-9_-]+/g, ":")
+    .replace(/^:+|:+$/g, "") || "project";
+}
+
 function isSceneRegistryRelevant(file, absoluteSceneRoot) {
   const normalizedFile = normalizePath(file);
   const normalizedSceneRoot = normalizePath(absoluteSceneRoot);
@@ -417,6 +443,25 @@ function isSceneRegistryRelevant(file, absoluteSceneRoot) {
   }
 
   return /\/(scene\.runtime\.json|scene\.meta\.json|index\.[jt]sx?)$/.test(normalizedFile);
+}
+
+function registerSceneRegistryWatcher(server, absoluteSceneRoot) {
+  const invalidate = (file) => {
+    if (!isSceneRegistryRelevant(file, absoluteSceneRoot)) {
+      return;
+    }
+
+    const virtualModule = server.moduleGraph.getModuleById(RESOLVED_SCENE_REGISTRY_ID);
+
+    if (virtualModule) {
+      server.moduleGraph.invalidateModule(virtualModule);
+    }
+
+    server.ws.send({ type: "full-reload" });
+  };
+
+  server.watcher.on("add", invalidate);
+  server.watcher.on("unlink", invalidate);
 }
 
 async function readSceneDirectories(sceneRoot) {

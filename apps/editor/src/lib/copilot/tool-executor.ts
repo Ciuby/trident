@@ -31,6 +31,7 @@ import {
 import {
   arcEditableMeshEdges,
   bevelEditableMeshEdges,
+  computePolygonNormal,
   convertBrushToEditableMesh,
   createAxisAlignedBrushFromBounds,
   cutEditableMeshFace,
@@ -38,9 +39,12 @@ import {
   extrudeEditableMeshEdge,
   extrudeEditableMeshFaces,
   fillEditableMeshFaceFromVertices,
+  getFaceVertices,
   invertEditableMeshNormals,
   mergeEditableMeshFaces,
   mergeEditableMeshVertices,
+  scaleEditableMeshVertices,
+  translateEditableMeshVertices,
   subdivideEditableMeshFace
 } from "@ggez/geometry-kernel";
 import { isBrushNode, isMeshNode, makeTransform, resolveSceneGraph, vec3 } from "@ggez/shared";
@@ -848,7 +852,31 @@ function executeToolInner(editor: EditorCore, name: string, args: Args, context:
           } while (he && he.id !== startId);
         }
 
-        return { id: f.id, vertexIds: vIds, materialId: f.materialId };
+        const faceVertices = getFaceVertices(mesh, f.id);
+        const center = faceVertices.reduce(
+          (acc, vertex) => ({
+            x: acc.x + vertex.position.x,
+            y: acc.y + vertex.position.y,
+            z: acc.z + vertex.position.z
+          }),
+          { x: 0, y: 0, z: 0 }
+        );
+        const normal = faceVertices.length >= 3
+          ? computePolygonNormal(faceVertices.map((vertex) => vertex.position))
+          : vec3(0, 0, 0);
+        const vertexCount = faceVertices.length || 1;
+
+        return {
+          id: f.id,
+          vertexIds: vIds,
+          materialId: f.materialId,
+          center: {
+            x: center.x / vertexCount,
+            y: center.y / vertexCount,
+            z: center.z / vertexCount
+          },
+          normal
+        };
       });
 
       const vertices = mesh.vertices.map((v) => ({
@@ -928,6 +956,29 @@ function executeToolInner(editor: EditorCore, name: string, args: Args, context:
         mergeEditableMeshVertices(mesh, strArray(args, "vertexIds")),
         "Merge vertices"
       );
+
+    case "translate_mesh_vertices":
+      return executeMeshOp(editor, str(args, "nodeId"), (mesh) =>
+        translateEditableMeshVertices(
+          mesh,
+          strArray(args, "vertexIds"),
+          vec3(num(args, "offsetX"), num(args, "offsetY"), num(args, "offsetZ"))
+        ),
+        "Translate vertices"
+      );
+
+    case "scale_mesh_vertices": {
+      const hasPivot = ["pivotX", "pivotY", "pivotZ"].some((key) => typeof args[key] === "number");
+      return executeMeshOp(editor, str(args, "nodeId"), (mesh) =>
+        scaleEditableMeshVertices(
+          mesh,
+          strArray(args, "vertexIds"),
+          vec3(num(args, "scaleX", 1), num(args, "scaleY", 1), num(args, "scaleZ", 1)),
+          hasPivot ? vec3(num(args, "pivotX"), num(args, "pivotY"), num(args, "pivotZ")) : undefined
+        ),
+        "Scale vertices"
+      );
+    }
 
     case "fill_mesh_face":
       return executeMeshOp(editor, str(args, "nodeId"), (mesh) =>

@@ -257,6 +257,8 @@ export function createGameApp(options: GameAppOptions) {
     }
   };
 
+  const start = () => loadScene(options.initialSceneId);
+
   const dispose = async () => {
     disposed = true;
     window.removeEventListener("resize", handleResize);
@@ -280,6 +282,7 @@ export function createGameApp(options: GameAppOptions) {
     loadScene,
     renderer,
     scene,
+    start,
     setStatus
   };
 }

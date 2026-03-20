@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { vec3 } from "@ggez/shared";
 import { computePolygonNormal } from "../../polygon/polygon-utils";
 import { createEditableMeshFromPolygons, getFaceVertexIds, getFaceVertices, validateEditableMesh } from "../editable-mesh";
+import { scaleEditableMeshVertices, translateEditableMeshVertices } from "./deform-ops";
 import { extrudeEditableMeshEdge, extrudeEditableMeshFaces } from "./extrude-ops";
 
 describe("extrudeEditableMeshFaces", () => {
@@ -137,6 +138,64 @@ describe("extrudeEditableMeshFaces", () => {
     expect(result).toBeDefined();
     expect(computeFaceNormal(result!, "back")).toEqual(backNormalBefore);
   });
+
+  test("can widen an extruded cap before a second extrusion to form a larger connected room", () => {
+    const cube = createEditableMeshFromPolygons([
+      {
+        id: "back",
+        positions: [vec3(0, 0, 0), vec3(0, 3, 0), vec3(4, 3, 0), vec3(4, 0, 0)],
+        vertexIds: ["a", "d", "c", "b"]
+      },
+      {
+        id: "front",
+        positions: [vec3(0, 0, 4), vec3(4, 0, 4), vec3(4, 3, 4), vec3(0, 3, 4)],
+        vertexIds: ["e", "f", "g", "h"]
+      },
+      {
+        id: "left",
+        positions: [vec3(0, 0, 0), vec3(0, 0, 4), vec3(0, 3, 4), vec3(0, 3, 0)],
+        vertexIds: ["a", "e", "h", "d"]
+      },
+      {
+        id: "right",
+        positions: [vec3(4, 0, 0), vec3(4, 3, 0), vec3(4, 3, 4), vec3(4, 0, 4)],
+        vertexIds: ["b", "c", "g", "f"]
+      },
+      {
+        id: "bottom",
+        positions: [vec3(0, 0, 0), vec3(4, 0, 0), vec3(4, 0, 4), vec3(0, 0, 4)],
+        vertexIds: ["a", "b", "f", "e"]
+      },
+      {
+        id: "top",
+        positions: [vec3(0, 3, 0), vec3(0, 3, 4), vec3(4, 3, 4), vec3(4, 3, 0)],
+        vertexIds: ["d", "h", "g", "c"]
+      }
+    ]);
+    const hallway = extrudeEditableMeshFaces(cube, ["front"], 2);
+
+    expect(hallway).toBeDefined();
+
+    const hallwayCapVertexIds = getFaceVertexIds(hallway!, "front:extrude:cap");
+    const widenedCap = scaleEditableMeshVertices(hallway!, hallwayCapVertexIds, vec3(1.5, 1.4, 1));
+
+    expect(widenedCap).toBeDefined();
+
+    const shiftedCap = translateEditableMeshVertices(widenedCap!, hallwayCapVertexIds, vec3(0, 0.25, 0));
+
+    expect(shiftedCap).toBeDefined();
+
+    const secondRoom = extrudeEditableMeshFaces(shiftedCap!, ["front:extrude:cap"], 3);
+
+    expect(secondRoom).toBeDefined();
+    expect(validateEditableMesh(secondRoom!).valid).toBe(true);
+
+    const hallwayCapBounds = getFaceBounds(shiftedCap!, "front:extrude:cap");
+    const secondRoomCapBounds = getFaceBounds(secondRoom!, "front:extrude:cap:extrude:cap");
+
+    expect(hallwayCapBounds.maxX - hallwayCapBounds.minX).toBeCloseTo(secondRoomCapBounds.maxX - secondRoomCapBounds.minX, 5);
+    expect(secondRoomCapBounds.maxY - secondRoomCapBounds.minY).toBeGreaterThan(3.9);
+  });
 });
 
 describe("extrudeEditableMeshEdge", () => {
@@ -188,6 +247,29 @@ function countFacesUsingEdge(mesh: Parameters<typeof validateEditableMesh>[0], e
 
 function computeFaceNormal(mesh: Parameters<typeof validateEditableMesh>[0], faceId: string) {
   return computePolygonNormal(getFaceVertices(mesh, faceId).map((vertex) => vertex.position));
+}
+
+function getFaceBounds(mesh: Parameters<typeof validateEditableMesh>[0], faceId: string) {
+  const positions = getFaceVertices(mesh, faceId).map((vertex) => vertex.position);
+
+  return positions.reduce(
+    (bounds, position) => ({
+      minX: Math.min(bounds.minX, position.x),
+      maxX: Math.max(bounds.maxX, position.x),
+      minY: Math.min(bounds.minY, position.y),
+      maxY: Math.max(bounds.maxY, position.y),
+      minZ: Math.min(bounds.minZ, position.z),
+      maxZ: Math.max(bounds.maxZ, position.z)
+    }),
+    {
+      minX: Number.POSITIVE_INFINITY,
+      maxX: Number.NEGATIVE_INFINITY,
+      minY: Number.POSITIVE_INFINITY,
+      maxY: Number.NEGATIVE_INFINITY,
+      minZ: Number.POSITIVE_INFINITY,
+      maxZ: Number.NEGATIVE_INFINITY
+    }
+  );
 }
 
 function makeEdgeKey(startId: string, endId: string) {

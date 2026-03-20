@@ -55,6 +55,96 @@ export function inflateEditableMesh(mesh: EditableMesh, factor: number): Editabl
   };
 }
 
+export function translateEditableMeshVertices(
+  mesh: EditableMesh,
+  vertexIds: VertexID[],
+  offset: Vec3,
+  epsilon = 0.0001
+): EditableMesh | undefined {
+  const selectedVertexIds = new Set(
+    vertexIds.filter((vertexId) => mesh.vertices.some((vertex) => vertex.id === vertexId))
+  );
+
+  if (selectedVertexIds.size === 0) {
+    return undefined;
+  }
+
+  if (lengthVec3(offset) <= epsilon) {
+    return {
+      ...mesh,
+      vertices: mesh.vertices.map((vertex) => ({
+        ...vertex,
+        position: vec3(vertex.position.x, vertex.position.y, vertex.position.z)
+      }))
+    };
+  }
+
+  return {
+    ...mesh,
+    vertices: mesh.vertices.map((vertex) => ({
+      ...vertex,
+      position: selectedVertexIds.has(vertex.id)
+        ? addVec3(vertex.position, offset)
+        : vec3(vertex.position.x, vertex.position.y, vertex.position.z)
+    }))
+  };
+}
+
+export function scaleEditableMeshVertices(
+  mesh: EditableMesh,
+  vertexIds: VertexID[],
+  scale: Vec3,
+  pivot?: Vec3,
+  epsilon = 0.0001
+): EditableMesh | undefined {
+  const selectedVertices = mesh.vertices.filter((vertex) => vertexIds.includes(vertex.id));
+
+  if (selectedVertices.length === 0) {
+    return undefined;
+  }
+
+  const pivotPoint = pivot ?? averageVec3(selectedVertices.map((vertex) => vertex.position));
+  const isIdentityScale =
+    Math.abs(scale.x - 1) <= epsilon &&
+    Math.abs(scale.y - 1) <= epsilon &&
+    Math.abs(scale.z - 1) <= epsilon;
+
+  if (isIdentityScale) {
+    return {
+      ...mesh,
+      vertices: mesh.vertices.map((vertex) => ({
+        ...vertex,
+        position: vec3(vertex.position.x, vertex.position.y, vertex.position.z)
+      }))
+    };
+  }
+
+  const selectedVertexIds = new Set(selectedVertices.map((vertex) => vertex.id));
+
+  return {
+    ...mesh,
+    vertices: mesh.vertices.map((vertex) => {
+      if (!selectedVertexIds.has(vertex.id)) {
+        return {
+          ...vertex,
+          position: vec3(vertex.position.x, vertex.position.y, vertex.position.z)
+        };
+      }
+
+      const localOffset = subVec3(vertex.position, pivotPoint);
+
+      return {
+        ...vertex,
+        position: vec3(
+          pivotPoint.x + localOffset.x * scale.x,
+          pivotPoint.y + localOffset.y * scale.y,
+          pivotPoint.z + localOffset.z * scale.z
+        )
+      };
+    })
+  };
+}
+
 export function offsetEditableMeshTop(mesh: EditableMesh, amount: number, epsilon = 0.0001): EditableMesh {
   if (Math.abs(amount) <= epsilon) {
     return {

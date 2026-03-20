@@ -5,7 +5,7 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
   {
     name: "place_blockout_room",
     description:
-      "Places a blockout room (enclosed box with walls, floor, ceiling). Open sides can be specified to create doorways or windows. Position is the center-bottom of the room.",
+      "Places a blockout room (enclosed box with walls, floor, ceiling). Open sides remove entire wall/floor/ceiling planes for coarse full-side openings only. Position is the center-bottom of the room.",
     parameters: {
       type: "object",
       properties: {
@@ -18,7 +18,7 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
         openSides: {
           type: "array",
           items: { type: "string", enum: ["north", "south", "east", "west", "top", "bottom"] },
-          description: "Sides to leave open (for doorways, windows, connections)"
+          description: "Whole sides to leave open. This removes the entire wall, floor, or ceiling plane and is not suitable for doorway- or hallway-sized openings."
         },
         materialId: { type: "string", description: "Material ID to apply. Use list_materials to see available IDs." },
         name: { type: "string", description: "Display name for the room node" }
@@ -610,7 +610,7 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
   },
   {
     name: "get_mesh_topology",
-    description: "Returns the face IDs, vertex IDs with positions, and edges for a mesh node. Use this before mesh editing operations to discover which faces/vertices/edges to target.",
+    description: "Returns the face IDs, vertex IDs with positions, face centers, face normals, and edges for a mesh node. Use this before mesh editing operations to discover which faces/vertices/edges to target.",
     parameters: {
       type: "object",
       properties: {
@@ -694,7 +694,7 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
   },
   {
     name: "delete_mesh_faces",
-    description: "Delete faces from a mesh, leaving holes.",
+    description: "Delete faces from a mesh, leaving real holes. Use only for intentional openings to empty space or adjacent voids, not as a shortcut for doorway- or hallway-sized passages.",
     parameters: {
       type: "object",
       properties: {
@@ -726,6 +726,39 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
         vertexIds: { type: "array", items: { type: "string" }, description: "Vertex IDs to merge" }
       },
       required: ["nodeId", "vertexIds"]
+    }
+  },
+  {
+    name: "translate_mesh_vertices",
+    description: "Translate selected mesh vertices in world space. Use this to reposition a cap or face region after cutting or extruding.",
+    parameters: {
+      type: "object",
+      properties: {
+        nodeId: { type: "string", description: "Mesh node ID" },
+        vertexIds: { type: "array", items: { type: "string" }, description: "Vertex IDs to move" },
+        offsetX: { type: "number", description: "World X offset in meters" },
+        offsetY: { type: "number", description: "World Y offset in meters" },
+        offsetZ: { type: "number", description: "World Z offset in meters" }
+      },
+      required: ["nodeId", "vertexIds", "offsetX", "offsetY", "offsetZ"]
+    }
+  },
+  {
+    name: "scale_mesh_vertices",
+    description: "Scale selected mesh vertices around their centroid or an optional pivot. Use this to widen or narrow an extruded cap before the next extrusion.",
+    parameters: {
+      type: "object",
+      properties: {
+        nodeId: { type: "string", description: "Mesh node ID" },
+        vertexIds: { type: "array", items: { type: "string" }, description: "Vertex IDs to scale" },
+        scaleX: { type: "number", description: "World-axis scale factor around the pivot for X" },
+        scaleY: { type: "number", description: "World-axis scale factor around the pivot for Y" },
+        scaleZ: { type: "number", description: "World-axis scale factor around the pivot for Z" },
+        pivotX: { type: "number", description: "Optional pivot X. Defaults to the selected vertices centroid." },
+        pivotY: { type: "number", description: "Optional pivot Y. Defaults to the selected vertices centroid." },
+        pivotZ: { type: "number", description: "Optional pivot Z. Defaults to the selected vertices centroid." }
+      },
+      required: ["nodeId", "vertexIds", "scaleX", "scaleY", "scaleZ"]
     }
   },
   {
