@@ -34,7 +34,7 @@
   },
   "homepage": "https://github.com/vibe-stack/trident/tree/main/packages/editor-core",
   "dependencies": {
-    "@ggez/geometry-kernel": "0.1.1",
-    "@ggez/shared": "0.1.1"
+    "@ggez/geometry-kernel": "workspace:*",
+    "@ggez/shared": "workspace:*"
   }
 }

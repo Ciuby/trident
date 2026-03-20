@@ -34,6 +34,6 @@
   },
   "homepage": "https://github.com/vibe-stack/trident/tree/main/packages/runtime-format",
   "dependencies": {
-    "@ggez/shared": "0.1.1"
+    "@ggez/shared": "workspace:*"
   }
 }
