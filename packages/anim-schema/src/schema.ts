@@ -1,0 +1,405 @@
+import { z } from "zod";
+
+export const ANIMATION_DOCUMENT_VERSION = 1;
+export const ANIMATION_GRAPH_VERSION = 1;
+export const ANIMATION_ARTIFACT_VERSION = 1;
+export const ANIMATION_ARTIFACT_FORMAT = "ggez.animation.artifact";
+
+export const animationParameterTypeSchema = z.enum(["float", "int", "bool", "trigger"]);
+export const animationBlendModeSchema = z.enum(["override", "additive"]);
+export const rootMotionModeSchema = z.enum(["none", "full", "xz", "xz-yaw"]);
+export const transitionOperatorSchema = z.enum([
+  ">",
+  ">=",
+  "<",
+  "<=",
+  "==",
+  "!=",
+  "set"
+]);
+export const interruptionSourceSchema = z.enum(["none", "current", "next", "both"]);
+
+export const vec2Schema = z.object({
+  x: z.number(),
+  y: z.number()
+});
+
+export const vec3Schema = z.object({
+  x: z.number(),
+  y: z.number(),
+  z: z.number()
+});
+
+export const quatSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  z: z.number(),
+  w: z.number()
+});
+
+export const parameterDefinitionSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  type: animationParameterTypeSchema,
+  defaultValue: z.union([z.number(), z.boolean()]).optional()
+});
+
+export const clipReferenceSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  duration: z.number().nonnegative(),
+  source: z.string().optional()
+});
+
+export const maskWeightSchema = z.object({
+  boneName: z.string().min(1),
+  weight: z.number().min(0).max(1)
+});
+
+export const boneMaskDefinitionSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  rootBoneName: z.string().optional(),
+  includeChildren: z.boolean().default(true),
+  weights: z.array(maskWeightSchema).default([])
+});
+
+export const graphEdgeSchema = z.object({
+  id: z.string().min(1),
+  sourceNodeId: z.string().min(1),
+  targetNodeId: z.string().min(1),
+  sourceHandle: z.string().optional(),
+  targetHandle: z.string().optional()
+});
+
+const graphNodeBaseSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  position: vec2Schema,
+  size: vec2Schema.optional(),
+  comment: z.string().optional(),
+  collapsed: z.boolean().optional(),
+  color: z.string().optional()
+});
+
+export const clipNodeSchema = graphNodeBaseSchema.extend({
+  kind: z.literal("clip"),
+  clipId: z.string().min(1),
+  speed: z.number().default(1),
+  loop: z.boolean().default(true)
+});
+
+export const blend1DChildSchema = z.object({
+  nodeId: z.string().min(1),
+  threshold: z.number(),
+  label: z.string().optional()
+});
+
+export const blend1DNodeSchema = graphNodeBaseSchema.extend({
+  kind: z.literal("blend1d"),
+  parameterId: z.string().min(1),
+  children: z.array(blend1DChildSchema).min(1)
+});
+
+export const blend2DChildSchema = z.object({
+  nodeId: z.string().min(1),
+  x: z.number(),
+  y: z.number(),
+  label: z.string().optional()
+});
+
+export const blend2DNodeSchema = graphNodeBaseSchema.extend({
+  kind: z.literal("blend2d"),
+  xParameterId: z.string().min(1),
+  yParameterId: z.string().min(1),
+  children: z.array(blend2DChildSchema).min(1)
+});
+
+export const transitionConditionSchema = z.object({
+  parameterId: z.string().min(1),
+  operator: transitionOperatorSchema,
+  value: z.union([z.number(), z.boolean()]).optional()
+});
+
+export const stateMachineStateSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  motionNodeId: z.string().min(1),
+  speed: z.number().default(1),
+  cycleOffset: z.number().default(0)
+});
+
+export const stateMachineTransitionSchema = z.object({
+  id: z.string().min(1),
+  fromStateId: z.string().min(1).optional(),
+  toStateId: z.string().min(1),
+  duration: z.number().nonnegative().default(0.15),
+  hasExitTime: z.boolean().default(false),
+  exitTime: z.number().min(0).max(1).optional(),
+  interruptionSource: interruptionSourceSchema.default("none"),
+  conditions: z.array(transitionConditionSchema).default([])
+});
+
+export const stateMachineNodeSchema = graphNodeBaseSchema.extend({
+  kind: z.literal("stateMachine"),
+  entryStateId: z.string().min(1),
+  states: z.array(stateMachineStateSchema).min(1),
+  transitions: z.array(stateMachineTransitionSchema).default([]),
+  anyStateTransitions: z.array(stateMachineTransitionSchema).default([])
+});
+
+export const subgraphNodeSchema = graphNodeBaseSchema.extend({
+  kind: z.literal("subgraph"),
+  graphId: z.string().min(1)
+});
+
+export const outputNodeSchema = graphNodeBaseSchema.extend({
+  kind: z.literal("output"),
+  sourceNodeId: z.string().min(1).optional()
+});
+
+export const graphNodeSchema = z.discriminatedUnion("kind", [
+  clipNodeSchema,
+  blend1DNodeSchema,
+  blend2DNodeSchema,
+  stateMachineNodeSchema,
+  subgraphNodeSchema,
+  outputNodeSchema
+]);
+
+export const editorGraphSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  outputNodeId: z.string().min(1),
+  nodes: z.array(graphNodeSchema).default([]),
+  edges: z.array(graphEdgeSchema).default([])
+});
+
+export const editorLayerSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  graphId: z.string().min(1),
+  weight: z.number().min(0).max(1).default(1),
+  blendMode: animationBlendModeSchema.default("override"),
+  maskId: z.string().min(1).optional(),
+  rootMotionMode: rootMotionModeSchema.default("none"),
+  enabled: z.boolean().default(true)
+});
+
+export const serializableRigSchema = z.object({
+  boneNames: z.array(z.string().min(1)),
+  parentIndices: z.array(z.number().int()),
+  rootBoneIndex: z.number().int().nonnegative(),
+  bindTranslations: z.array(z.number()),
+  bindRotations: z.array(z.number()),
+  bindScales: z.array(z.number())
+});
+
+export const clipTrackSchema = z.object({
+  boneIndex: z.number().int().nonnegative(),
+  translationTimes: z.array(z.number()).optional(),
+  translationValues: z.array(z.number()).optional(),
+  rotationTimes: z.array(z.number()).optional(),
+  rotationValues: z.array(z.number()).optional(),
+  scaleTimes: z.array(z.number()).optional(),
+  scaleValues: z.array(z.number()).optional()
+});
+
+export const serializableClipSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  duration: z.number().nonnegative(),
+  rootBoneIndex: z.number().int().nonnegative().optional(),
+  tracks: z.array(clipTrackSchema)
+});
+
+export const animationEditorDocumentSchema = z.object({
+  version: z.literal(ANIMATION_DOCUMENT_VERSION),
+  name: z.string().min(1),
+  entryGraphId: z.string().min(1),
+  rig: serializableRigSchema.optional(),
+  parameters: z.array(parameterDefinitionSchema).default([]),
+  clips: z.array(clipReferenceSchema).default([]),
+  masks: z.array(boneMaskDefinitionSchema).default([]),
+  graphs: z.array(editorGraphSchema).min(1),
+  layers: z.array(editorLayerSchema).min(1),
+  metadata: z
+    .object({
+      createdAt: z.string().optional(),
+      updatedAt: z.string().optional()
+    })
+    .optional()
+});
+
+export const compiledConditionSchema = z.object({
+  parameterIndex: z.number().int().nonnegative(),
+  operator: transitionOperatorSchema,
+  value: z.union([z.number(), z.boolean()]).optional()
+});
+
+export const compiledTransitionSchema = z.object({
+  fromStateIndex: z.number().int().min(-1),
+  toStateIndex: z.number().int().nonnegative(),
+  duration: z.number().nonnegative(),
+  hasExitTime: z.boolean(),
+  exitTime: z.number().min(0).max(1).optional(),
+  interruptionSource: interruptionSourceSchema,
+  conditions: z.array(compiledConditionSchema)
+});
+
+export const compiledStateSchema = z.object({
+  name: z.string().min(1),
+  motionNodeIndex: z.number().int().nonnegative(),
+  speed: z.number(),
+  cycleOffset: z.number()
+});
+
+export const compiledClipNodeSchema = z.object({
+  type: z.literal("clip"),
+  clipIndex: z.number().int().nonnegative(),
+  speed: z.number(),
+  loop: z.boolean()
+});
+
+export const compiledBlend1DNodeSchema = z.object({
+  type: z.literal("blend1d"),
+  parameterIndex: z.number().int().nonnegative(),
+  children: z
+    .array(
+      z.object({
+        nodeIndex: z.number().int().nonnegative(),
+        threshold: z.number()
+      })
+    )
+    .min(1)
+});
+
+export const compiledBlend2DNodeSchema = z.object({
+  type: z.literal("blend2d"),
+  xParameterIndex: z.number().int().nonnegative(),
+  yParameterIndex: z.number().int().nonnegative(),
+  children: z
+    .array(
+      z.object({
+        nodeIndex: z.number().int().nonnegative(),
+        x: z.number(),
+        y: z.number()
+      })
+    )
+    .min(1)
+});
+
+export const compiledStateMachineNodeSchema = z.object({
+  type: z.literal("stateMachine"),
+  machineIndex: z.number().int().nonnegative(),
+  entryStateIndex: z.number().int().nonnegative(),
+  states: z.array(compiledStateSchema).min(1),
+  transitions: z.array(compiledTransitionSchema),
+  anyStateTransitions: z.array(compiledTransitionSchema)
+});
+
+export const compiledSubgraphNodeSchema = z.object({
+  type: z.literal("subgraph"),
+  graphIndex: z.number().int().nonnegative()
+});
+
+export const compiledGraphNodeSchema = z.discriminatedUnion("type", [
+  compiledClipNodeSchema,
+  compiledBlend1DNodeSchema,
+  compiledBlend2DNodeSchema,
+  compiledStateMachineNodeSchema,
+  compiledSubgraphNodeSchema
+]);
+
+export const compiledMotionGraphSchema = z.object({
+  name: z.string().min(1),
+  rootNodeIndex: z.number().int().nonnegative(),
+  nodes: z.array(compiledGraphNodeSchema)
+});
+
+export const compiledBoneMaskSchema = z.object({
+  name: z.string().min(1),
+  weights: z.array(z.number().min(0).max(1))
+});
+
+export const compiledLayerSchema = z.object({
+  name: z.string().min(1),
+  graphIndex: z.number().int().nonnegative(),
+  weight: z.number().min(0).max(1),
+  blendMode: animationBlendModeSchema,
+  maskIndex: z.number().int().nonnegative().optional(),
+  rootMotionMode: rootMotionModeSchema,
+  enabled: z.boolean()
+});
+
+export const compiledClipSlotSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  duration: z.number().nonnegative()
+});
+
+export const compiledParameterSchema = z.object({
+  name: z.string().min(1),
+  type: animationParameterTypeSchema,
+  defaultValue: z.union([z.number(), z.boolean()]).optional()
+});
+
+export const compiledAnimatorGraphSchema = z.object({
+  version: z.literal(ANIMATION_GRAPH_VERSION),
+  name: z.string().min(1),
+  rig: serializableRigSchema.optional(),
+  parameters: z.array(compiledParameterSchema),
+  clipSlots: z.array(compiledClipSlotSchema),
+  masks: z.array(compiledBoneMaskSchema),
+  graphs: z.array(compiledMotionGraphSchema).min(1),
+  layers: z.array(compiledLayerSchema).min(1),
+  entryGraphIndex: z.number().int().nonnegative()
+});
+
+export const animationArtifactSchema = z.object({
+  format: z.literal(ANIMATION_ARTIFACT_FORMAT),
+  version: z.literal(ANIMATION_ARTIFACT_VERSION),
+  graph: compiledAnimatorGraphSchema,
+  rig: serializableRigSchema.optional(),
+  clips: z.array(serializableClipSchema).default([])
+});
+
+export type AnimationParameterType = z.infer<typeof animationParameterTypeSchema>;
+export type AnimationBlendMode = z.infer<typeof animationBlendModeSchema>;
+export type RootMotionMode = z.infer<typeof rootMotionModeSchema>;
+export type TransitionOperator = z.infer<typeof transitionOperatorSchema>;
+export type InterruptionSource = z.infer<typeof interruptionSourceSchema>;
+
+export type ParameterDefinition = z.infer<typeof parameterDefinitionSchema>;
+export type ClipReference = z.infer<typeof clipReferenceSchema>;
+export type BoneMaskDefinition = z.infer<typeof boneMaskDefinitionSchema>;
+export type GraphEdge = z.infer<typeof graphEdgeSchema>;
+export type EditorGraphNode = z.infer<typeof graphNodeSchema>;
+export type EditorGraph = z.infer<typeof editorGraphSchema>;
+export type EditorLayer = z.infer<typeof editorLayerSchema>;
+export type SerializableRig = z.infer<typeof serializableRigSchema>;
+export type SerializableClip = z.infer<typeof serializableClipSchema>;
+export type AnimationEditorDocument = z.infer<typeof animationEditorDocumentSchema>;
+export type CompiledCondition = z.infer<typeof compiledConditionSchema>;
+export type CompiledTransition = z.infer<typeof compiledTransitionSchema>;
+export type CompiledState = z.infer<typeof compiledStateSchema>;
+export type CompiledGraphNode = z.infer<typeof compiledGraphNodeSchema>;
+export type CompiledMotionGraph = z.infer<typeof compiledMotionGraphSchema>;
+export type CompiledBoneMask = z.infer<typeof compiledBoneMaskSchema>;
+export type CompiledLayer = z.infer<typeof compiledLayerSchema>;
+export type CompiledClipSlot = z.infer<typeof compiledClipSlotSchema>;
+export type CompiledParameter = z.infer<typeof compiledParameterSchema>;
+export type CompiledAnimatorGraph = z.infer<typeof compiledAnimatorGraphSchema>;
+export type AnimationArtifact = z.infer<typeof animationArtifactSchema>;
+
+export function parseAnimationEditorDocument(input: unknown): AnimationEditorDocument {
+  return animationEditorDocumentSchema.parse(input);
+}
+
+export function parseCompiledAnimatorGraph(input: unknown): CompiledAnimatorGraph {
+  return compiledAnimatorGraphSchema.parse(input);
+}
+
+export function parseAnimationArtifact(input: unknown): AnimationArtifact {
+  return animationArtifactSchema.parse(input);
+}

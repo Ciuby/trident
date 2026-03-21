@@ -1,0 +1,161 @@
+import { describe, expect, it } from "bun:test";
+import { createRigDefinition } from "@ggez/anim-core";
+import type { AnimationClipAsset } from "@ggez/anim-core";
+import type { CompiledAnimatorGraph } from "@ggez/anim-schema";
+import { createAnimatorInstance } from "./runtime";
+
+const rig = createRigDefinition({
+  boneNames: ["root"],
+  parentIndices: [-1],
+  rootBoneIndex: 0,
+  bindTranslations: [0, 0, 0],
+  bindRotations: [0, 0, 0, 1],
+  bindScales: [1, 1, 1]
+});
+
+const idleClip: AnimationClipAsset = {
+  id: "idle",
+  name: "Idle",
+  duration: 1,
+  tracks: [
+    {
+      boneIndex: 0,
+      translationTimes: new Float32Array([0]),
+      translationValues: new Float32Array([0, 0, 0])
+    }
+  ]
+};
+
+const walkClip: AnimationClipAsset = {
+  id: "walk",
+  name: "Walk",
+  duration: 1,
+  tracks: [
+    {
+      boneIndex: 0,
+      translationTimes: new Float32Array([0, 1]),
+      translationValues: new Float32Array([0, 0, 0, 2, 0, 0])
+    }
+  ]
+};
+
+describe("@ggez/anim-runtime", () => {
+  it("evaluates 1d blends and root motion", () => {
+    const graph: CompiledAnimatorGraph = {
+      version: 1,
+      name: "Blend Graph",
+      parameters: [{ name: "speed", type: "float", defaultValue: 0 }],
+      clipSlots: [
+        { id: "idle", name: "Idle", duration: 1 },
+        { id: "walk", name: "Walk", duration: 1 }
+      ],
+      masks: [],
+      graphs: [
+        {
+          name: "Locomotion",
+          rootNodeIndex: 2,
+          nodes: [
+            { type: "clip", clipIndex: 0, speed: 1, loop: true },
+            { type: "clip", clipIndex: 1, speed: 1, loop: true },
+            {
+              type: "blend1d",
+              parameterIndex: 0,
+              children: [
+                { nodeIndex: 0, threshold: 0 },
+                { nodeIndex: 1, threshold: 1 }
+              ]
+            }
+          ]
+        }
+      ],
+      layers: [
+        {
+          name: "Base",
+          graphIndex: 0,
+          weight: 1,
+          blendMode: "override",
+          rootMotionMode: "full",
+          enabled: true
+        }
+      ],
+      entryGraphIndex: 0
+    };
+
+    const animator = createAnimatorInstance({
+      rig,
+      graph,
+      clips: [idleClip, walkClip]
+    });
+
+    animator.setFloat("speed", 1);
+    const result = animator.update(0.5);
+
+    expect(result.pose.translations[0]).toBeCloseTo(1);
+    expect(result.rootMotion.translation[0]).toBeCloseTo(1);
+  });
+
+  it("evaluates state machine transitions on bool conditions", () => {
+    const graph: CompiledAnimatorGraph = {
+      version: 1,
+      name: "State Machine",
+      parameters: [{ name: "moving", type: "bool", defaultValue: false }],
+      clipSlots: [
+        { id: "idle", name: "Idle", duration: 1 },
+        { id: "walk", name: "Walk", duration: 1 }
+      ],
+      masks: [],
+      graphs: [
+        {
+          name: "Main",
+          rootNodeIndex: 2,
+          nodes: [
+            { type: "clip", clipIndex: 0, speed: 1, loop: true },
+            { type: "clip", clipIndex: 1, speed: 1, loop: true },
+            {
+              type: "stateMachine",
+              machineIndex: 0,
+              entryStateIndex: 0,
+              states: [
+                { name: "Idle", motionNodeIndex: 0, speed: 1, cycleOffset: 0 },
+                { name: "Walk", motionNodeIndex: 1, speed: 1, cycleOffset: 0 }
+              ],
+              transitions: [
+                {
+                  fromStateIndex: 0,
+                  toStateIndex: 1,
+                  duration: 0.1,
+                  hasExitTime: false,
+                  interruptionSource: "none",
+                  conditions: [{ parameterIndex: 0, operator: "==", value: true }]
+                }
+              ],
+              anyStateTransitions: []
+            }
+          ]
+        }
+      ],
+      layers: [
+        {
+          name: "Base",
+          graphIndex: 0,
+          weight: 1,
+          blendMode: "override",
+          rootMotionMode: "none",
+          enabled: true
+        }
+      ],
+      entryGraphIndex: 0
+    };
+
+    const animator = createAnimatorInstance({
+      rig,
+      graph,
+      clips: [idleClip, walkClip]
+    });
+
+    animator.setBool("moving", true);
+    animator.update(0.2);
+
+    expect(animator.outputPose.translations[0]).toBeGreaterThan(0);
+  });
+});

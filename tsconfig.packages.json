@@ -5,8 +5,7 @@
     "declaration": true,
     "declarationMap": true,
     "emitDeclarationOnly": false,
-    "noEmit": false,
-    "paths": {}
+    "noEmit": false
   },
   "include": ["packages/*/src/**/*"]
 }
