@@ -15,6 +15,14 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
+      '@ggez/anim-compiler': path.resolve(__dirname, '../../packages/anim-compiler/src/index.ts'),
+      '@ggez/anim-core': path.resolve(__dirname, '../../packages/anim-core/src/index.ts'),
+      '@ggez/anim-editor-core': path.resolve(__dirname, '../../packages/anim-editor-core/src/index.ts'),
+      '@ggez/anim-exporter': path.resolve(__dirname, '../../packages/anim-exporter/src/index.ts'),
+      '@ggez/anim-runtime': path.resolve(__dirname, '../../packages/anim-runtime/src/index.ts'),
+      '@ggez/anim-schema': path.resolve(__dirname, '../../packages/anim-schema/src/index.ts'),
+      '@ggez/anim-three': path.resolve(__dirname, '../../packages/anim-three/src/index.ts'),
+      '@ggez/anim-utils': path.resolve(__dirname, '../../packages/anim-utils/src/index.ts'),
     },
   },
 })

@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { createAnimationEditorStore } from "@ggez/anim-editor-core";
-import { AnimationEditorWorkspace } from "@ggez/anim-editor-react";
+import { AnimationEditorWorkspace } from "./editor/animation-editor-workspace";
 
 function App() {
   const storeRef = useRef(createAnimationEditorStore());

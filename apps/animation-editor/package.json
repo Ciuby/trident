@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@ggez/anim-editor-core": "workspace:*",
-    "@ggez/anim-editor-react": "workspace:*",
+    "@xyflow/react": "^12.10.1",
     "@base-ui/react": "^1.3.0",
     "@fontsource-variable/geist": "^5.2.8",
     "@tailwindcss/vite": "^4.2.2",

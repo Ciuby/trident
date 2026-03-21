@@ -6,15 +6,15 @@ import {
   ReactFlowProvider,
   type Connection,
   type Edge,
-  type Node
+  type Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { AnimationEditorStore } from "@ggez/anim-editor-core";
-import type { EditorGraphNode, ParameterDefinition } from "@ggez/anim-schema";
 import { createAnimationArtifact, serializeAnimationArtifact } from "@ggez/anim-exporter";
+import type { EditorGraphNode, ParameterDefinition } from "@ggez/anim-schema";
 import type { CSSProperties, ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { useEditorStoreValue } from "./hooks";
+import { useEditorStoreValue } from "./use-editor-store-value";
 
 const theme = {
   panelBorder: "rgba(167, 243, 208, 0.12)",
@@ -26,7 +26,6 @@ const theme = {
   fieldBackground: "rgba(255, 255, 255, 0.04)",
   fieldBackgroundStrong: "rgba(255, 255, 255, 0.06)",
   fieldText: "#ecfdf5",
-  fieldPlaceholder: "rgba(236, 253, 245, 0.4)",
   accent: "#6ee7b7",
   accentStrong: "#34d399",
   accentSoft: "rgba(52, 211, 153, 0.18)",
@@ -35,7 +34,7 @@ const theme = {
   canvasBackground: "linear-gradient(180deg, rgba(5, 8, 7, 0.98) 0%, rgba(7, 12, 10, 1) 100%)",
   canvasGrid: "rgba(110, 231, 183, 0.12)",
   edge: "rgba(167, 243, 208, 0.56)",
-  edgeLabelBackground: "rgba(5, 8, 7, 0.86)"
+  edgeLabelBackground: "rgba(5, 8, 7, 0.86)",
 } as const;
 
 const panelStyle: CSSProperties = {
@@ -47,7 +46,7 @@ const panelStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: 10,
-  boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.03)"
+  boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.03)",
 };
 
 const fieldStyle: CSSProperties = {
@@ -56,13 +55,13 @@ const fieldStyle: CSSProperties = {
   borderRadius: 10,
   padding: "8px 10px",
   fontSize: 13,
-  color: theme.fieldText,
-  background: theme.fieldBackgroundStrong
+  color: theme.panelText,
+  background: theme.fieldBackgroundStrong,
 };
 
 const helperTextStyle: CSSProperties = {
   fontSize: 12,
-  color: theme.panelMutedText
+  color: theme.panelMutedText,
 };
 
 function useSelectedGraph(store: AnimationEditorStore) {
@@ -81,7 +80,7 @@ function toCanvasNode(node: EditorGraphNode, selected = false): Node {
     id: node.id,
     position: node.position,
     data: {
-      label: `${node.name}\n${node.kind}`
+      label: `${node.name}\n${node.kind}`,
     },
     selected,
     type: "default",
@@ -93,8 +92,10 @@ function toCanvasNode(node: EditorGraphNode, selected = false): Node {
       padding: 12,
       width: 180,
       whiteSpace: "pre-wrap",
-      boxShadow: selected ? "0 0 0 1px rgba(110, 231, 183, 0.18), 0 16px 40px rgba(0, 0, 0, 0.28)" : "0 12px 32px rgba(0, 0, 0, 0.22)"
-    }
+      boxShadow: selected
+        ? "0 0 0 1px rgba(110, 231, 183, 0.18), 0 16px 40px rgba(0, 0, 0, 0.28)"
+        : "0 12px 32px rgba(0, 0, 0, 0.22)",
+    },
   };
 }
 
@@ -108,7 +109,7 @@ function buildCanvasEdges(nodes: EditorGraphNode[], graphEdges: { id: string; so
           id: `${child.nodeId}->${node.id}`,
           source: child.nodeId,
           target: node.id,
-          label: child.threshold.toString()
+          label: child.threshold.toString(),
         });
       });
     } else if (node.kind === "blend2d") {
@@ -117,7 +118,7 @@ function buildCanvasEdges(nodes: EditorGraphNode[], graphEdges: { id: string; so
           id: `${child.nodeId}->${node.id}`,
           source: child.nodeId,
           target: node.id,
-          label: `${child.x}, ${child.y}`
+          label: `${child.x}, ${child.y}`,
         });
       });
     }
@@ -142,14 +143,7 @@ function TextInput(props: {
   onChange: (value: string) => void;
   type?: "text" | "number";
 }) {
-  return (
-    <input
-      value={props.value}
-      type={props.type ?? "text"}
-      onChange={(event) => props.onChange(event.target.value)}
-      style={fieldStyle}
-    />
-  );
+  return <input value={props.value} type={props.type ?? "text"} onChange={(event) => props.onChange(event.target.value)} style={fieldStyle} />;
 }
 
 function SelectInput(props: {
@@ -163,7 +157,7 @@ function SelectInput(props: {
       onChange={(event) => props.onChange(event.target.value)}
       style={{
         ...fieldStyle,
-        appearance: "none"
+        appearance: "none",
       }}
     >
       {props.options.map((option) => (
@@ -188,7 +182,7 @@ function ToolbarButton(props: { label: string; onClick: () => void }) {
         cursor: "pointer",
         fontSize: 13,
         fontWeight: 600,
-        boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.04)"
+        boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.04)",
       }}
     >
       {props.label}
@@ -243,9 +237,7 @@ function NodeInspector({ store }: { store: AnimationEditorStore }) {
               options={state.document.parameters.map((parameter) => ({ label: parameter.name, value: parameter.id }))}
             />
           </label>
-          <div style={helperTextStyle}>
-            Children are created by connecting clip nodes into this blend node on the canvas.
-          </div>
+          <div style={helperTextStyle}>Children are created by connecting clip nodes into this blend node on the canvas.</div>
         </>
       ) : null}
 
@@ -281,11 +273,7 @@ function NodeInspector({ store }: { store: AnimationEditorStore }) {
         </label>
       ) : null}
 
-      {node.kind === "output" ? (
-        <div style={helperTextStyle}>
-          Connect a motion node into the output node to define the graph result.
-        </div>
-      ) : null}
+      {node.kind === "output" ? <div style={helperTextStyle}>Connect a motion node into the output node to define the graph result.</div> : null}
 
       {node.kind === "stateMachine" ? (
         <div style={helperTextStyle}>
@@ -302,20 +290,14 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
   const graph = useSelectedGraph(store);
   const [artifactJson, setArtifactJson] = useState("");
 
-  const nodes = useMemo(
-    () =>
-      graph.nodes.map((node) =>
-        toCanvasNode(node, state.selection.nodeIds.includes(node.id))
-      ),
-    [graph, state.selection.nodeIds]
-  );
-
+  const nodes = useMemo(() => graph.nodes.map((node) => toCanvasNode(node, state.selection.nodeIds.includes(node.id))), [graph, state.selection.nodeIds]);
   const edges = useMemo(() => buildCanvasEdges(graph.nodes, graph.edges), [graph]);
 
   function handleConnect(connection: Connection) {
     if (!connection.source || !connection.target) {
       return;
     }
+
     store.connectNodes(graph.id, connection.source, connection.target);
   }
 
@@ -325,13 +307,14 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
       setArtifactJson(
         serializeAnimationArtifact(
           createAnimationArtifact({
-            graph: result.graph
+            graph: result.graph,
           })
         )
       );
-    } else {
-      setArtifactJson("");
+      return;
     }
+
+    setArtifactJson("");
   }
 
   return (
@@ -343,7 +326,7 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
           gridTemplateRows: "auto minmax(0, 1fr)",
           gap: 16,
           height: "100%",
-          minHeight: 0
+          minHeight: 0,
         }}
       >
         <div style={{ gridColumn: "1 / span 3", display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -374,7 +357,7 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
                   textAlign: "left",
                   background: entry.id === state.selection.graphId ? theme.accentSoft : theme.fieldBackground,
                   color: theme.panelText,
-                  cursor: "pointer"
+                  cursor: "pointer",
                 }}
               >
                 {entry.name}
@@ -393,7 +376,7 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
                     { label: "Float", value: "float" },
                     { label: "Int", value: "int" },
                     { label: "Bool", value: "bool" },
-                    { label: "Trigger", value: "trigger" }
+                    { label: "Trigger", value: "trigger" },
                   ]}
                 />
               </div>
@@ -433,7 +416,7 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
             overflow: "hidden",
             minHeight: 0,
             background: theme.canvasBackground,
-            boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.03)"
+            boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.03)",
           }}
         >
           <ReactFlow
@@ -444,18 +427,18 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
             defaultEdgeOptions={{
               style: {
                 stroke: theme.edge,
-                strokeWidth: 1.5
+                strokeWidth: 1.5,
               },
               labelStyle: {
                 fill: theme.panelText,
                 fontSize: 11,
-                fontWeight: 600
+                fontWeight: 600,
               },
               labelBgStyle: {
                 fill: theme.edgeLabelBackground,
                 fillOpacity: 1,
-                stroke: theme.fieldBorder
-              }
+                stroke: theme.fieldBorder,
+              },
             }}
             style={{ background: theme.canvasBackground }}
             onSelectionChange={(selection) => {
@@ -463,7 +446,7 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
             }}
             onNodeDragStop={(_, draggedNode) => {
               store.moveNodes(graph.id, {
-                [draggedNode.id]: draggedNode.position
+                [draggedNode.id]: draggedNode.position,
               });
             }}
             onConnect={handleConnect}
@@ -495,7 +478,7 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
                   style={{
                     borderLeft: diagnostic.severity === "error" ? `3px solid ${theme.danger}` : `3px solid ${theme.warning}`,
                     paddingLeft: 8,
-                    fontSize: 13
+                    fontSize: 13,
                   }}
                 >
                   <strong style={{ textTransform: "capitalize" }}>{diagnostic.severity}</strong>: {diagnostic.message}
@@ -514,7 +497,7 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
                 borderRadius: 12,
                 padding: 10,
                 fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                fontSize: 12
+                fontSize: 12,
               }}
             />
           </Panel>
