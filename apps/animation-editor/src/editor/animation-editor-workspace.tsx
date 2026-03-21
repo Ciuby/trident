@@ -12,8 +12,10 @@ import "@xyflow/react/dist/style.css";
 import type { AnimationEditorStore } from "@ggez/anim-editor-core";
 import { createAnimationArtifact, serializeAnimationArtifact } from "@ggez/anim-exporter";
 import type { EditorGraphNode, ParameterDefinition } from "@ggez/anim-schema";
-import type { CSSProperties, ReactNode } from "react";
-import { useMemo, useState } from "react";
+import type { ChangeEvent, CSSProperties, ReactNode } from "react";
+import { useMemo, useRef, useState } from "react";
+import { AnimationPreviewPanel } from "./animation-preview-panel";
+import { importAnimationFiles, importCharacterFile, type ImportedCharacterAsset, type ImportedPreviewClip } from "./preview-assets";
 import { useEditorStoreValue } from "./use-editor-store-value";
 
 const theme = {
@@ -289,6 +291,12 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
   const state = useEditorStoreValue(store, () => store.getState(), ["document", "selection", "compile", "clipboard"]);
   const graph = useSelectedGraph(store);
   const [artifactJson, setArtifactJson] = useState("");
+  const [character, setCharacter] = useState<ImportedCharacterAsset | null>(null);
+  const [importedClips, setImportedClips] = useState<ImportedPreviewClip[]>([]);
+  const [assetStatus, setAssetStatus] = useState("Import a rigged character to unlock preview and rig-aware compilation.");
+  const [assetError, setAssetError] = useState<string | null>(null);
+  const characterInputRef = useRef<HTMLInputElement | null>(null);
+  const animationInputRef = useRef<HTMLInputElement | null>(null);
 
   const nodes = useMemo(() => graph.nodes.map((node) => toCanvasNode(node, state.selection.nodeIds.includes(node.id))), [graph, state.selection.nodeIds]);
   const edges = useMemo(() => buildCanvasEdges(graph.nodes, graph.edges), [graph]);
@@ -317,6 +325,65 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
     setArtifactJson("");
   }
 
+  async function handleCharacterImport(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      setAssetError(null);
+      setAssetStatus(`Importing character "${file.name}"...`);
+      const nextCharacter = await importCharacterFile(file, state.document.clips.map((clip) => clip.id));
+      setCharacter(nextCharacter);
+      setImportedClips(nextCharacter.clips);
+      store.setRig(nextCharacter.documentRig);
+      store.upsertClips(nextCharacter.clips.map((clip) => clip.reference));
+      setAssetStatus(`Loaded "${file.name}" with ${nextCharacter.rig.boneNames.length} bones and ${nextCharacter.clips.length} embedded clips.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to import character.";
+      setAssetError(message);
+      setAssetStatus("Character import failed.");
+    }
+  }
+
+  async function handleAnimationImport(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+
+    if (files.length === 0) {
+      return;
+    }
+
+    if (!character) {
+      setAssetError("Import a rigged character first so external animation files can be mapped onto its skeleton.");
+      return;
+    }
+
+    try {
+      setAssetError(null);
+      setAssetStatus(`Importing ${files.length} animation file(s)...`);
+      const nextClips = await importAnimationFiles(
+        files,
+        character.skeleton,
+        new Set([...state.document.clips.map((clip) => clip.id), ...importedClips.map((clip) => clip.id)])
+      );
+      setImportedClips((current) => {
+        const merged = new Map(current.map((clip) => [clip.id, clip]));
+        nextClips.forEach((clip) => merged.set(clip.id, clip));
+        return Array.from(merged.values());
+      });
+      store.upsertClips(nextClips.map((clip) => clip.reference));
+      setAssetStatus(`Imported ${nextClips.length} animation clip(s) from ${files.length} file(s).`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to import animation files.";
+      setAssetError(message);
+      setAssetStatus("Animation import failed.");
+    }
+  }
+
   return (
     <ReactFlowProvider>
       <div
@@ -331,6 +398,8 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
       >
         <div style={{ gridColumn: "1 / span 3", display: "flex", gap: 8, flexWrap: "wrap" }}>
           <ToolbarButton label="Compile" onClick={handleCompile} />
+          <ToolbarButton label="Import Character" onClick={() => characterInputRef.current?.click()} />
+          <ToolbarButton label="Import Animations" onClick={() => animationInputRef.current?.click()} />
           <ToolbarButton label="Undo" onClick={() => store.undo()} />
           <ToolbarButton label="Redo" onClick={() => store.redo()} />
           <ToolbarButton label="Copy" onClick={() => store.copySelection()} />
@@ -342,9 +411,30 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
           <ToolbarButton label="Add Blend2D" onClick={() => store.addNode(graph.id, "blend2d")} />
           <ToolbarButton label="Add Subgraph" onClick={() => store.addNode(graph.id, "subgraph")} />
           <ToolbarButton label="Add Graph" onClick={() => store.addGraph()} />
+          <input ref={characterInputRef} type="file" accept=".glb,.gltf,.fbx" hidden onChange={handleCharacterImport} />
+          <input ref={animationInputRef} type="file" accept=".glb,.gltf,.fbx" multiple hidden onChange={handleAnimationImport} />
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
+          <Panel title="Assets">
+            <div style={helperTextStyle}>
+              This is where your rigged character and animation files go. Import a character first, then optional extra animation files.
+            </div>
+            <ToolbarButton label="Choose Character File" onClick={() => characterInputRef.current?.click()} />
+            <ToolbarButton label="Choose Animation Files" onClick={() => animationInputRef.current?.click()} />
+            <div style={{ ...helperTextStyle, color: assetError ? theme.danger : theme.panelMutedText }}>
+              {assetError ?? assetStatus}
+            </div>
+            <div style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontSize: 12, color: theme.panelText }}>
+                Character: {character ? character.fileName : "none"}
+              </div>
+              <div style={{ fontSize: 12, color: theme.panelText }}>
+                Imported clips: {importedClips.length}
+              </div>
+            </div>
+          </Panel>
+
           <Panel title="Graphs">
             {state.document.graphs.map((entry) => (
               <button
@@ -464,6 +554,8 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
+          <AnimationPreviewPanel store={store} character={character} importedClips={importedClips} />
+
           <Panel title="Inspector">
             <NodeInspector store={store} />
           </Panel>

@@ -1,4 +1,4 @@
-import type { AnimationClipAsset } from "@ggez/anim-core";
+import type { AnimationClipAsset, PoseBuffer } from "@ggez/anim-core";
 import { createRigDefinition } from "@ggez/anim-core";
 import type { AnimatorInstance } from "@ggez/anim-runtime";
 import {
@@ -91,9 +91,7 @@ export function createClipAssetFromThreeClip(clip: AnimationClip, skeleton: Skel
   };
 }
 
-export function applyPoseToSkeleton(animator: AnimatorInstance, skeleton: Skeleton): void {
-  const pose = animator.outputPose;
-
+export function applyPoseBufferToSkeleton(pose: PoseBuffer, skeleton: Skeleton): void {
   skeleton.bones.forEach((bone, boneIndex) => {
     const vectorOffset = boneIndex * 3;
     const quaternionOffset = boneIndex * 4;
@@ -116,6 +114,10 @@ export function applyPoseToSkeleton(animator: AnimatorInstance, skeleton: Skelet
   });
 
   skeleton.calculateInverses();
+}
+
+export function applyPoseToSkeleton(animator: AnimatorInstance, skeleton: Skeleton): void {
+  applyPoseBufferToSkeleton(animator.outputPose, skeleton);
 }
 
 export function createThreeAnimatorBridge(animator: AnimatorInstance, skeleton: Skeleton) {

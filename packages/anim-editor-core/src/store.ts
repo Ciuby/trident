@@ -6,7 +6,8 @@ import type {
   EditorGraph,
   EditorGraphNode,
   EditorLayer,
-  ParameterDefinition
+  ParameterDefinition,
+  SerializableRig
 } from "@ggez/anim-schema";
 import { createStableId, Emitter, type Unsubscribe } from "@ggez/anim-utils";
 import { createDefaultAnimationEditorDocument, createDefaultNode } from "./defaults";
@@ -66,6 +67,8 @@ export interface AnimationEditorStore {
   updateMask(maskId: string, patch: Partial<BoneMaskDefinition>): void;
   addClip(clip?: Partial<ClipReference>): void;
   updateClip(clipId: string, patch: Partial<ClipReference>): void;
+  setRig(rig?: SerializableRig): void;
+  upsertClips(clips: ClipReference[]): void;
   compile(): CompileResult;
   undo(): void;
   redo(): void;
@@ -460,6 +463,31 @@ export function createAnimationEditorStore(initialDocument = createDefaultAnimat
         state.document = {
           ...state.document,
           clips: state.document.clips.map((clip) => (clip.id === clipId ? { ...clip, ...patch } : clip))
+        };
+      });
+    },
+    setRig(rig) {
+      commit(["document"], () => {
+        state.document = {
+          ...state.document,
+          rig
+        };
+      });
+    },
+    upsertClips(clips) {
+      commit(["document"], () => {
+        const existingById = new Map(state.document.clips.map((clip) => [clip.id, clip]));
+
+        for (const clip of clips) {
+          existingById.set(clip.id, {
+            ...existingById.get(clip.id),
+            ...clip
+          });
+        }
+
+        state.document = {
+          ...state.document,
+          clips: Array.from(existingById.values())
         };
       });
     },

@@ -68,3 +68,10 @@
 - [ ] Add live Three.js preview scene integration inside the app shell
 - [ ] Add binary export and runtime streaming-friendly artifact variants
 - [ ] Add advanced runtime nodes such as constraints, IK, aim, and event tracks
+
+## Current Turn
+
+- [x] Add explicit character/animation file import workflow in the app shell
+- [x] Add preview viewport with playback controls and runtime graph evaluation
+- [x] Sync imported rig and clip references into the editor document
+- [x] Clarify in-app where assets live versus what the graph authoring layer does
