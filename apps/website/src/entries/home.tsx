@@ -6,7 +6,6 @@ renderPage(
   "GGEZ",
   <PageShell
     currentPath={currentPath}
-    eyebrow="Public Preview"
     intro="GGEZ is a Game Framework to vibe code games. It gives you a CLI starter, a browser world editor called Trident, and an animation pipeline called Animation Studio, then gets out of your way so you can keep writing game code."
     stats={[
       { label: "Starter", value: "CLI scaffold" },
@@ -16,7 +15,6 @@ renderPage(
     title="Code a game. Author the world. Keep the runtime yours."
   >
     <Section
-      eyebrow="Start Here"
       intro="The shortest path from zero to a running game is the CLI starter. It generates a vanilla Vite + TypeScript game with the runtime packages, starter scenes, and animation bundle hooks already wired."
       title="Create a game in a few commands"
     >
@@ -51,7 +49,6 @@ bun run dev`}
     </Section>
 
     <Section
-      eyebrow="Mental Model"
       intro="GGEZ is not trying to be an everything-engine. The runtime boundary stays in your app, while the tools produce content and helper packages you can compose around it."
       title="What ships with the framework"
     >
@@ -67,7 +64,6 @@ bun run dev`}
     </Section>
 
     <Section
-      eyebrow="Reality Check"
       intro="This needs to be said plainly because it changes how you should evaluate the framework today."
       title="Treat it as experimental software"
     >

@@ -14,7 +14,7 @@ type Stat = {
 };
 
 type PageShellProps = {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   intro: string;
   currentPath: string;
@@ -91,10 +91,10 @@ export function PageShell({ eyebrow, title, intro, currentPath, stats, children 
   return (
     <div className="site-shell">
       <div className="site-grid pointer-events-none absolute inset-0 opacity-40" />
-      <div className="pointer-events-none absolute left-[-12rem] top-16 h-80 w-80 rounded-full bg-emerald-400/18 blur-3xl" />
-      <div className="pointer-events-none absolute right-[-8rem] top-64 h-72 w-72 rounded-full bg-teal-300/14 blur-3xl" />
+      <div className="pointer-events-none absolute -left-48 top-16 h-80 w-80 rounded-full bg-emerald-400/18 blur-3xl" />
+      <div className="pointer-events-none absolute -right-32 top-64 h-72 w-72 rounded-full bg-teal-300/14 blur-3xl" />
       <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-6 pb-16 pt-6 sm:px-8 lg:px-10">
-        <header className="surface fade-up rounded-[2rem] px-5 py-4 sm:px-6">
+        <header className="surface fade-up rounded-4xl px-5 py-4 sm:px-6">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
               <a className="inline-flex items-center gap-3 rounded-full bg-black/20 px-3 py-2" href={siteHref("")}> 
@@ -118,10 +118,12 @@ export function PageShell({ eyebrow, title, intro, currentPath, stats, children 
         <main className="mt-8 flex-1">
           <section className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_24rem] lg:items-end">
             <div className="fade-up">
-              <span className="eyebrow inline-flex rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em]">
-                {eyebrow}
-              </span>
-              <h1 className="mt-6 max-w-4xl text-5xl font-semibold tracking-[-0.05em] text-white sm:text-6xl lg:text-7xl">
+              {eyebrow ? (
+                <span className="eyebrow inline-flex rounded-full px-4 py-2 text-xs font-semibold tracking-[0.18em]">
+                  {eyebrow}
+                </span>
+              ) : null}
+              <h1 className="max-w-4xl text-5xl font-semibold tracking-[-0.05em] text-white sm:text-6xl lg:text-7xl">
                 {title}
               </h1>
               <p className="mt-6 max-w-3xl text-lg leading-8 text-white/72 sm:text-xl">{intro}</p>
@@ -138,8 +140,8 @@ export function PageShell({ eyebrow, title, intro, currentPath, stats, children 
               </div>
             </div>
 
-            <aside className="surface spotlight fade-up-delay rounded-[2rem] p-6 sm:p-7">
-              <div className="rounded-[1.5rem] bg-black/22 px-4 py-3 text-sm leading-6 text-emerald-100/90">
+            <aside className="surface spotlight fade-up-delay rounded-4xl p-6 sm:p-7">
+              <div className="rounded-3xl bg-black/22 px-4 py-3 text-sm leading-6 text-emerald-100/90">
                 Public preview. Extremely experimental. Expect it to break at any time.
               </div>
               <div className="mt-6 space-y-3 text-sm text-white/68">
@@ -166,7 +168,7 @@ export function PageShell({ eyebrow, title, intro, currentPath, stats, children 
           <div className="mt-12 space-y-8">{children}</div>
         </main>
 
-        <footer className="surface-quiet mt-12 rounded-[2rem] px-6 py-6 text-sm text-white/60">
+        <footer className="surface-quiet mt-12 rounded-4xl px-6 py-6 text-sm text-white/60">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <p>GGEZ ships fast, changes fast, and is not stable yet. Treat every release as a moving target.</p>
             <div className="flex flex-wrap gap-3 text-white/72">
@@ -183,15 +185,15 @@ export function PageShell({ eyebrow, title, intro, currentPath, stats, children 
 
 export function Section({ id, eyebrow, title, intro, children }: SectionProps) {
   return (
-    <section className="surface rounded-[2rem] px-6 py-8 sm:px-8 sm:py-10" id={id}>
+    <section className="surface rounded-4xl px-6 py-8 sm:px-8 sm:py-10" id={id}>
       <div className="grid gap-8 lg:grid-cols-[20rem_minmax(0,1fr)]">
         <div>
           {eyebrow ? (
-            <span className="eyebrow inline-flex rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em]">
+            <span className="eyebrow inline-flex rounded-full px-4 py-2 text-xs font-semibold tracking-[0.18em]">
               {eyebrow}
             </span>
           ) : null}
-          <h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl">{title}</h2>
+          <h2 className={eyebrow ? "mt-4 text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl" : "text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl"}>{title}</h2>
           {intro ? <p className="mt-4 max-w-sm text-base leading-7 text-white/64">{intro}</p> : null}
         </div>
         <div className="section-copy text-base leading-7">{children}</div>
@@ -202,7 +204,7 @@ export function Section({ id, eyebrow, title, intro, children }: SectionProps) {
 
 export function CommandBlock({ title, children }: { title: string; children: string }) {
   return (
-    <div className="code-block rounded-[1.5rem] px-5 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+    <div className="code-block rounded-3xl px-5 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
       <div className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-200/78">{title}</div>
       <pre className="mt-3 overflow-x-auto text-sm leading-7 text-emerald-50">{children}</pre>
     </div>
@@ -211,7 +213,7 @@ export function CommandBlock({ title, children }: { title: string; children: str
 
 export function FileTree({ title, children }: { title: string; children: string }) {
   return (
-    <div className="tree-block rounded-[1.5rem] bg-black/24 px-5 py-4">
+    <div className="tree-block rounded-3xl bg-black/24 px-5 py-4">
       <div className="text-xs font-semibold uppercase tracking-[0.24em] text-white/48">{title}</div>
       <pre className="mt-3 overflow-x-auto text-sm leading-7 text-white/82">{children}</pre>
     </div>

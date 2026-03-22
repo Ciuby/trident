@@ -6,12 +6,10 @@ renderPage(
   "GGEZ | Tools",
   <PageShell
     currentPath={currentPath}
-    eyebrow="T ools"
     intro="Trident is the world editor. Animation Studio is the animation editor. Both live in this monorepo today, so the install flow is shared and the run commands are separate."
     title="Install and run the editors"
   >
     <Section
-      eyebrow="Shared Install"
       intro="Clone the repository, then install once at the root. Bun is the package manager used across the monorepo."
       title="Install the toolchain"
     >
@@ -26,7 +24,6 @@ bun install`}
     </Section>
 
     <Section
-      eyebrow="World Editor"
       intro="Trident is the browser-based world editor for building levels, runtime bundles, and scene data."
       title="Run Trident"
     >
@@ -42,7 +39,6 @@ bun install`}
     </Section>
 
     <Section
-      eyebrow="Animation Editor"
       intro="Animation Studio is the animation authoring app for graphs, bundles, preview assets, and exported runtime animation data."
       title="Run Animation Studio"
     >

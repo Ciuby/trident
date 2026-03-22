@@ -6,12 +6,10 @@ renderPage(
   "GGEZ | Getting Started",
   <PageShell
     currentPath={currentPath}
-    eyebrow="Getting Started"
     intro="Use the CLI when you want a game project that already knows how to host runtime scenes, gameplay hooks, and animation bundles. The starter targets a vanilla Three.js workflow and stays close to plain Vite."
     title="From CLI scaffold to live game dev server"
   >
     <Section
-      eyebrow="Step 1"
       intro="The published scaffolder is create-ggez. It can use the default package manager or one you choose explicitly."
       title="Create your own game"
     >
@@ -27,7 +25,6 @@ renderPage(
     </Section>
 
     <Section
-      eyebrow="Step 2"
       intro="After scaffolding, install dependencies in the generated project directory."
       title="Install the project"
     >
@@ -41,7 +38,6 @@ bun install`}
     </Section>
 
     <Section
-      eyebrow="Step 3"
       intro="The starter exposes the standard Vite commands you expect, with TypeScript typechecking in build."
       title="Run your game dev server"
     >

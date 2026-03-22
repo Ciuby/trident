@@ -6,12 +6,10 @@ renderPage(
   "GGEZ | Project Layout",
   <PageShell
     currentPath={currentPath}
-    eyebrow="Project Layout"
     intro="The scaffold is intentionally vanilla, but it is organized like a real game app: runtime glue in one place, scene logic in another, and animation bundles isolated behind their own loading boundary."
     title="Know where your code and content belong"
   >
     <Section
-      eyebrow="Generated App"
       intro="This is the practical shape of the current starter. Scene folders and animation bundles live next to the code that consumes them, while core runtime wiring stays under src/game."
       title="Starter folder structure"
     >
@@ -51,7 +49,6 @@ renderPage(
     </Section>
 
     <Section
-      eyebrow="Responsibilities"
       intro="You will move faster if you keep each folder opinionated instead of letting everything drift into src/."
       title="How to organize the project"
     >
@@ -67,7 +64,6 @@ renderPage(
     </Section>
 
     <Section
-      eyebrow="Workflow"
       intro="Most teams will touch these areas in this order when building with the current starter."
       title="Typical day-to-day loop"
     >
