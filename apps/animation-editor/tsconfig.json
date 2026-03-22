@@ -11,7 +11,8 @@
       "@ggez/anim-runtime": ["packages/anim-runtime/src/index.ts"],
       "@ggez/anim-schema": ["packages/anim-schema/src/index.ts"],
       "@ggez/anim-three": ["packages/anim-three/src/index.ts"],
-      "@ggez/anim-utils": ["packages/anim-utils/src/index.ts"]
+      "@ggez/anim-utils": ["packages/anim-utils/src/index.ts"],
+      "@ggez/dev-sync": ["packages/dev-sync/src/index.ts"]
     },
     "types": ["vite/client", "node"]
   },

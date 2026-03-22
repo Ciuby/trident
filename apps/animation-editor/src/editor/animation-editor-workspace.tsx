@@ -1,18 +1,21 @@
 import "@xyflow/react/dist/style.css";
 import type { AnimationEditorStore } from "@ggez/anim-editor-core";
 import { parseAnimationEditorDocument, type ClipReference, type EditorGraphNode, type SerializableRig } from "@ggez/anim-schema";
+import { slugifyProjectName } from "@ggez/dev-sync";
 import type { ChangeEvent } from "react";
 import { ArrowDownRight, GripHorizontal } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CopilotPanel } from "./copilot/CopilotPanel";
 import { useCopilot } from "./hooks/use-copilot";
+import { useGameConnection } from "./hooks/use-game-connection";
 import { AnimationPreviewPanel } from "./animation-preview-panel";
 import { importAnimationFiles, importCharacterFile, type ImportedCharacterAsset, type ImportedPreviewClip } from "./preview-assets";
 import { createProjectBundleJson, parseProjectBundleJson } from "./project-bundle";
-import { createRuntimeBundleZip } from "./runtime-bundle";
+import { createRuntimeBundleSyncResult, createRuntimeBundleZip } from "./runtime-bundle";
 import { useEditorStoreValue } from "./use-editor-store-value";
 import { EditorMenubar } from "./workspace/editor-menubar";
+import { GameConnectionControl } from "./workspace/game-connection-control";
 import { GraphCanvas } from "./workspace/graph-canvas";
 import { LeftSidebar } from "./workspace/left-sidebar";
 import { RightSidebar } from "./workspace/right-sidebar";
@@ -148,9 +151,9 @@ function clampPreviewRect(rect: PreviewRect, bounds: { width: number; height: nu
 
 export function AnimationEditorWorkspace(props: { store: AnimationEditorStore }) {
   const { store } = props;
-  const copilot = useCopilot(store);
   const state = useEditorStoreValue(store, () => store.getState(), ["document", "selection", "compile", "clipboard"]);
   const graph = useSelectedGraph(store);
+  const gameConnection = useGameConnection();
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [character, setCharacter] = useState<ImportedCharacterAsset | null>(null);
   const [importedClips, setImportedClips] = useState<ImportedPreviewClip[]>([]);
@@ -158,6 +161,9 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
   const [assetStatus, setAssetStatus] = useState("Import a rigged character to unlock preview and rig-aware compilation.");
   const [assetError, setAssetError] = useState<string | null>(null);
   const [openedStateMachineNodeId, setOpenedStateMachineNodeId] = useState<string | null>(null);
+  const [projectName, setProjectName] = useState(() => store.getState().document.name || "Untitled Animation");
+  const [projectSlug, setProjectSlug] = useState(() => slugifyProjectName(store.getState().document.name || "Untitled Animation"));
+  const [projectSlugDirty, setProjectSlugDirty] = useState(false);
   const characterInputRef = useRef<HTMLInputElement | null>(null);
   const animationInputRef = useRef<HTMLInputElement | null>(null);
   const projectInputRef = useRef<HTMLInputElement | null>(null);
@@ -172,6 +178,14 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
     | null
   >(null);
   const [previewRect, setPreviewRect] = useState<PreviewRect>({ x: 16, y: 16, width: 440, height: 420 });
+  const resolvedProjectName = projectName.trim() || state.document.name.trim() || "Untitled Animation";
+  const resolvedProjectSlug = slugifyProjectName(projectSlug.trim() || resolvedProjectName);
+
+  const copilot = useCopilot(store, {
+    requestAnimationPush: (options) => {
+      void handlePushAnimationToGame(options).catch(() => {});
+    }
+  });
 
   function handleConnect(connection: { source: string | null; target: string | null }) {
     if (!connection.source || !connection.target) {
@@ -307,6 +321,76 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
     }
   }
 
+  function handleProjectNameChange(value: string) {
+    const previousAutoSlug = slugifyProjectName(projectName);
+    setProjectName(value);
+
+    if (!projectSlugDirty || projectSlug === previousAutoSlug) {
+      setProjectSlug(slugifyProjectName(value));
+      setProjectSlugDirty(false);
+    }
+  }
+
+  function handleProjectSlugChange(value: string) {
+    setProjectSlug(slugifyProjectName(value));
+    setProjectSlugDirty(true);
+  }
+
+  async function handlePushAnimationToGame(options?: {
+    gameId?: string;
+    projectName?: string;
+    projectSlug?: string;
+  }) {
+    const nextProjectName = options?.projectName?.trim() || resolvedProjectName;
+    const nextProjectSlug = slugifyProjectName(
+      options?.projectSlug?.trim() || options?.projectName?.trim() || resolvedProjectSlug || nextProjectName
+    );
+
+    if (options?.projectName) {
+      setProjectName(nextProjectName);
+      if (!options.projectSlug) {
+        setProjectSlug(nextProjectSlug);
+        setProjectSlugDirty(false);
+      }
+    }
+
+    if (options?.projectSlug) {
+      setProjectSlug(nextProjectSlug);
+      setProjectSlugDirty(true);
+    }
+
+    try {
+      setAssetError(null);
+      setAssetStatus(`Pushing animation bundle to ${gameConnection.activeGame?.name ?? "connected game"}...`);
+      const bundle = await createRuntimeBundleSyncResult({
+        characterFile: characterSourceFile,
+        folderName: nextProjectSlug,
+        importedClips,
+        sourceDocument: store.getState().document,
+        title: nextProjectName
+      });
+
+      const result = await gameConnection.pushAnimation({
+        bundle: {
+          files: bundle.files
+        },
+        gameId: options?.gameId ?? gameConnection.activeGame?.id,
+        metadata: {
+          projectName: nextProjectName,
+          projectSlug: nextProjectSlug
+        }
+      });
+
+      setAssetStatus(`Pushed animation bundle to ${result.animationPath} in ${result.game.name}.`);
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to push animation bundle to game.";
+      setAssetError(message);
+      setAssetStatus("Animation sync failed.");
+      throw error;
+    }
+  }
+
   async function handleProjectLoad(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -361,6 +445,9 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
       setCharacter(nextCharacter);
       setCharacterSourceFile(loaded.characterFile);
       setImportedClips(restoredClips);
+      setProjectName(loaded.document.name || "Untitled Animation");
+      setProjectSlug(slugifyProjectName(loaded.document.name || "Untitled Animation"));
+      setProjectSlugDirty(false);
       setAssetStatus(`Loaded project "${file.name}" with ${loaded.document.graphs.length} graph(s) and ${restoredClips.length} clip asset(s).`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load project bundle.";
@@ -481,6 +568,26 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <EditorMenubar
         store={store}
+        gameConnectionControl={
+          <GameConnectionControl
+            activeGame={gameConnection.activeGame}
+            error={gameConnection.error}
+            games={gameConnection.games}
+            isLoading={gameConnection.isLoading}
+            isPushing={gameConnection.isPushing}
+            lastPush={gameConnection.lastPush}
+            onProjectNameChange={handleProjectNameChange}
+            onProjectSlugChange={handleProjectSlugChange}
+            onPushAnimation={() => {
+              void handlePushAnimationToGame();
+            }}
+            onRefresh={gameConnection.refresh}
+            onSelectGame={gameConnection.setSelectedGameId}
+            projectName={projectName}
+            projectSlug={resolvedProjectSlug}
+            selectedGameId={gameConnection.selectedGameId}
+          />
+        }
         onCompile={handleCompile}
         onExportRuntimeBundle={() => void handleExportRuntimeBundle()}
         onSaveProject={() => void handleSaveProject()}

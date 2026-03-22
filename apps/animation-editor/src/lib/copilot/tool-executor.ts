@@ -13,6 +13,14 @@ type Args = Record<string, unknown>;
 type StateMachineNode = Extract<EditorGraphNode, { kind: "stateMachine" }>;
 type StateMachineTransition = StateMachineNode["transitions"][number];
 
+export type CopilotToolExecutionContext = {
+  requestAnimationPush?: (options: {
+    gameId?: string;
+    projectName?: string;
+    projectSlug?: string;
+  }) => void;
+};
+
 function ok(data: Record<string, unknown>): string {
   return JSON.stringify({ success: true, ...data });
 }
@@ -289,8 +297,12 @@ function createMask(store: AnimationEditorStore, args: Args) {
   return store.getState().document.masks.find((mask) => !beforeIds.has(mask.id));
 }
 
-export function executeTool(store: AnimationEditorStore, toolCall: CopilotToolCall): CopilotToolResult {
-  const result = executeToolInner(store, toolCall.name, toolCall.args);
+export function executeTool(
+  store: AnimationEditorStore,
+  toolCall: CopilotToolCall,
+  context: CopilotToolExecutionContext = {}
+): CopilotToolResult {
+  const result = executeToolInner(store, toolCall.name, toolCall.args, context);
   return {
     callId: toolCall.id,
     name: toolCall.name,
@@ -298,11 +310,29 @@ export function executeTool(store: AnimationEditorStore, toolCall: CopilotToolCa
   };
 }
 
-function executeToolInner(store: AnimationEditorStore, name: string, args: Args): string {
+function executeToolInner(
+  store: AnimationEditorStore,
+  name: string,
+  args: Args,
+  context: CopilotToolExecutionContext
+): string {
   try {
     const document = getDocument(store);
 
     switch (name) {
+      case "push_animation_to_connected_game": {
+        if (!context.requestAnimationPush) {
+          return fail("Editor-to-game animation sync is unavailable in this session.");
+        }
+
+        context.requestAnimationPush({
+          gameId: str(args, "gameId") || undefined,
+          projectName: str(args, "projectName") || undefined,
+          projectSlug: str(args, "projectSlug") || undefined
+        });
+        return ok({ queued: true });
+      }
+
       case "get_document_summary":
         return ok({ summary: buildDocumentSummary(document) });
 

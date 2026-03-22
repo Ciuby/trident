@@ -5,7 +5,7 @@ import { createCodexProvider } from "@/lib/copilot/codex-provider";
 import { loadCopilotSettings, isCopilotConfigured } from "@/lib/copilot/settings";
 import { buildSystemPrompt } from "@/lib/copilot/system-prompt";
 import { COPILOT_TOOL_DECLARATIONS } from "@/lib/copilot/tool-declarations";
-import { executeTool } from "@/lib/copilot/tool-executor";
+import { executeTool, type CopilotToolExecutionContext } from "@/lib/copilot/tool-executor";
 
 const EMPTY_SESSION: CopilotSession = {
   messages: [],
@@ -13,7 +13,7 @@ const EMPTY_SESSION: CopilotSession = {
   iterationCount: 0
 };
 
-export function useCopilot(store: AnimationEditorStore) {
+export function useCopilot(store: AnimationEditorStore, context: CopilotToolExecutionContext = {}) {
   const [session, setSession] = useState<CopilotSession>(EMPTY_SESSION);
   const abortRef = useRef<AbortController | null>(null);
   const threadIdRef = useRef<string | undefined>(undefined);
@@ -42,7 +42,7 @@ export function useCopilot(store: AnimationEditorStore) {
       onThreadId: (threadId) => {
         threadIdRef.current = threadId;
       },
-      executeTool: (toolCall) => executeTool(store, toolCall),
+      executeTool: (toolCall) => executeTool(store, toolCall, context),
       onUpdate: (nextSession) => {
         setSession({ ...nextSession, messages: [...nextSession.messages] });
       },
@@ -50,7 +50,7 @@ export function useCopilot(store: AnimationEditorStore) {
     });
 
     abortRef.current = null;
-  }, [session.messages, store]);
+  }, [context, session.messages, store]);
 
   const abort = useCallback(() => {
     abortRef.current?.abort();

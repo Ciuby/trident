@@ -10,6 +10,15 @@ type RuntimeBundleExportResult = {
   folderName: string;
 };
 
+export type RuntimeBundleSyncResult = {
+  files: Array<{
+    bytes: number[];
+    mimeType: string;
+    path: string;
+  }>;
+  folderName: string;
+};
+
 function slugifySegment(value: string): string {
   const normalized = value
     .trim()
@@ -49,10 +58,11 @@ function makeUniquePath(basePath: string, usedPaths: Set<string>): string {
 }
 
 async function buildZipFiles(input: {
-  basePath: string;
   characterFile: File | null;
+  folderName: string;
   importedClips: ImportedPreviewClip[];
   sourceDocument: unknown;
+  title: string;
 }) {
   const editorDocument = parseAnimationEditorDocument(input.sourceDocument);
   const compiledGraph = compileAnimationEditorDocumentOrThrow(editorDocument);
@@ -97,21 +107,41 @@ async function buildZipFiles(input: {
     clips: bundleClips.map((bundleClip) => clipsById.get(bundleClip.id)!.asset)
   });
   const manifest = createAnimationBundle({
-    name: editorDocument.name,
+    name: input.title,
     artifactPath: "./graph.animation.json",
     characterAssetPath: input.characterFile ? `./${reserveAssetPath(input.characterFile, getFileStem(input.characterFile.name))}` : undefined,
     clips: bundleClips
   });
 
-  files.set(`${input.basePath}/animation.bundle.json`, strToU8(serializeAnimationBundle(manifest)));
-  files.set(`${input.basePath}/graph.animation.json`, strToU8(serializeAnimationArtifact(artifact)));
+  files.set("animation.bundle.json", strToU8(serializeAnimationBundle(manifest)));
+  files.set("animation.meta.json", strToU8(JSON.stringify({
+    id: input.folderName,
+    title: input.title
+  }, null, 2)));
+  files.set("graph.animation.json", strToU8(serializeAnimationArtifact(artifact)));
 
   const fileEntries = Array.from(assetPathsByFile.entries());
   for (const [file, relativePath] of fileEntries) {
-    files.set(`${input.basePath}/${relativePath}`, new Uint8Array(await file.arrayBuffer()));
+    files.set(relativePath, new Uint8Array(await file.arrayBuffer()));
   }
 
   return files;
+}
+
+function getMimeType(path: string): string {
+  if (path.endsWith(".json")) {
+    return "application/json";
+  }
+
+  if (path.endsWith(".glb")) {
+    return "model/gltf-binary";
+  }
+
+  if (path.endsWith(".gltf")) {
+    return "model/gltf+json";
+  }
+
+  return "application/octet-stream";
 }
 
 export async function createRuntimeBundleZip(input: {
@@ -121,17 +151,46 @@ export async function createRuntimeBundleZip(input: {
 }): Promise<RuntimeBundleExportResult> {
   const editorDocument = parseAnimationEditorDocument(input.sourceDocument);
   const folderName = slugifySegment(editorDocument.name);
-  const basePath = `animations/${folderName}`;
   const files = await buildZipFiles({
-    basePath,
     characterFile: input.characterFile,
+    folderName,
     importedClips: input.importedClips,
-    sourceDocument: editorDocument
+    sourceDocument: editorDocument,
+    title: editorDocument.name
   });
+
+  const prefixedFiles = Object.fromEntries(
+    Array.from(files.entries()).map(([path, bytes]) => [`animations/${folderName}/${path}`, bytes])
+  );
 
   return {
     fileName: `${folderName}.ggezanim.zip`,
-    bytes: zipSync(Object.fromEntries(files), { level: 6 }),
+    bytes: zipSync(prefixedFiles, { level: 6 }),
     folderName
+  };
+}
+
+export async function createRuntimeBundleSyncResult(input: {
+  characterFile: File | null;
+  folderName: string;
+  importedClips: ImportedPreviewClip[];
+  sourceDocument: unknown;
+  title: string;
+}): Promise<RuntimeBundleSyncResult> {
+  const files = await buildZipFiles({
+    characterFile: input.characterFile,
+    folderName: input.folderName,
+    importedClips: input.importedClips,
+    sourceDocument: input.sourceDocument,
+    title: input.title
+  });
+
+  return {
+    files: Array.from(files.entries()).map(([path, bytes]) => ({
+      bytes: Array.from(bytes),
+      mimeType: getMimeType(path),
+      path
+    })),
+    folderName: input.folderName
   };
 }

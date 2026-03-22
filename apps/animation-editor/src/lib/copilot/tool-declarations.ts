@@ -2,6 +2,27 @@ import type { CopilotToolDeclaration } from "./types";
 
 export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
   {
+    name: "push_animation_to_connected_game",
+    description: "Pushes the current animation bundle into the connected scaffolded game dev server. Use it when the user asks to sync or send the authored animation bundle to the game.",
+    parameters: {
+      type: "object",
+      properties: {
+        gameId: {
+          type: "string",
+          description: "Optional specific connected game ID when more than one game is available."
+        },
+        projectName: {
+          type: "string",
+          description: "Optional display name override for the pushed animation bundle."
+        },
+        projectSlug: {
+          type: "string",
+          description: "Optional slug override for the target animation folder."
+        }
+      }
+    }
+  },
+  {
     name: "get_document_summary",
     description: "Returns a compact summary of the current animation document, including counts and high-level ids.",
     parameters: { type: "object", properties: {} }

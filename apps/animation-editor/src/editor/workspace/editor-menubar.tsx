@@ -1,4 +1,5 @@
 import type { AnimationEditorStore } from "@ggez/anim-editor-core";
+import type { ReactNode } from "react";
 import { Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +14,7 @@ import {
 
 export function EditorMenubar(props: {
   store: AnimationEditorStore;
+  gameConnectionControl?: ReactNode;
   onCompile: () => void;
   onExportRuntimeBundle: () => void;
   onSaveProject: () => void;
@@ -104,6 +106,7 @@ export function EditorMenubar(props: {
       </Menubar>
 
       <div className="ml-auto flex items-center gap-1.5">
+        {props.gameConnectionControl}
         <Button variant="ghost" size="xs" className={`h-7 gap-1.5 px-2 text-[11px] ${props.copilotOpen ? "text-emerald-300" : "text-zinc-300"}`} onClick={props.onToggleCopilot}>
           <Bot className="size-3.5" />
           Codex

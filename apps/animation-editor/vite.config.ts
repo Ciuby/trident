@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { createAnimationGameSyncPlugin } from './server/animation-game-sync-plugin'
 import { createCodexBridgePlugin } from './server/codex-bridge-plugin'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -12,6 +13,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    createAnimationGameSyncPlugin(),
     createCodexBridgePlugin(),
   ],
   resolve: {
@@ -25,6 +27,7 @@ export default defineConfig({
       '@ggez/anim-schema': path.resolve(__dirname, '../../packages/anim-schema/src/index.ts'),
       '@ggez/anim-three': path.resolve(__dirname, '../../packages/anim-three/src/index.ts'),
       '@ggez/anim-utils': path.resolve(__dirname, '../../packages/anim-utils/src/index.ts'),
+      '@ggez/dev-sync': path.resolve(__dirname, '../../packages/dev-sync/src/index.ts'),
     },
   },
 })
