@@ -1,4 +1,4 @@
-name: Deploy Trident Demo
+name: Deploy GGEZ Website
 
 on:
   push:
@@ -40,12 +40,12 @@ jobs:
       - name: Build static site
         env:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
-        run: bun run build
+        run: bun run build:website
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: apps/editor/dist
+          path: apps/website/dist
 
       - name: Deploy to GitHub Pages
         id: deployment

@@ -1,0 +1,146 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --page: #03100b;
+  --page-deep: #020806;
+  --surface: rgba(244, 255, 249, 0.06);
+  --surface-strong: rgba(244, 255, 249, 0.1);
+  --text: #f3fff9;
+  --muted: rgba(223, 246, 236, 0.76);
+  --accent: #34d399;
+  --accent-soft: rgba(52, 211, 153, 0.18);
+}
+
+html {
+  background:
+    radial-gradient(circle at top, rgba(16, 185, 129, 0.22), transparent 34%),
+    radial-gradient(circle at 20% 18%, rgba(52, 211, 153, 0.16), transparent 28%),
+    linear-gradient(180deg, #072217 0%, var(--page) 32%, var(--page-deep) 100%);
+  background-color: var(--page-deep);
+}
+
+body {
+  min-height: 100vh;
+  color: var(--text);
+  font-family: "Space Grotesk Variable", "Avenir Next", "Segoe UI", sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: rgba(52, 211, 153, 0.35);
+  color: var(--text);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.site-shell {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.site-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-position: center;
+  background-size: 90px 90px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.65), transparent 90%);
+}
+
+.surface {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
+  box-shadow: 0 32px 100px rgba(0, 0, 0, 0.28);
+}
+
+.surface-quiet {
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.eyebrow {
+  background: rgba(52, 211, 153, 0.14);
+  color: #baf5dc;
+}
+
+.section-copy > * + * {
+  margin-top: 1rem;
+}
+
+.section-copy p,
+.section-copy li {
+  color: var(--muted);
+}
+
+.section-copy ul {
+  list-style: none;
+  padding: 0;
+}
+
+.section-copy li {
+  position: relative;
+  padding-left: 1.1rem;
+}
+
+.section-copy li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.72rem;
+  height: 0.38rem;
+  width: 0.38rem;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 14px rgba(52, 211, 153, 0.6);
+}
+
+.code-block {
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.code-block pre,
+.tree-block pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.spotlight {
+  background:
+    radial-gradient(circle at top left, rgba(52, 211, 153, 0.22), transparent 42%),
+    rgba(255, 255, 255, 0.05);
+}
+
+.page-link {
+  transition: transform 180ms ease, background-color 180ms ease, color 180ms ease;
+}
+
+.page-link:hover {
+  transform: translateY(-1px);
+}
+
+.fade-up {
+  animation: fade-up 480ms ease both;
+}
+
+.fade-up-delay {
+  animation: fade-up 620ms ease both;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

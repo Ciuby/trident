@@ -17,6 +17,7 @@ The public GitHub Pages build is a static demo of the editor shell. The local de
 ## Project Layout
 
 - `apps/editor`: Vite + React + TypeScript editor application
+- `apps/website`: Vite + React + TypeScript multi-page website for GGEZ docs and onboarding
 - `packages/editor-core`: scene document, command stack, selection, and event bus
 - `packages/geometry-kernel`: brush and mesh operations
 - `packages/render-pipeline`: render-facing scene and viewport contracts
@@ -114,7 +115,7 @@ If you only want to try the public demo on GitHub Pages, you can skip this entir
 
 ## GitHub Pages Deployment
 
-This repository includes a GitHub Actions workflow that builds `apps/editor` as a static site and deploys it to GitHub Pages.
+This repository includes a GitHub Actions workflow that builds `apps/website` as a static site and deploys it to GitHub Pages.
 
 The workflow lives at `.github/workflows/deploy-pages.yml` and assumes the site is hosted from the repository path, so the Vite base path is set automatically for Pages builds.
 
