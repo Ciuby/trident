@@ -10,23 +10,32 @@ const DEV_SYNC_STALE_AFTER_MS = 8000;
 const DEV_SYNC_REGISTRY_PATH = join(tmpdir(), "web-hammer-dev-sync.json");
 const VIRTUAL_SCENE_REGISTRY_ID = "virtual:web-hammer-scene-registry";
 const RESOLVED_SCENE_REGISTRY_ID = "\0virtual:web-hammer-scene-registry";
+const VIRTUAL_ANIMATION_REGISTRY_ID = "virtual:web-hammer-animation-registry";
+const RESOLVED_ANIMATION_REGISTRY_ID = "\0virtual:web-hammer-animation-registry";
 const VIRTUAL_EDITOR_SYNC_ID = "virtual:web-hammer-editor-sync";
 const RESOLVED_EDITOR_SYNC_ID = "\0virtual:web-hammer-editor-sync";
 
 export function createWebHammerGamePlugin(options = {}) {
   const sceneRoot = options.sceneRoot ?? "src/scenes";
+  const animationRoot = options.animationRoot ?? "src/animations";
   let projectRoot = process.cwd();
   let absoluteSceneRoot = join(projectRoot, sceneRoot);
+  let absoluteAnimationRoot = join(projectRoot, animationRoot);
 
   return {
     name: "web-hammer-game-dev",
     configResolved(config) {
       projectRoot = config.root;
       absoluteSceneRoot = join(projectRoot, sceneRoot);
+      absoluteAnimationRoot = join(projectRoot, animationRoot);
     },
     resolveId(id) {
       if (id === VIRTUAL_SCENE_REGISTRY_ID) {
         return RESOLVED_SCENE_REGISTRY_ID;
+      }
+
+      if (id === VIRTUAL_ANIMATION_REGISTRY_ID) {
+        return RESOLVED_ANIMATION_REGISTRY_ID;
       }
 
       if (id === VIRTUAL_EDITOR_SYNC_ID) {
@@ -41,6 +50,13 @@ export function createWebHammerGamePlugin(options = {}) {
           initialSceneId: options.initialSceneId,
           projectRoot,
           sceneRoot
+        });
+      }
+
+      if (id === RESOLVED_ANIMATION_REGISTRY_ID) {
+        return createAnimationRegistryModule({
+          animationRoot,
+          projectRoot
         });
       }
 
@@ -60,6 +76,7 @@ export function createWebHammerGamePlugin(options = {}) {
         sceneRoot
       });
       registerSceneRegistryWatcher(server, absoluteSceneRoot);
+      registerAnimationRegistryWatcher(server, absoluteAnimationRoot);
     },
     transformIndexHtml(_html, context) {
       if (!context?.server) {
@@ -76,18 +93,27 @@ export function createWebHammerGamePlugin(options = {}) {
       ];
     },
     handleHotUpdate(context) {
-      if (!isSceneRegistryRelevant(context.file, absoluteSceneRoot)) {
-        return;
+      if (isSceneRegistryRelevant(context.file, absoluteSceneRoot)) {
+        const virtualModule = context.server.moduleGraph.getModuleById(RESOLVED_SCENE_REGISTRY_ID);
+
+        if (virtualModule) {
+          context.server.moduleGraph.invalidateModule(virtualModule);
+        }
+
+        context.server.ws.send({ type: "full-reload" });
+        return [];
       }
 
-      const virtualModule = context.server.moduleGraph.getModuleById(RESOLVED_SCENE_REGISTRY_ID);
+      if (isAnimationRegistryRelevant(context.file, absoluteAnimationRoot)) {
+        const virtualAnimationModule = context.server.moduleGraph.getModuleById(RESOLVED_ANIMATION_REGISTRY_ID);
 
-      if (virtualModule) {
-        context.server.moduleGraph.invalidateModule(virtualModule);
+        if (virtualAnimationModule) {
+          context.server.moduleGraph.invalidateModule(virtualAnimationModule);
+        }
+
+        context.server.ws.send({ type: "full-reload" });
+        return [];
       }
-
-      context.server.ws.send({ type: "full-reload" });
-      return [];
     }
   };
 }
@@ -296,12 +322,10 @@ function isGameSceneDefinition(value) {
     typeof value.source.load === "function"
   );
 }
-
 function extractSceneFolderName(path) {
   const match = /\\/([^/]+)\\/scene\\.runtime\\.json$/.exec(path);
   return match?.[1];
 }
-
 function prettifyProjectSlug(value) {
   const trimmed = value.trim();
 
@@ -337,6 +361,164 @@ function createEditorSyncClientModule(options) {
   return `${createEditorSyncClientRuntimeSource(options, { enabled: true })}
 
 export { resolveEditorSyncInitialSceneId, startEditorSyncClient };
+`;
+}
+
+async function createAnimationRegistryModule(options) {
+  const animationDirectories = await readSceneDirectories(join(options.projectRoot, options.animationRoot));
+  const explicitModuleImports = [];
+  let explicitImportIndex = 0;
+
+  for (const directory of animationDirectories) {
+    const explicitModulePath = await resolveFirstExistingFile([
+      join(options.projectRoot, options.animationRoot, directory, "index.ts"),
+      join(options.projectRoot, options.animationRoot, directory, "index.tsx"),
+      join(options.projectRoot, options.animationRoot, directory, "index.js"),
+      join(options.projectRoot, options.animationRoot, directory, "index.jsx")
+    ]);
+
+    if (!explicitModulePath) {
+      continue;
+    }
+
+    explicitModuleImports.push({
+      importName: `animationModule${explicitImportIndex++}`,
+      specifier: toProjectImportSpecifier(options.projectRoot, explicitModulePath)
+    });
+  }
+
+  const importLines = explicitModuleImports.map(
+    ({ importName, specifier }) => `import * as ${importName} from ${JSON.stringify(specifier)};`
+  );
+  const explicitCandidates = explicitModuleImports.map(({ importName }) => importName).join(", ");
+  const animationRootPattern = `/${normalizePath(options.animationRoot)}/*`;
+
+  return `
+import { createBundledRuntimeAnimationSource, defineGameAnimationBundle } from ${JSON.stringify("/src/game/runtime-animation-sources.ts")};
+
+${importLines.join("\n")}
+
+const explicitAnimationModules = [${explicitCandidates}];
+const explicitAnimations = Object.fromEntries(
+  explicitAnimationModules
+    .map(resolveExplicitAnimationDefinition)
+    .filter(Boolean)
+    .map((animation) => [animation.id, animation])
+);
+
+const animationManifestModules = import.meta.glob(${JSON.stringify(`${animationRootPattern}/animation.bundle.json`)}, {
+  eager: true,
+  import: "default",
+  query: "?raw"
+});
+const animationArtifactModules = import.meta.glob(${JSON.stringify(`${animationRootPattern}/*.animation.json`)}, {
+  eager: true,
+  import: "default",
+  query: "?raw"
+});
+const animationAssetModules = import.meta.glob(${JSON.stringify(`${animationRootPattern}/assets/**/*`)}, {
+  eager: true,
+  import: "default",
+  query: "?url"
+});
+const animationMetaModules = import.meta.glob(${JSON.stringify(`${animationRootPattern}/animation.meta.json`)}, {
+  eager: true,
+  import: "default"
+});
+
+const discoveredAnimations = createDiscoveredAnimations(explicitAnimations);
+export const animations = {
+  ...discoveredAnimations,
+  ...explicitAnimations
+};
+
+function createDiscoveredAnimations(existingAnimations) {
+  const discovered = {};
+
+  for (const [path, manifestText] of Object.entries(animationManifestModules)) {
+    const folderName = extractAnimationFolderName(path);
+
+    if (!folderName) {
+      continue;
+    }
+
+    const metadata = animationMetaModules[path.replace(/animation\\.bundle\\.json$/, "animation.meta.json")] ?? {};
+    const animationId = typeof metadata.id === "string" && metadata.id.trim() ? metadata.id.trim() : folderName;
+
+    if (animationId in existingAnimations) {
+      continue;
+    }
+
+    const artifactText = animationArtifactModules[path.replace(/animation\\.bundle\\.json$/, "graph.animation.json")];
+
+    if (typeof artifactText !== "string") {
+      continue;
+    }
+
+    const assetUrls = Object.fromEntries(
+      Object.entries(animationAssetModules)
+        .filter(([assetPath]) => assetPath.startsWith(path.replace(/animation\\.bundle\\.json$/, "assets/")))
+        .map(([assetPath, url]) => [assetPath.replace(new RegExp(\`^.+/\\\${folderName}/\`), "./"), url])
+    );
+
+    discovered[animationId] = defineGameAnimationBundle({
+      id: animationId,
+      source: createBundledRuntimeAnimationSource({
+        assetUrls,
+        artifactText,
+        manifestText
+      }),
+      title: typeof metadata.title === "string" && metadata.title.trim()
+        ? metadata.title.trim()
+        : prettifyProjectSlug(animationId)
+    });
+  }
+
+  return discovered;
+}
+
+function resolveExplicitAnimationDefinition(module) {
+  if (isGameAnimationDefinition(module?.default)) {
+    return module.default;
+  }
+
+  for (const value of Object.values(module ?? {})) {
+    if (isGameAnimationDefinition(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function isGameAnimationDefinition(value) {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    typeof value.id === "string" &&
+    value.source &&
+    typeof value.source.load === "function"
+  );
+}
+
+function extractAnimationFolderName(path) {
+  const match = /\\/([^/]+)\\/animation\\.bundle\\.json$/.exec(path);
+  return match?.[1];
+}
+
+function prettifyProjectSlug(value) {
+  const trimmed = value.trim();
+
+  if (trimmed.length === 0) {
+    return "Untitled Animation";
+  }
+
+  return trimmed
+    .split(/[-_]+/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 `;
 }
 
@@ -445,6 +627,17 @@ function isSceneRegistryRelevant(file, absoluteSceneRoot) {
   return /\/(scene\.runtime\.json|scene\.meta\.json|index\.[jt]sx?)$/.test(normalizedFile);
 }
 
+function isAnimationRegistryRelevant(file, absoluteAnimationRoot) {
+  const normalizedFile = normalizePath(file);
+  const normalizedAnimationRoot = normalizePath(absoluteAnimationRoot);
+
+  if (!normalizedFile.startsWith(`${normalizedAnimationRoot}/`)) {
+    return false;
+  }
+
+  return /\/(animation\.bundle\.json|animation\.meta\.json|[^/]+\.animation\.json|index\.[jt]sx?)$/.test(normalizedFile);
+}
+
 function registerSceneRegistryWatcher(server, absoluteSceneRoot) {
   const invalidate = (file) => {
     if (!isSceneRegistryRelevant(file, absoluteSceneRoot)) {
@@ -452,6 +645,25 @@ function registerSceneRegistryWatcher(server, absoluteSceneRoot) {
     }
 
     const virtualModule = server.moduleGraph.getModuleById(RESOLVED_SCENE_REGISTRY_ID);
+
+    if (virtualModule) {
+      server.moduleGraph.invalidateModule(virtualModule);
+    }
+
+    server.ws.send({ type: "full-reload" });
+  };
+
+  server.watcher.on("add", invalidate);
+  server.watcher.on("unlink", invalidate);
+}
+
+function registerAnimationRegistryWatcher(server, absoluteAnimationRoot) {
+  const invalidate = (file) => {
+    if (!isAnimationRegistryRelevant(file, absoluteAnimationRoot)) {
+      return;
+    }
+
+    const virtualModule = server.moduleGraph.getModuleById(RESOLVED_ANIMATION_REGISTRY_ID);
 
     if (virtualModule) {
       server.moduleGraph.invalidateModule(virtualModule);

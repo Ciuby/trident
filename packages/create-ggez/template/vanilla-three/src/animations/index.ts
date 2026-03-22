@@ -1,0 +1,1 @@
+export { animations } from "virtual:web-hammer-animation-registry";

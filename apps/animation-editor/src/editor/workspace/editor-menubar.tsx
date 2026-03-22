@@ -14,6 +14,7 @@ import {
 export function EditorMenubar(props: {
   store: AnimationEditorStore;
   onCompile: () => void;
+  onExportRuntimeBundle: () => void;
   onSaveProject: () => void;
   onLoadProject: () => void;
   onImportCharacter: () => void;
@@ -38,6 +39,7 @@ export function EditorMenubar(props: {
               Save Project
               <MenubarShortcut>Cmd+S</MenubarShortcut>
             </MenubarItem>
+            <MenubarItem onClick={props.onExportRuntimeBundle}>Export Runtime Bundle</MenubarItem>
             <MenubarItem onClick={props.onLoadProject}>
               Load Project
             </MenubarItem>

@@ -16,12 +16,12 @@ export function GraphsSection(props: { store: AnimationEditorStore; state: Edito
       }
     >
       <div className="space-y-2">
-        {props.state.document.graphs.map((entry) => {
+        {props.state.document.graphs.map((entry, index) => {
           const selected = entry.id === props.state.selection.graphId;
 
           return (
             <button
-              key={entry.id}
+              key={`${entry.id}-${index}`}
               onClick={() => props.store.selectGraph(entry.id)}
               className={
                 selected

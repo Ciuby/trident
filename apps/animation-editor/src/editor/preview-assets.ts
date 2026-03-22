@@ -16,6 +16,7 @@ export interface ImportedPreviewClip {
   name: string;
   duration: number;
   source: string;
+  sourceFile?: File;
   asset: AnimationClipAsset;
   reference: ClipReference;
 }
@@ -126,6 +127,7 @@ async function loadAnimationSource(file: File): Promise<LoadedAnimationSource> {
 function buildImportedClips(
   animations: AnimationClip[],
   skeleton: Skeleton,
+  sourceFile: File,
   fileName: string,
   existingIds: Set<string>
 ): ImportedPreviewClip[] {
@@ -138,6 +140,7 @@ function buildImportedClips(
       name: clip.name || clipId,
       duration: clip.duration,
       source: fileName,
+      sourceFile,
       asset: {
         ...asset,
         id: clipId,
@@ -165,7 +168,7 @@ export async function importCharacterFile(
   }
 
   const rig = createRigFromSkeleton(skeleton);
-  const clips = buildImportedClips(source.animations, skeleton, file.name, new Set(existingClipIds));
+  const clips = buildImportedClips(source.animations, skeleton, file, file.name, new Set(existingClipIds));
 
   return {
     fileName: file.name,
@@ -187,7 +190,7 @@ export async function importAnimationFiles(
 
   for (const file of files) {
     const source = await loadAnimationSource(file);
-    imported.push(...buildImportedClips(source.animations, skeleton, file.name, ids));
+    imported.push(...buildImportedClips(source.animations, skeleton, file, file.name, ids));
   }
 
   return imported;

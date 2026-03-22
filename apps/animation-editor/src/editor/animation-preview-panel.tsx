@@ -380,11 +380,11 @@ export function AnimationPreviewPanel(props: {
       </div>
 
       <div className="shrink-0 space-y-3">
-        {/* {assetStatus || assetError ? (
+        {assetStatus || assetError ? (
           <div className={assetError ? "rounded-2xl border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-[11px] leading-5 text-rose-100" : "rounded-2xl border border-emerald-400/12 bg-emerald-500/8 px-3 py-2 text-[11px] leading-5 text-emerald-100"}>
             {assetError ?? assetStatus}
           </div>
-        ) : null} */}
+        ) : null}
 
         <div className="grid gap-3 sm:grid-cols-[140px_minmax(0,1fr)]">
           <PropertyField label="Speed">

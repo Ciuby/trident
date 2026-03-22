@@ -10,6 +10,7 @@ import { useCopilot } from "./hooks/use-copilot";
 import { AnimationPreviewPanel } from "./animation-preview-panel";
 import { importAnimationFiles, importCharacterFile, type ImportedCharacterAsset, type ImportedPreviewClip } from "./preview-assets";
 import { createProjectBundleJson, parseProjectBundleJson } from "./project-bundle";
+import { createRuntimeBundleZip } from "./runtime-bundle";
 import { useEditorStoreValue } from "./use-editor-store-value";
 import { EditorMenubar } from "./workspace/editor-menubar";
 import { GraphCanvas } from "./workspace/graph-canvas";
@@ -279,6 +280,33 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
     }
   }
 
+  async function handleExportRuntimeBundle() {
+    try {
+      setAssetError(null);
+      setAssetStatus("Exporting runtime bundle...");
+      const result = await createRuntimeBundleZip({
+        characterFile: characterSourceFile,
+        importedClips,
+        sourceDocument: store.getState().document
+      });
+      const zipBytes = new Uint8Array(result.bytes.byteLength);
+      zipBytes.set(result.bytes);
+      const blob = new Blob([zipBytes], { type: "application/zip" });
+      const url = URL.createObjectURL(blob);
+      const anchor = window.document.createElement("a");
+      anchor.href = url;
+      anchor.download = result.fileName;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setAssetStatus(`Exported runtime bundle as "${result.fileName}" with folder animations/${result.folderName}/.`);
+    } catch (error) {
+      console.error("Runtime bundle export failed.", error);
+      const message = error instanceof Error ? error.message : "Failed to export runtime bundle.";
+      setAssetError(message);
+      setAssetStatus("Runtime bundle export failed.");
+    }
+  }
+
   async function handleProjectLoad(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -454,6 +482,7 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
       <EditorMenubar
         store={store}
         onCompile={handleCompile}
+        onExportRuntimeBundle={() => void handleExportRuntimeBundle()}
         onSaveProject={() => void handleSaveProject()}
         onLoadProject={() => projectInputRef.current?.click()}
         onImportCharacter={() => characterInputRef.current?.click()}

@@ -181,6 +181,17 @@ export function createAnimationEditorStore(initialDocument = createDefaultAnimat
     diagnostics: []
   };
 
+  function createUniqueGraphId(): string {
+    const existingIds = new Set(state.document.graphs.map((graph) => graph.id));
+    let graphId = createStableId("graph");
+
+    while (existingIds.has(graphId)) {
+      graphId = createStableId("graph");
+    }
+
+    return graphId;
+  }
+
   function notify(topics: EditorTopic[]): void {
     revision += 1;
     emitter.emit(new Set(topics));
@@ -260,7 +271,7 @@ export function createAnimationEditorStore(initialDocument = createDefaultAnimat
     },
     addGraph(name = "New Graph") {
       const outputNode = createDefaultNode("output", "Output");
-      const graphId = createStableId("graph");
+      const graphId = createUniqueGraphId();
       commit(["document", "graphs", `graph:${graphId}`], () => {
         state.document = {
           ...state.document,

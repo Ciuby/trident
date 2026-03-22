@@ -40,6 +40,7 @@
     "@ggez/runtime-build": "workspace:*",
     "@ggez/runtime-format": "workspace:*",
     "@ggez/shared": "workspace:*",
+    "earcut": "^3.0.2",
     "three": "^0.181.1"
   }
 }

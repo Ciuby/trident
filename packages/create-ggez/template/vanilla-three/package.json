@@ -12,6 +12,11 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.2",
+    "@ggez/anim-core": "^0.1.1",
+    "@ggez/anim-exporter": "^0.1.1",
+    "@ggez/anim-runtime": "^0.1.1",
+    "@ggez/anim-schema": "^0.1.1",
+    "@ggez/anim-three": "^0.1.1",
     "@ggez/game-dev": "^0.1.1",
     "@ggez/gameplay-runtime": "^0.1.1",
     "@ggez/render-pipeline": "^0.1.1",

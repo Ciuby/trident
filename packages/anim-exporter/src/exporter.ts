@@ -3,8 +3,13 @@ import type { AnimationClipAsset, RigDefinition } from "@ggez/anim-core";
 import {
   ANIMATION_ARTIFACT_FORMAT,
   ANIMATION_ARTIFACT_VERSION,
+  ANIMATION_BUNDLE_FORMAT,
+  ANIMATION_BUNDLE_VERSION,
   animationArtifactSchema,
+  animationBundleSchema,
   type AnimationArtifact,
+  type AnimationBundle,
+  type AnimationBundleClip,
   type CompiledAnimatorGraph,
   type SerializableClip,
   type SerializableRig
@@ -59,6 +64,45 @@ export function serializeAnimationArtifact(artifact: AnimationArtifact): string 
 
 export function parseAnimationArtifactJson(json: string): AnimationArtifact {
   return animationArtifactSchema.parse(JSON.parse(json));
+}
+
+export function createAnimationBundle(input: {
+  name: string;
+  artifactPath?: string;
+  characterAssetPath?: string;
+  clips?: AnimationBundleClip[];
+}): AnimationBundle {
+  const clipAssets: Record<string, string> = {};
+
+  for (const clip of input.clips ?? []) {
+    if (!clip.asset) {
+      continue;
+    }
+
+    if (clip.name in clipAssets && clipAssets[clip.name] !== clip.asset) {
+      throw new Error(`Animation bundle clip name "${clip.name}" is duplicated with conflicting assets.`);
+    }
+
+    clipAssets[clip.name] = clip.asset;
+  }
+
+  return {
+    format: ANIMATION_BUNDLE_FORMAT,
+    version: ANIMATION_BUNDLE_VERSION,
+    name: input.name,
+    artifact: input.artifactPath ?? "./graph.animation.json",
+    characterAsset: input.characterAssetPath,
+    clips: input.clips ?? [],
+    clipAssets
+  };
+}
+
+export function serializeAnimationBundle(bundle: AnimationBundle): string {
+  return JSON.stringify(bundle, null, 2);
+}
+
+export function parseAnimationBundleJson(json: string): AnimationBundle {
+  return animationBundleSchema.parse(JSON.parse(json));
 }
 
 export function loadRigFromArtifact(artifact: AnimationArtifact): RigDefinition | undefined {

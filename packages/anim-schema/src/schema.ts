@@ -4,6 +4,8 @@ export const ANIMATION_DOCUMENT_VERSION = 1;
 export const ANIMATION_GRAPH_VERSION = 1;
 export const ANIMATION_ARTIFACT_VERSION = 1;
 export const ANIMATION_ARTIFACT_FORMAT = "ggez.animation.artifact";
+export const ANIMATION_BUNDLE_VERSION = 1;
+export const ANIMATION_BUNDLE_FORMAT = "ggez.animation.bundle";
 
 export const animationParameterTypeSchema = z.enum(["float", "int", "bool", "trigger"]);
 export const animationBlendModeSchema = z.enum(["override", "additive"]);
@@ -367,6 +369,24 @@ export const animationArtifactSchema = z.object({
   clips: z.array(serializableClipSchema).default([])
 });
 
+export const animationBundleClipSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  duration: z.number().nonnegative(),
+  source: z.string().optional(),
+  asset: z.string().min(1).optional()
+});
+
+export const animationBundleSchema = z.object({
+  format: z.literal(ANIMATION_BUNDLE_FORMAT),
+  version: z.literal(ANIMATION_BUNDLE_VERSION),
+  name: z.string().min(1),
+  artifact: z.string().min(1),
+  characterAsset: z.string().min(1).optional(),
+  clips: z.array(animationBundleClipSchema).default([]),
+  clipAssets: z.record(z.string().min(1)).default({})
+});
+
 export type AnimationParameterType = z.infer<typeof animationParameterTypeSchema>;
 export type AnimationBlendMode = z.infer<typeof animationBlendModeSchema>;
 export type RootMotionMode = z.infer<typeof rootMotionModeSchema>;
@@ -394,6 +414,8 @@ export type CompiledClipSlot = z.infer<typeof compiledClipSlotSchema>;
 export type CompiledParameter = z.infer<typeof compiledParameterSchema>;
 export type CompiledAnimatorGraph = z.infer<typeof compiledAnimatorGraphSchema>;
 export type AnimationArtifact = z.infer<typeof animationArtifactSchema>;
+export type AnimationBundleClip = z.infer<typeof animationBundleClipSchema>;
+export type AnimationBundle = z.infer<typeof animationBundleSchema>;
 
 export function parseAnimationEditorDocument(input: unknown): AnimationEditorDocument {
   return animationEditorDocumentSchema.parse(input);
@@ -405,4 +427,8 @@ export function parseCompiledAnimatorGraph(input: unknown): CompiledAnimatorGrap
 
 export function parseAnimationArtifact(input: unknown): AnimationArtifact {
   return animationArtifactSchema.parse(input);
+}
+
+export function parseAnimationBundle(input: unknown): AnimationBundle {
+  return animationBundleSchema.parse(input);
 }
