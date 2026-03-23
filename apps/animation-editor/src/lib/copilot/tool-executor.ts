@@ -8,7 +8,7 @@ import type {
 } from "@ggez/anim-schema";
 import { createStableId } from "@ggez/anim-utils";
 import type { ImportedPreviewClip } from "@/editor/preview-assets";
-import { adjustClipMotion, getClipTrackData, listClipBones, matchClipTransition } from "./clip-tools";
+import { adjustClipMotion, createClip, createPoseClip, duplicateClipAsVariant, getClipTrackData, listClipBones, matchClipTransition, setClipTrackData } from "./clip-tools";
 import type { CopilotToolCall, CopilotToolResult } from "./types";
 
 type Args = Record<string, unknown>;
@@ -21,6 +21,7 @@ export type CopilotToolExecutionContext = {
     projectName?: string;
     projectSlug?: string;
   }) => void;
+  createImportedClip?: (clip: ImportedPreviewClip, options?: { select?: boolean }) => void;
   getImportedClips?: () => ImportedPreviewClip[];
   updateImportedClip?: (clipId: string, updater: (clip: ImportedPreviewClip) => ImportedPreviewClip) => void;
 };
@@ -350,6 +351,27 @@ function executeToolInner(
           }))
         });
 
+      case "create_clip": {
+        if (!context.getImportedClips || !context.createImportedClip) {
+          return fail("Clip creation is unavailable in this session.");
+        }
+        return ok(createClip(context.getImportedClips(), args, context.createImportedClip));
+      }
+
+      case "duplicate_clip_as_variant": {
+        if (!context.getImportedClips || !context.createImportedClip) {
+          return fail("Clip creation is unavailable in this session.");
+        }
+        return ok(duplicateClipAsVariant(context.getImportedClips(), args, context.createImportedClip));
+      }
+
+      case "create_pose_clip": {
+        if (!context.getImportedClips || !context.createImportedClip) {
+          return fail("Clip creation is unavailable in this session.");
+        }
+        return ok(createPoseClip(context.getImportedClips(), document.rig, args, context.createImportedClip));
+      }
+
       case "list_clip_bones": {
         if (!context.getImportedClips) {
           return fail("Imported clip access is unavailable in this session.");
@@ -362,6 +384,13 @@ function executeToolInner(
           return fail("Imported clip access is unavailable in this session.");
         }
         return ok(getClipTrackData(context.getImportedClips(), document.rig, args));
+      }
+
+      case "set_clip_track_data": {
+        if (!context.getImportedClips || !context.updateImportedClip) {
+          return fail("Clip editing is unavailable in this session.");
+        }
+        return ok(setClipTrackData(context.getImportedClips(), document.rig, args, context.updateImportedClip));
       }
 
       case "adjust_clip_motion": {

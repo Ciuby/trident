@@ -9,6 +9,13 @@ type ChannelFrame = {
   values: number[];
 };
 
+type PoseBoneInput = {
+  boneIndex: number;
+  translation?: number[];
+  rotation?: number[];
+  scale?: number[];
+};
+
 type ChannelConfig = {
   kind: ChannelKind;
   components: readonly string[];
@@ -66,6 +73,36 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function slugifyClipId(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return normalized || "clip";
+}
+
+function makeUniqueClipId(baseId: string, existingIds: Set<string>): string {
+  if (!existingIds.has(baseId)) {
+    existingIds.add(baseId);
+    return baseId;
+  }
+
+  let suffix = 2;
+  while (existingIds.has(`${baseId}-${suffix}`)) {
+    suffix += 1;
+  }
+
+  const nextId = `${baseId}-${suffix}`;
+  existingIds.add(nextId);
+  return nextId;
+}
+
 function getChannelConfig(channel: ChannelKind): ChannelConfig {
   return CHANNEL_CONFIGS.find((entry) => entry.kind === channel) ?? CHANNEL_CONFIGS[0]!;
 }
@@ -91,6 +128,133 @@ function cloneImportedClip(clip: ImportedPreviewClip): ImportedPreviewClip {
     },
     reference: { ...clip.reference }
   };
+}
+
+function resolveTargetBoneIndex(args: Args, rig: SerializableRig | undefined): number {
+  const explicitBoneIndex = num(args, "boneIndex");
+  if (explicitBoneIndex !== undefined && Number.isInteger(explicitBoneIndex) && explicitBoneIndex >= 0) {
+    return explicitBoneIndex;
+  }
+
+  const boneName = str(args, "boneName").trim();
+  if (!boneName) {
+    throw new Error("Provide either boneName or boneIndex.");
+  }
+
+  const boneIndex = rig?.boneNames.findIndex((entry) => entry === boneName) ?? -1;
+  if (boneIndex < 0) {
+    throw new Error(`Unknown bone "${boneName}".`);
+  }
+
+  return boneIndex;
+}
+
+function parseFrames(args: Args, channel: ChannelKind): ChannelFrame[] {
+  const componentCount = getChannelConfig(channel).components.length;
+  const frames = args.frames;
+
+  if (!Array.isArray(frames)) {
+    throw new Error("frames must be an array.");
+  }
+
+  const parsed = frames.map((entry, index) => {
+    if (!isRecord(entry) || typeof entry.time !== "number" || !Array.isArray(entry.values)) {
+      throw new Error(`frames[${index}] must include numeric time and values.`);
+    }
+
+    const values = entry.values.filter((value: unknown): value is number => typeof value === "number" && Number.isFinite(value));
+    if (values.length !== componentCount) {
+      throw new Error(`frames[${index}] values must have length ${componentCount} for ${channel}.`);
+    }
+
+    return {
+      time: entry.time,
+      values: channel === "rotation" ? normalizeQuaternion(values) : values
+    };
+  }).sort((left, right) => left.time - right.time);
+
+  parsed.forEach((frame, index) => {
+    if (frame.time < 0) {
+      throw new Error("Frame times must be non-negative.");
+    }
+
+    if (index > 0 && Math.abs(frame.time - parsed[index - 1]!.time) <= 1e-4) {
+      throw new Error("Frame times must be unique per channel.");
+    }
+  });
+
+  return parsed;
+}
+
+function parseVector(values: unknown, expectedLength: number, label: string): number[] | undefined {
+  if (values === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(values)) {
+    throw new Error(`${label} must be an array of ${expectedLength} numbers.`);
+  }
+
+  const parsed = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (parsed.length !== expectedLength) {
+    throw new Error(`${label} must be an array of ${expectedLength} numbers.`);
+  }
+
+  return expectedLength === 4 ? normalizeQuaternion(parsed) : parsed;
+}
+
+function resolveBoneIndexFromInput(input: Record<string, unknown>, rig: SerializableRig | undefined): number {
+  const explicitBoneIndex = typeof input.boneIndex === "number" && Number.isInteger(input.boneIndex) && input.boneIndex >= 0
+    ? input.boneIndex
+    : undefined;
+  if (explicitBoneIndex !== undefined) {
+    return explicitBoneIndex;
+  }
+
+  const boneName = typeof input.boneName === "string" ? input.boneName.trim() : "";
+  if (!boneName) {
+    throw new Error("Each pose bone entry must include boneName or boneIndex.");
+  }
+
+  const boneIndex = rig?.boneNames.findIndex((entry) => entry === boneName) ?? -1;
+  if (boneIndex < 0) {
+    throw new Error(`Unknown bone "${boneName}".`);
+  }
+
+  return boneIndex;
+}
+
+function buildChannelMapKey(boneIndex: number, channel: ChannelKind) {
+  return `${boneIndex}:${channel}`;
+}
+
+function appendChannelFrame(map: Map<string, { boneIndex: number; channel: ChannelKind; frames: ChannelFrame[] }>, boneIndex: number, channel: ChannelKind, frame: ChannelFrame) {
+  const key = buildChannelMapKey(boneIndex, channel);
+  const current = map.get(key);
+  if (current) {
+    current.frames.push(frame);
+    return;
+  }
+
+  map.set(key, {
+    boneIndex,
+    channel,
+    frames: [frame]
+  });
+}
+
+function sortAndValidateFrames(frames: ChannelFrame[]): ChannelFrame[] {
+  const sorted = [...frames].sort((left, right) => left.time - right.time);
+  sorted.forEach((frame, index) => {
+    if (frame.time < 0) {
+      throw new Error("Pose times must be non-negative.");
+    }
+
+    if (index > 0 && Math.abs(frame.time - sorted[index - 1]!.time) <= 1e-4) {
+      throw new Error("Each bone/channel may only have one frame at a given time.");
+    }
+  });
+  return sorted;
 }
 
 function findTrack(clip: ImportedPreviewClip, boneIndex: number): AnimationTrack | undefined {
@@ -240,6 +404,18 @@ function resolveBoneIndices(
   return clip.asset.tracks.map((track) => track.boneIndex).sort((left, right) => left - right);
 }
 
+function findOrCreateTrack(clip: ImportedPreviewClip, boneIndex: number): AnimationTrack {
+  const existing = findTrack(clip, boneIndex);
+  if (existing) {
+    return existing;
+  }
+
+  const track: AnimationTrack = { boneIndex };
+  clip.asset.tracks.push(track);
+  clip.asset.tracks.sort((left, right) => left.boneIndex - right.boneIndex);
+  return track;
+}
+
 function buildTimeWeight(time: number, start: number, end: number, feather: number): number {
   if (time < start || time > end) {
     return 0;
@@ -281,6 +457,186 @@ function serializeChannelFrames(frames: ChannelFrame[], channel: ChannelKind) {
         return entry;
       }, {})
     )
+  };
+}
+
+export function createClip(
+  clips: ImportedPreviewClip[],
+  args: Args,
+  addClip: (clip: ImportedPreviewClip, options?: { select?: boolean }) => void
+) {
+  const name = str(args, "name").trim();
+  if (!name) {
+    throw new Error("Clip name is required.");
+  }
+
+  const duplicateFromClipId = str(args, "duplicateFromClipId").trim();
+  const sourceClip = duplicateFromClipId
+    ? clips.find((clip) => clip.id === duplicateFromClipId)
+    : undefined;
+
+  if (duplicateFromClipId && !sourceClip) {
+    throw new Error(`Unknown clip "${duplicateFromClipId}".`);
+  }
+
+  const existingIds = new Set(clips.map((clip) => clip.id));
+  const requestedId = str(args, "clipId").trim();
+  const clipId = makeUniqueClipId(requestedId || slugifyClipId(name), existingIds);
+  const duration = Math.max(num(args, "duration") ?? sourceClip?.duration ?? 1, 0);
+  const source = str(args, "source").trim() || "ai-generated";
+  const rootBoneIndex = num(args, "rootBoneIndex") ?? sourceClip?.asset.rootBoneIndex;
+
+  const baseClip = sourceClip ? cloneImportedClip(sourceClip) : null;
+  const nextClip: ImportedPreviewClip = {
+    id: clipId,
+    name,
+    duration,
+    source,
+    sourceFile: undefined,
+    asset: {
+      id: clipId,
+      name,
+      duration,
+      rootBoneIndex,
+      tracks: baseClip?.asset.tracks.map(cloneTrack) ?? []
+    },
+    reference: {
+      id: clipId,
+      name,
+      duration,
+      source
+    }
+  };
+
+  addClip(nextClip, { select: true });
+
+  return {
+    clip: {
+      id: nextClip.id,
+      name: nextClip.name,
+      duration: nextClip.duration,
+      source: nextClip.source,
+      duplicatedFromClipId: sourceClip?.id ?? null,
+      trackCount: nextClip.asset.tracks.length
+    }
+  };
+}
+
+export function duplicateClipAsVariant(
+  clips: ImportedPreviewClip[],
+  args: Args,
+  addClip: (clip: ImportedPreviewClip, options?: { select?: boolean }) => void
+) {
+  return createClip(clips, {
+    ...args,
+    duplicateFromClipId: str(args, "sourceClipId"),
+    source: str(args, "source") || "ai-generated-variant"
+  }, addClip);
+}
+
+export function createPoseClip(
+  clips: ImportedPreviewClip[],
+  rig: SerializableRig | undefined,
+  args: Args,
+  addClip: (clip: ImportedPreviewClip, options?: { select?: boolean }) => void
+) {
+  const name = str(args, "name").trim();
+  if (!name) {
+    throw new Error("Clip name is required.");
+  }
+
+  if (!Array.isArray(args.poses) || args.poses.length === 0) {
+    throw new Error("poses must be a non-empty array.");
+  }
+
+  const existingIds = new Set(clips.map((clip) => clip.id));
+  const requestedId = str(args, "clipId").trim();
+  const source = str(args, "source").trim() || "ai-generated";
+  const rootBoneIndex = num(args, "rootBoneIndex");
+  const channelMap = new Map<string, { boneIndex: number; channel: ChannelKind; frames: ChannelFrame[] }>();
+  let latestTime = 0;
+
+  args.poses.forEach((poseEntry, poseIndex) => {
+    if (!isRecord(poseEntry) || typeof poseEntry.time !== "number" || !Array.isArray(poseEntry.bones)) {
+      throw new Error(`poses[${poseIndex}] must include numeric time and a bones array.`);
+    }
+
+    const poseTime = poseEntry.time;
+    latestTime = Math.max(latestTime, poseTime);
+
+    poseEntry.bones.forEach((boneEntry, boneIndexInPose) => {
+      if (!isRecord(boneEntry)) {
+        throw new Error(`poses[${poseIndex}].bones[${boneIndexInPose}] must be an object.`);
+      }
+
+      const boneIndex = resolveBoneIndexFromInput(boneEntry, rig);
+      const translation = parseVector(boneEntry.translation, 3, `poses[${poseIndex}].bones[${boneIndexInPose}].translation`);
+      const rotation = parseVector(boneEntry.rotation, 4, `poses[${poseIndex}].bones[${boneIndexInPose}].rotation`);
+      const scale = parseVector(boneEntry.scale, 3, `poses[${poseIndex}].bones[${boneIndexInPose}].scale`);
+
+      if (!translation && !rotation && !scale) {
+        throw new Error(`poses[${poseIndex}].bones[${boneIndexInPose}] must include translation, rotation, or scale.`);
+      }
+
+      if (translation) {
+        appendChannelFrame(channelMap, boneIndex, "translation", { time: poseTime, values: translation });
+      }
+      if (rotation) {
+        appendChannelFrame(channelMap, boneIndex, "rotation", { time: poseTime, values: rotation });
+      }
+      if (scale) {
+        appendChannelFrame(channelMap, boneIndex, "scale", { time: poseTime, values: scale });
+      }
+    });
+  });
+
+  const clipId = makeUniqueClipId(requestedId || slugifyClipId(name), existingIds);
+  const duration = Math.max(num(args, "duration") ?? latestTime ?? 0, 1);
+  const tracksByBone = new Map<number, AnimationTrack>();
+
+  for (const entry of channelMap.values()) {
+    const frames = sortAndValidateFrames(entry.frames);
+    let track = tracksByBone.get(entry.boneIndex);
+    if (!track) {
+      track = { boneIndex: entry.boneIndex };
+      tracksByBone.set(entry.boneIndex, track);
+    }
+
+    writeChannelFrames(track, entry.channel, frames);
+  }
+
+  const clip: ImportedPreviewClip = {
+    id: clipId,
+    name,
+    duration,
+    source,
+    sourceFile: undefined,
+    asset: {
+      id: clipId,
+      name,
+      duration,
+      rootBoneIndex,
+      tracks: Array.from(tracksByBone.values()).sort((left, right) => left.boneIndex - right.boneIndex)
+    },
+    reference: {
+      id: clipId,
+      name,
+      duration,
+      source
+    }
+  };
+
+  addClip(clip, { select: true });
+
+  return {
+    clip: {
+      id: clip.id,
+      name: clip.name,
+      duration: clip.duration,
+      source: clip.source,
+      trackCount: clip.asset.tracks.length,
+      poseCount: Array.isArray(args.poses) ? args.poses.length : 0
+    }
   };
 }
 
@@ -388,6 +744,60 @@ export function getClipTrackData(clips: ImportedPreviewClip[], rig: Serializable
         }
       ];
     })
+  };
+}
+
+export function setClipTrackData(
+  clips: ImportedPreviewClip[],
+  rig: SerializableRig | undefined,
+  args: Args,
+  updateClip: (clipId: string, updater: (clip: ImportedPreviewClip) => ImportedPreviewClip) => void
+) {
+  const clipId = str(args, "clipId");
+  const clip = clips.find((entry) => entry.id === clipId);
+  if (!clip) {
+    throw new Error(`Unknown clip "${clipId}".`);
+  }
+
+  const channel = str(args, "channel") as ChannelKind;
+  if (!CHANNEL_CONFIGS.some((config) => config.kind === channel)) {
+    throw new Error("channel must be one of translation, rotation, or scale.");
+  }
+
+  const boneIndex = resolveTargetBoneIndex(args, rig);
+  const frames = parseFrames(args, channel);
+  const durationOverride = num(args, "duration");
+  let nextDuration = clip.duration;
+
+  updateClip(clipId, (current) => {
+    const nextClip = cloneImportedClip(current);
+    const track = findOrCreateTrack(nextClip, boneIndex);
+    writeChannelFrames(track, channel, frames);
+    const filteredTracks = nextClip.asset.tracks.filter(hasTrackData);
+
+    const maxFrameTime = frames[frames.length - 1]?.time ?? 0;
+    nextDuration = Math.max(durationOverride ?? current.duration, maxFrameTime, current.duration);
+    nextClip.duration = nextDuration;
+    nextClip.asset = {
+      ...nextClip.asset,
+      duration: nextDuration,
+      tracks: filteredTracks
+    };
+    nextClip.reference = {
+      ...nextClip.reference,
+      duration: nextDuration
+    };
+    return nextClip;
+  });
+
+  return {
+    clipId,
+    channel,
+    boneIndex,
+    boneName: rig?.boneNames[boneIndex] ?? null,
+    duration: nextDuration,
+    keyCount: frames.length,
+    frames: serializeChannelFrames(frames, channel)
   };
 }
 

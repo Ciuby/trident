@@ -138,6 +138,16 @@ type PreviewRect = {
   height: number;
 };
 
+type FloatingPanelPosition = {
+  x: number;
+  y: number;
+};
+
+const COPILOT_PANEL_DEFAULT_X_OFFSET = 16;
+const COPILOT_PANEL_DEFAULT_Y_OFFSET = 48;
+const COPILOT_PANEL_FALLBACK_WIDTH = 352;
+const COPILOT_PANEL_FALLBACK_HEIGHT = 560;
+
 function clampPreviewRect(rect: PreviewRect, bounds: { width: number; height: number }): PreviewRect {
   const width = Math.min(Math.max(rect.width, 360), Math.max(bounds.width - 32, 360));
   const height = Math.min(Math.max(rect.height, 280), Math.max(bounds.height - 32, 280));
@@ -147,6 +157,13 @@ function clampPreviewRect(rect: PreviewRect, bounds: { width: number; height: nu
     height,
     x: Math.min(Math.max(rect.x, 16), Math.max(bounds.width - width - 16, 16)),
     y: Math.min(Math.max(rect.y, 16), Math.max(bounds.height - height - 16, 16)),
+  };
+}
+
+function clampFloatingPanelPosition(position: FloatingPanelPosition, panelSize: { width: number; height: number }, bounds: { width: number; height: number }): FloatingPanelPosition {
+  return {
+    x: Math.min(Math.max(position.x, 16), Math.max(bounds.width - panelSize.width - 16, 16)),
+    y: Math.min(Math.max(position.y, 16), Math.max(bounds.height - panelSize.height - 16, 16)),
   };
 }
 
@@ -171,6 +188,7 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
   const animationInputRef = useRef<HTMLInputElement | null>(null);
   const projectInputRef = useRef<HTMLInputElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
+  const copilotPanelRef = useRef<HTMLDivElement | null>(null);
   const previewDragRef = useRef<
     | {
         mode: "move" | "resize";
@@ -180,7 +198,16 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
       }
     | null
   >(null);
+  const copilotDragRef = useRef<
+    | {
+        pointerX: number;
+        pointerY: number;
+        position: FloatingPanelPosition;
+      }
+    | null
+  >(null);
   const [previewRect, setPreviewRect] = useState<PreviewRect>({ x: 16, y: 16, width: 440, height: 420 });
+  const [copilotPosition, setCopilotPosition] = useState<FloatingPanelPosition | null>(null);
   const importedClipsRef = useRef(importedClips);
   const resolvedProjectName = projectName.trim() || state.document.name.trim() || "Untitled Animation";
   const resolvedProjectSlug = slugifyProjectName(projectSlug.trim() || resolvedProjectName);
@@ -190,6 +217,7 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
   }, [importedClips]);
 
   const copilot = useCopilot(store, {
+    createImportedClip,
     requestAnimationPush: (options) => {
       void handlePushAnimationToGame(options).catch(() => {});
     },
@@ -330,6 +358,31 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
         source: nextSource,
       });
     }
+  }
+
+  function createImportedClip(clip: ImportedPreviewClip, options?: { select?: boolean }) {
+    setImportedClips((current) => [...current, clip]);
+
+    setCharacter((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        clips: [...current.clips, clip],
+      };
+    });
+
+    store.addClip(clip.reference);
+
+    if (options?.select) {
+      setSelectedClipId(clip.id);
+      setEditorView("clip");
+    }
+
+    setAssetError(null);
+    setAssetStatus(`Created clip "${clip.name}".`);
   }
 
   async function handleSaveProject() {
@@ -532,9 +585,40 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
     });
   }, []);
 
+  const updateCopilotBounds = useCallback(() => {
+    const bounds = workspaceRef.current?.getBoundingClientRect();
+    if (!bounds) {
+      return;
+    }
+
+    const panelBounds = copilotPanelRef.current?.getBoundingClientRect();
+    const panelSize = {
+      width: panelBounds?.width ?? COPILOT_PANEL_FALLBACK_WIDTH,
+      height: panelBounds?.height ?? COPILOT_PANEL_FALLBACK_HEIGHT,
+    };
+
+    setCopilotPosition((current) => {
+      const nextPosition =
+        current ?? {
+          x: Math.max(bounds.width - panelSize.width - COPILOT_PANEL_DEFAULT_X_OFFSET, 16),
+          y: COPILOT_PANEL_DEFAULT_Y_OFFSET,
+        };
+
+      return clampFloatingPanelPosition(nextPosition, panelSize, { width: bounds.width, height: bounds.height });
+    });
+  }, []);
+
   useEffect(() => {
     updatePreviewBounds();
   }, [updatePreviewBounds]);
+
+  useEffect(() => {
+    if (!copilotOpen) {
+      return;
+    }
+
+    updateCopilotBounds();
+  }, [copilotOpen, updateCopilotBounds]);
 
   useEffect(() => {
     if (importedClips.length === 0) {
@@ -571,13 +655,23 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
       return;
     }
 
-    const resizeObserver = new ResizeObserver(() => updatePreviewBounds());
+    const resizeObserver = new ResizeObserver(() => {
+      updatePreviewBounds();
+      if (copilotOpen) {
+        updateCopilotBounds();
+      }
+    });
     resizeObserver.observe(element);
+
+    const copilotElement = copilotPanelRef.current;
+    if (copilotOpen && copilotElement) {
+      resizeObserver.observe(copilotElement);
+    }
 
     return () => {
       resizeObserver.disconnect();
     };
-  }, [updatePreviewBounds]);
+  }, [copilotOpen, updateCopilotBounds, updatePreviewBounds]);
 
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
@@ -629,6 +723,47 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
     };
   }, [previewRect]);
 
+  useEffect(() => {
+    function handlePointerMove(event: PointerEvent) {
+      const interaction = copilotDragRef.current;
+      const bounds = workspaceRef.current?.getBoundingClientRect();
+      if (!interaction || !bounds) {
+        return;
+      }
+
+      const panelBounds = copilotPanelRef.current?.getBoundingClientRect();
+      const panelSize = {
+        width: panelBounds?.width ?? COPILOT_PANEL_FALLBACK_WIDTH,
+        height: panelBounds?.height ?? COPILOT_PANEL_FALLBACK_HEIGHT,
+      };
+      const deltaX = event.clientX - interaction.pointerX;
+      const deltaY = event.clientY - interaction.pointerY;
+
+      setCopilotPosition(
+        clampFloatingPanelPosition(
+          {
+            x: interaction.position.x + deltaX,
+            y: interaction.position.y + deltaY,
+          },
+          panelSize,
+          { width: bounds.width, height: bounds.height }
+        )
+      );
+    }
+
+    function handlePointerUp() {
+      copilotDragRef.current = null;
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, []);
+
   function beginPreviewInteraction(mode: "move" | "resize", event: ReactPointerEvent) {
     event.preventDefault();
     event.stopPropagation();
@@ -638,6 +773,32 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
       pointerX: event.clientX,
       pointerY: event.clientY,
       rect: previewRect,
+    };
+  }
+
+  function beginCopilotDrag(event: ReactPointerEvent) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    const bounds = workspaceRef.current?.getBoundingClientRect();
+    const panelBounds = copilotPanelRef.current?.getBoundingClientRect();
+    if (!bounds) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const fallbackPosition = {
+      x: Math.max(bounds.width - (panelBounds?.width ?? COPILOT_PANEL_FALLBACK_WIDTH) - COPILOT_PANEL_DEFAULT_X_OFFSET, 16),
+      y: COPILOT_PANEL_DEFAULT_Y_OFFSET,
+    };
+
+    copilotDragRef.current = {
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      position: copilotPosition ?? fallbackPosition,
     };
   }
 
@@ -739,7 +900,21 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
           ) : null}
 
           {copilotOpen ? (
-            <div className="pointer-events-auto absolute top-12 right-4 z-20 h-[min(72vh,760px)] w-88 max-w-[calc(100vw-2rem)]">
+            <div
+              ref={copilotPanelRef}
+              className="pointer-events-auto absolute z-20 h-[min(72vh,760px)] w-88 max-w-[calc(100vw-2rem)]"
+              style={
+                copilotPosition
+                  ? {
+                      left: `${copilotPosition.x}px`,
+                      top: `${copilotPosition.y}px`,
+                    }
+                  : {
+                      right: "1rem",
+                      top: "3rem",
+                    }
+              }
+            >
               <CopilotPanel
                 onClose={() => setCopilotOpen(false)}
                 onSendMessage={(prompt) => void copilot.sendMessage(prompt)}
@@ -748,6 +923,7 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
                 onSettingsChanged={copilot.refreshConfigured}
                 session={copilot.session}
                 isConfigured={copilot.isConfigured}
+                onHeaderPointerDown={beginCopilotDrag}
               />
             </div>
           ) : null}

@@ -1353,7 +1353,7 @@ export function ClipEditorWorkspace(props: {
           <div className="border-b border-white/8 px-3 py-3 text-[11px] leading-5 text-zinc-500">
             Drop animation files here to append new takes directly into the clip library.
           </div>
-          <ScrollArea className="min-h-0 flex-1">
+          <ScrollArea className="min-h-0 flex-1 pb-24">
             <div className="space-y-1.5 p-2.5">
               {props.importedClips.length === 0 ? (
                 <div className="rounded-[20px] border border-dashed border-white/10 bg-white/3 px-4 py-6 text-center text-[12px] leading-6 text-zinc-500">

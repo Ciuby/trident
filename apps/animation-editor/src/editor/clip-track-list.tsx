@@ -143,7 +143,7 @@ function ClipTrackListInner(props: {
       </div>
       <div
         ref={viewportRef}
-        className="h-[calc(100%-77px)] min-h-0 overflow-auto"
+        className="h-[calc(100%-77px)] min-h-0 overflow-auto pb-42"
         onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       >
         <div style={{ height: `${items.totalHeight}px`, position: "relative" }}>

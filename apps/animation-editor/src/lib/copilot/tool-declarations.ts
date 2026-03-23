@@ -33,6 +33,77 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
     parameters: { type: "object", properties: {} }
   },
   {
+    name: "create_clip",
+    description: "Creates a new clip asset the editor can preview, edit, and export. Optionally clone an existing clip first, then refine it with sparse set_clip_track_data passes or adjust_clip_motion.",
+    parameters: {
+      type: "object",
+      properties: {
+        clipId: { type: "string", description: "Optional explicit clip id. Defaults to a slug from the name." },
+        name: { type: "string", description: "Human-readable clip name." },
+        duration: { type: "number", description: "Clip duration in seconds. Defaults to 1." },
+        duplicateFromClipId: { type: "string", description: "Optional existing clip id to duplicate as the starting point." },
+        rootBoneIndex: { type: "number", description: "Optional explicit root bone index." },
+        source: { type: "string", description: "Optional source label. Defaults to ai-generated." }
+      },
+      required: ["name"]
+    }
+  },
+  {
+    name: "duplicate_clip_as_variant",
+    description: "Creates a new clip by duplicating an existing clip as a starting point. Prefer this when the user wants a variant, alternate timing, or a modified version of an existing animation.",
+    parameters: {
+      type: "object",
+      properties: {
+        sourceClipId: { type: "string", description: "Existing clip id to duplicate." },
+        name: { type: "string", description: "Name for the new variant clip." },
+        clipId: { type: "string", description: "Optional explicit id for the new variant." },
+        duration: { type: "number", description: "Optional duration override for the duplicated clip." },
+        rootBoneIndex: { type: "number", description: "Optional explicit root bone index override." },
+        source: { type: "string", description: "Optional source label. Defaults to ai-generated-variant." }
+      },
+      required: ["sourceClipId", "name"]
+    }
+  },
+  {
+    name: "create_pose_clip",
+    description: "Creates a new sparse blockout clip from a sequence of key poses. Use this for first-pass authoring instead of many per-bone set_clip_track_data calls.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Human-readable clip name." },
+        clipId: { type: "string", description: "Optional explicit clip id." },
+        duration: { type: "number", description: "Optional clip duration override. Defaults to the last pose time or 1." },
+        rootBoneIndex: { type: "number", description: "Optional explicit root bone index." },
+        source: { type: "string", description: "Optional source label. Defaults to ai-generated." },
+        poses: {
+          type: "array",
+          description: "Sparse key poses as [{ time, bones: [{ boneName|boneIndex, translation?, rotation?, scale? }] }].",
+          items: {
+            type: "object",
+            properties: {
+              time: { type: "number" },
+              bones: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    boneName: { type: "string" },
+                    boneIndex: { type: "number" },
+                    translation: { type: "array", items: { type: "number" } },
+                    rotation: { type: "array", items: { type: "number" } },
+                    scale: { type: "array", items: { type: "number" } }
+                  }
+                }
+              }
+            },
+            required: ["time", "bones"]
+          }
+        }
+      },
+      required: ["name", "poses"]
+    }
+  },
+  {
     name: "list_clip_bones",
     description: "Lists animated bones for a clip, including which channels exist and how many keys each channel has. Use this before reading raw track data.",
     parameters: {
@@ -59,6 +130,33 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
         includeAllBones: { type: "boolean", description: "Must be true to read all animated bones without a filter." }
       },
       required: ["clipId"]
+    }
+  },
+  {
+    name: "set_clip_track_data",
+    description: "Creates or replaces keyframes for one clip bone/channel. Use this to author new motion from scratch or overwrite a duplicated clip on selected bones. Prefer a few important keys first instead of dense frame-by-frame data unless the user explicitly asks for that.",
+    parameters: {
+      type: "object",
+      properties: {
+        clipId: { type: "string", description: "Clip id to modify." },
+        boneName: { type: "string", description: "Target bone name. Prefer this when a rig is present." },
+        boneIndex: { type: "number", description: "Target bone index when boneName is unavailable." },
+        channel: { type: "string", enum: ["translation", "rotation", "scale"], description: "Transform channel to write." },
+        duration: { type: "number", description: "Optional clip duration override." },
+        frames: {
+          type: "array",
+          description: "Keyframes as [{ time, values }]. Values length must be 3 for translation/scale and 4 for rotation quaternions.",
+          items: {
+            type: "object",
+            properties: {
+              time: { type: "number" },
+              values: { type: "array", items: { type: "number" } }
+            },
+            required: ["time", "values"]
+          }
+        }
+      },
+      required: ["clipId", "channel", "frames"]
     }
   },
   {

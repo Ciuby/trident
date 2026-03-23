@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEventHandler } from "react";
 import { Bot, Loader2, Send, Square, Trash2, Wrench, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +14,7 @@ type CopilotPanelProps = {
   onSettingsChanged: () => void;
   session: CopilotSession;
   isConfigured: boolean;
+  onHeaderPointerDown?: PointerEventHandler<HTMLDivElement>;
 };
 
 export function CopilotPanel(props: CopilotPanelProps) {
@@ -39,9 +41,12 @@ export function CopilotPanel(props: CopilotPanelProps) {
   const visibleMessages = props.session.messages.filter((message) => message.role !== "tool");
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-[28px] border border-white/7 bg-[#091012]/88 shadow-[0_24px_80px_rgba(0,0,0,0.42)] ring-1 ring-white/7 backdrop-blur-2xl">
+    <div className="flex h-full flex-col overflow-hidden rounded-[28px] border border-white/7 bg-[#091012]/40 shadow-[0_24px_80px_rgba(0,0,0,0.42)] ring-1 ring-white/7 backdrop-blur-lg">
       <div className="flex shrink-0 items-center justify-between border-b border-white/8 bg-linear-to-r from-white/3 to-transparent px-3 py-2.5">
-        <div className="flex items-center gap-2 text-[11px] font-medium tracking-[0.18em] text-foreground/52 uppercase">
+        <div
+          className="flex min-w-0 flex-1 cursor-grab select-none items-center gap-2 text-[11px] font-medium tracking-[0.18em] text-foreground/52 uppercase active:cursor-grabbing"
+          onPointerDown={props.onHeaderPointerDown}
+        >
           <Bot className="size-3.5 text-emerald-300" />
           Codex Graph
         </div>
