@@ -33,6 +33,76 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
     parameters: { type: "object", properties: {} }
   },
   {
+    name: "list_clip_bones",
+    description: "Lists animated bones for a clip, including which channels exist and how many keys each channel has. Use this before reading raw track data.",
+    parameters: {
+      type: "object",
+      properties: {
+        clipId: { type: "string", description: "Clip id to inspect." },
+        query: { type: "string", description: "Optional bone-name search filter." }
+      },
+      required: ["clipId"]
+    }
+  },
+  {
+    name: "get_clip_track_data",
+    description: "Returns raw animation track data for selected bones in a clip. Prefer passing boneNames or boneIndices. Set includeAllBones=true only when a whole-clip read is truly necessary.",
+    parameters: {
+      type: "object",
+      properties: {
+        clipId: { type: "string" },
+        boneNames: { type: "array", items: { type: "string" } },
+        boneIndices: { type: "array", items: { type: "number" } },
+        channels: { type: "array", items: { type: "string", enum: ["translation", "rotation", "scale"] } },
+        timeStart: { type: "number" },
+        timeEnd: { type: "number" },
+        includeAllBones: { type: "boolean", description: "Must be true to read all animated bones without a filter." }
+      },
+      required: ["clipId"]
+    }
+  },
+  {
+    name: "adjust_clip_motion",
+    description: "Applies a targeted motion edit to selected clip bones and channels. Use scale to reduce or amplify motion, offset to bias values, and smooth to damp jitter.",
+    parameters: {
+      type: "object",
+      properties: {
+        clipId: { type: "string" },
+        boneNames: { type: "array", items: { type: "string" } },
+        boneIndices: { type: "array", items: { type: "number" } },
+        channels: { type: "array", items: { type: "string", enum: ["translation", "rotation", "scale"] } },
+        components: { type: "array", items: { type: "string", enum: ["X", "Y", "Z", "W"] } },
+        operation: { type: "string", enum: ["scale", "offset", "smooth"] },
+        factor: { type: "number", description: "Scale multiplier for scale operations." },
+        offset: { type: "number", description: "Scalar offset applied to selected components." },
+        offsets: { type: "array", items: { type: "number" }, description: "Per-component offsets, in the same order as selected components." },
+        timeStart: { type: "number" },
+        timeEnd: { type: "number" },
+        feather: { type: "number", description: "Softens the start/end of the edit window." },
+        pivotTime: { type: "number", description: "Reference time used as the pivot for scale operations." },
+        iterations: { type: "number", description: "Smoothing pass count for smooth operations." }
+      },
+      required: ["clipId", "operation"]
+    }
+  },
+  {
+    name: "match_clip_transition",
+    description: "Adjusts the tail of one clip and/or the start of another so the cut between them is smoother over a blend duration.",
+    parameters: {
+      type: "object",
+      properties: {
+        fromClipId: { type: "string" },
+        toClipId: { type: "string" },
+        boneNames: { type: "array", items: { type: "string" } },
+        boneIndices: { type: "array", items: { type: "number" } },
+        channels: { type: "array", items: { type: "string", enum: ["translation", "rotation", "scale"] } },
+        duration: { type: "number", description: "Blend window in seconds." },
+        editMode: { type: "string", enum: ["from", "to", "both"], description: "Which side of the cut should be edited." }
+      },
+      required: ["fromClipId", "toClipId"]
+    }
+  },
+  {
     name: "list_parameters",
     description: "Lists all animation parameters with ids, names, types, and defaults.",
     parameters: { type: "object", properties: {} }

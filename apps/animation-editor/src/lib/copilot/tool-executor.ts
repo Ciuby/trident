@@ -7,6 +7,8 @@ import type {
   ParameterDefinition
 } from "@ggez/anim-schema";
 import { createStableId } from "@ggez/anim-utils";
+import type { ImportedPreviewClip } from "@/editor/preview-assets";
+import { adjustClipMotion, getClipTrackData, listClipBones, matchClipTransition } from "./clip-tools";
 import type { CopilotToolCall, CopilotToolResult } from "./types";
 
 type Args = Record<string, unknown>;
@@ -19,6 +21,8 @@ export type CopilotToolExecutionContext = {
     projectName?: string;
     projectSlug?: string;
   }) => void;
+  getImportedClips?: () => ImportedPreviewClip[];
+  updateImportedClip?: (clipId: string, updater: (clip: ImportedPreviewClip) => ImportedPreviewClip) => void;
 };
 
 function ok(data: Record<string, unknown>): string {
@@ -345,6 +349,34 @@ function executeToolInner(
             source: clip.source ?? null
           }))
         });
+
+      case "list_clip_bones": {
+        if (!context.getImportedClips) {
+          return fail("Imported clip access is unavailable in this session.");
+        }
+        return ok(listClipBones(context.getImportedClips(), document.rig, args));
+      }
+
+      case "get_clip_track_data": {
+        if (!context.getImportedClips) {
+          return fail("Imported clip access is unavailable in this session.");
+        }
+        return ok(getClipTrackData(context.getImportedClips(), document.rig, args));
+      }
+
+      case "adjust_clip_motion": {
+        if (!context.getImportedClips || !context.updateImportedClip) {
+          return fail("Clip editing is unavailable in this session.");
+        }
+        return ok(adjustClipMotion(context.getImportedClips(), document.rig, args, context.updateImportedClip));
+      }
+
+      case "match_clip_transition": {
+        if (!context.getImportedClips || !context.updateImportedClip) {
+          return fail("Clip editing is unavailable in this session.");
+        }
+        return ok(matchClipTransition(context.getImportedClips(), document.rig, args, context.updateImportedClip));
+      }
 
       case "list_parameters":
         return ok({ parameters: document.parameters });

@@ -181,13 +181,20 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
     | null
   >(null);
   const [previewRect, setPreviewRect] = useState<PreviewRect>({ x: 16, y: 16, width: 440, height: 420 });
+  const importedClipsRef = useRef(importedClips);
   const resolvedProjectName = projectName.trim() || state.document.name.trim() || "Untitled Animation";
   const resolvedProjectSlug = slugifyProjectName(projectSlug.trim() || resolvedProjectName);
+
+  useEffect(() => {
+    importedClipsRef.current = importedClips;
+  }, [importedClips]);
 
   const copilot = useCopilot(store, {
     requestAnimationPush: (options) => {
       void handlePushAnimationToGame(options).catch(() => {});
-    }
+    },
+    getImportedClips: () => importedClipsRef.current,
+    updateImportedClip
   });
 
   function handleConnect(connection: { source: string | null; target: string | null }) {
