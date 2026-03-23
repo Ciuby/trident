@@ -403,6 +403,8 @@ export function compileAnimationEditorDocument(input: unknown): CompileResult {
                   fromStateIndex,
                   toStateIndex,
                   duration: transition.duration,
+                  blendCurve: transition.blendCurve,
+                  syncNormalizedTime: transition.syncNormalizedTime,
                   hasExitTime: transition.hasExitTime,
                   exitTime: transition.exitTime,
                   interruptionSource: transition.interruptionSource,

@@ -37,12 +37,32 @@ export function StateMachineOverview(props: {
   const transitionRows = props.node.transitions.map((transition) => {
     const fromName = props.node.states.find((state) => state.id === transition.fromStateId)?.name ?? "Missing state";
     const toName = props.node.states.find((state) => state.id === transition.toStateId)?.name ?? "Missing state";
-    const summary = transition.conditions.length > 0 ? transition.conditions.map((condition) => formatCondition(condition, props.parameters)).join(" and ") : "No conditions";
+    const summaryParts = [`${transition.duration.toFixed(2)}s ${transition.blendCurve}`];
+    if (transition.syncNormalizedTime) {
+      summaryParts.push("phase sync");
+    }
+    if (transition.hasExitTime) {
+      summaryParts.push(`exit ${Number(transition.exitTime ?? 1).toFixed(2)}`);
+    }
+    summaryParts.push(
+      transition.conditions.length > 0 ? transition.conditions.map((condition) => formatCondition(condition, props.parameters)).join(" and ") : "No conditions"
+    );
+    const summary = summaryParts.join(" | ");
     return { id: transition.id, label: `${fromName} to ${toName}`, detail: summary };
   });
   const anyStateRows = props.node.anyStateTransitions.map((transition) => {
     const toName = props.node.states.find((state) => state.id === transition.toStateId)?.name ?? "Missing state";
-    const summary = transition.conditions.length > 0 ? transition.conditions.map((condition) => formatCondition(condition, props.parameters)).join(" and ") : "No conditions";
+    const summaryParts = [`${transition.duration.toFixed(2)}s ${transition.blendCurve}`];
+    if (transition.syncNormalizedTime) {
+      summaryParts.push("phase sync");
+    }
+    if (transition.hasExitTime) {
+      summaryParts.push(`exit ${Number(transition.exitTime ?? 1).toFixed(2)}`);
+    }
+    summaryParts.push(
+      transition.conditions.length > 0 ? transition.conditions.map((condition) => formatCondition(condition, props.parameters)).join(" and ") : "No conditions"
+    );
+    const summary = summaryParts.join(" | ");
     return { id: transition.id, label: `Any State to ${toName}`, detail: summary };
   });
 

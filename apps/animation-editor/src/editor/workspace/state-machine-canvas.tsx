@@ -25,7 +25,15 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { PropertyField, StudioSection, editorInputClassName, editorSelectClassName, sectionHintClassName } from "./shared";
-import { buildDefaultTransition, INTERRUPTION_SOURCES, NumericDragInput, TRANSITION_OPERATORS, updateStateMachineNode } from "./inspector/shared";
+import {
+  buildDefaultTransition,
+  INTERRUPTION_SOURCES,
+  NumericDragInput,
+  TRANSITION_BLEND_CURVES,
+  TRANSITION_OPERATORS,
+  createDefaultStateMachineTransition,
+  updateStateMachineNode
+} from "./inspector/shared";
 import type { StateMachineNode, StateMachineState, StateMachineTransition } from "./inspector/types";
 
 const ENTRY_NODE_ID = "__entry__";
@@ -53,6 +61,12 @@ function formatCondition(condition: StateMachineTransition["conditions"][number]
 
 function describeTransition(transition: StateMachineTransition, parameters: ParameterDefinition[]) {
   const parts: string[] = [];
+
+  parts.push(`${transition.duration.toFixed(2)}s ${transition.blendCurve}`);
+
+  if (transition.syncNormalizedTime) {
+    parts.push("phase sync");
+  }
 
   if (transition.hasExitTime) {
     parts.push(`exit ${Number(transition.exitTime ?? 1).toFixed(2)}`);
@@ -425,16 +439,12 @@ export function StateMachineCanvas(props: {
       return;
     }
 
-    const nextTransition: StateMachineTransition = {
+    const nextTransition: StateMachineTransition = createDefaultStateMachineTransition({
       id: createStableId(connection.source === ANY_STATE_NODE_ID ? "any-transition" : "transition"),
       fromStateId: connection.source === ANY_STATE_NODE_ID ? undefined : connection.source,
       toStateId: connection.target,
-      duration: 0.15,
-      hasExitTime: false,
-      exitTime: 1,
-      interruptionSource: "none",
-      conditions: props.parameters.length > 0 ? [buildDefaultTransition(props.parameters[0])] : [],
-    };
+      parameter: props.parameters[0]
+    });
 
     updateStateMachineNode(props.store, props.graph.id, props.node.id, (current) => ({
       ...current,
@@ -745,6 +755,44 @@ export function StateMachineCanvas(props: {
                           </option>
                         ))}
                       </select>
+                    </PropertyField>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_132px]">
+                    <PropertyField label="Blend Curve">
+                      <select
+                        value={selectedTransitionEntry.blendCurve}
+                        onChange={(event) =>
+                          updateStateMachineNode(props.store, props.graph.id, props.node.id, (current) =>
+                            updateTransitionCollections(current, selectedTransitionEntry.id, Boolean(selectedTransition?.isAnyState), (entry) => ({
+                              ...entry,
+                              blendCurve: event.target.value as StateMachineTransition["blendCurve"],
+                            }))
+                          )
+                        }
+                        className={editorSelectClassName}
+                      >
+                        {TRANSITION_BLEND_CURVES.map((curve) => (
+                          <option key={curve} value={curve}>
+                            {curve}
+                          </option>
+                        ))}
+                      </select>
+                    </PropertyField>
+                    <PropertyField label="Phase Sync">
+                      <label className="flex h-8 items-center gap-2 rounded-xl bg-white/7 px-2.5 text-[12px] text-zinc-200">
+                        <Checkbox
+                          checked={selectedTransitionEntry.syncNormalizedTime}
+                          onCheckedChange={(checked) =>
+                            updateStateMachineNode(props.store, props.graph.id, props.node.id, (current) =>
+                              updateTransitionCollections(current, selectedTransitionEntry.id, Boolean(selectedTransition?.isAnyState), (entry) => ({
+                                ...entry,
+                                syncNormalizedTime: Boolean(checked),
+                              }))
+                            )
+                          }
+                        />
+                        <span>Match phase</span>
+                      </label>
                     </PropertyField>
                   </div>
                   <div className="space-y-2 border-t border-white/8 pt-3">

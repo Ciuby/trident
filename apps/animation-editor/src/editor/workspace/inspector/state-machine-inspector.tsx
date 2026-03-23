@@ -5,7 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { PropertyField, editorInputClassName, editorSelectClassName, sectionHintClassName } from "../shared";
-import { buildDefaultTransition, INTERRUPTION_SOURCES, NumericDragInput, TRANSITION_OPERATORS, updateStateMachineNode } from "./shared";
+import {
+  buildDefaultTransition,
+  INTERRUPTION_SOURCES,
+  NumericDragInput,
+  TRANSITION_BLEND_CURVES,
+  TRANSITION_OPERATORS,
+  createDefaultStateMachineTransition,
+  updateStateMachineNode
+} from "./shared";
 import { StateMachineOverview } from "./state-machine-overview";
 import type { StateMachineNode, StateMachineState, StateMachineTransition } from "./types";
 
@@ -60,16 +68,12 @@ function TransitionListEditor(props: {
               return;
             }
 
-            const transition: StateMachineTransition = {
+            const transition: StateMachineTransition = createDefaultStateMachineTransition({
               id: createStableId(props.isAnyState ? "any-transition" : "transition"),
               fromStateId: props.isAnyState ? undefined : firstState.id,
               toStateId: fallbackTarget.id,
-              duration: 0.15,
-              hasExitTime: false,
-              exitTime: 1,
-              interruptionSource: "none",
-              conditions: props.parameterOptions.length > 0 ? [buildDefaultTransition(props.parameterOptions[0])] : [],
-            };
+              parameter: props.parameterOptions[0]
+            });
 
             updateStateMachineNode(props.store, props.graph.id, props.node.id, (current) => ({
               ...current,
@@ -194,6 +198,45 @@ function TransitionListEditor(props: {
                   </option>
                 ))}
               </select>
+            </PropertyField>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_132px]">
+            <PropertyField label="Blend Curve">
+              <select
+                value={transition.blendCurve}
+                onChange={(event) =>
+                  updateStateMachineNode(props.store, props.graph.id, props.node.id, (current) =>
+                    updateTransitionCollections(current, transition.id, Boolean(props.isAnyState), (entry) => ({
+                      ...entry,
+                      blendCurve: event.target.value as StateMachineTransition["blendCurve"],
+                    }))
+                  )
+                }
+                className={editorSelectClassName}
+              >
+                {TRANSITION_BLEND_CURVES.map((curve) => (
+                  <option key={curve} value={curve}>
+                    {curve}
+                  </option>
+                ))}
+              </select>
+            </PropertyField>
+            <PropertyField label="Phase Sync">
+              <label className="flex h-8 items-center gap-2 rounded-xl bg-white/7 px-2.5 text-[12px] text-zinc-200">
+                <Checkbox
+                  checked={transition.syncNormalizedTime}
+                  onCheckedChange={(checked) =>
+                    updateStateMachineNode(props.store, props.graph.id, props.node.id, (current) =>
+                      updateTransitionCollections(current, transition.id, Boolean(props.isAnyState), (entry) => ({
+                        ...entry,
+                        syncNormalizedTime: Boolean(checked),
+                      }))
+                    )
+                  }
+                />
+                <span>Match phase</span>
+              </label>
             </PropertyField>
           </div>
 

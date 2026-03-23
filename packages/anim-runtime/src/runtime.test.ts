@@ -39,6 +39,19 @@ const walkClip: AnimationClipAsset = {
   ]
 };
 
+const poseTenClip: AnimationClipAsset = {
+  id: "pose-ten",
+  name: "Pose Ten",
+  duration: 1,
+  tracks: [
+    {
+      boneIndex: 0,
+      translationTimes: new Float32Array([0]),
+      translationValues: new Float32Array([10, 0, 0])
+    }
+  ]
+};
+
 const fastRunClip: AnimationClipAsset = {
   id: "run-fast",
   name: "Run Fast",
@@ -213,6 +226,8 @@ describe("@ggez/anim-runtime", () => {
                   fromStateIndex: 0,
                   toStateIndex: 1,
                   duration: 0.1,
+                  blendCurve: "linear",
+                  syncNormalizedTime: false,
                   hasExitTime: false,
                   interruptionSource: "none",
                   conditions: [{ parameterIndex: 0, operator: "==", value: true }]
@@ -299,6 +314,151 @@ describe("@ggez/anim-runtime", () => {
     const result = animator.update(0.75);
 
     expect(result.pose.translations[0]).toBeCloseTo(1.125);
+  });
+
+  it("supports easing curves for state machine crossfades", () => {
+    const graph: CompiledAnimatorGraph = {
+      version: 1,
+      name: "Eased Transition",
+      parameters: [{ name: "moving", type: "bool", defaultValue: false }],
+      clipSlots: [
+        { id: "idle", name: "Idle", duration: 1 },
+        { id: "pose-ten", name: "Pose Ten", duration: 1 }
+      ],
+      masks: [],
+      graphs: [
+        {
+          name: "Main",
+          rootNodeIndex: 2,
+          nodes: [
+            { type: "clip", clipIndex: 0, speed: 1, loop: true, inPlace: false },
+            { type: "clip", clipIndex: 1, speed: 1, loop: true, inPlace: false },
+            {
+              type: "stateMachine",
+              machineIndex: 0,
+              entryStateIndex: 0,
+              states: [
+                { name: "Idle", motionNodeIndex: 0, speed: 1, cycleOffset: 0 },
+                { name: "Pose", motionNodeIndex: 1, speed: 1, cycleOffset: 0 }
+              ],
+              transitions: [
+                {
+                  fromStateIndex: 0,
+                  toStateIndex: 1,
+                  duration: 1,
+                  blendCurve: "ease-in",
+                  syncNormalizedTime: false,
+                  hasExitTime: false,
+                  interruptionSource: "none",
+                  conditions: [{ parameterIndex: 0, operator: "==", value: true }]
+                }
+              ],
+              anyStateTransitions: []
+            }
+          ]
+        }
+      ],
+      layers: [
+        {
+          name: "Base",
+          graphIndex: 0,
+          weight: 1,
+          blendMode: "override",
+          rootMotionMode: "none",
+          enabled: true
+        }
+      ],
+      entryGraphIndex: 0
+    };
+
+    const animator = createAnimatorInstance({
+      rig,
+      graph,
+      clips: [idleClip, poseTenClip]
+    });
+
+    animator.setBool("moving", true);
+    const result = animator.update(0.25);
+
+    expect(result.pose.translations[0]).toBeCloseTo(0.625);
+  });
+
+  it("can sync the next state by normalized phase when a transition begins", () => {
+    const makeGraph = (syncNormalizedTime: boolean): CompiledAnimatorGraph => ({
+      version: 1,
+      name: syncNormalizedTime ? "Phase Synced Transition" : "Unsynced Transition",
+      parameters: [{ name: "moving", type: "bool", defaultValue: false }],
+      clipSlots: [
+        { id: "walk", name: "Walk", duration: 1 },
+        { id: "run-fast", name: "Run Fast", duration: 0.5 }
+      ],
+      masks: [],
+      graphs: [
+        {
+          name: "Main",
+          rootNodeIndex: 2,
+          nodes: [
+            { type: "clip", clipIndex: 0, speed: 1, loop: true, inPlace: false },
+            { type: "clip", clipIndex: 1, speed: 1, loop: true, inPlace: false },
+            {
+              type: "stateMachine",
+              machineIndex: 0,
+              entryStateIndex: 0,
+              states: [
+                { name: "Walk", motionNodeIndex: 0, speed: 1, cycleOffset: 0 },
+                { name: "Run", motionNodeIndex: 1, speed: 1, cycleOffset: 0 }
+              ],
+              transitions: [
+                {
+                  fromStateIndex: 0,
+                  toStateIndex: 1,
+                  duration: 0.2,
+                  blendCurve: "linear",
+                  syncNormalizedTime,
+                  hasExitTime: false,
+                  interruptionSource: "none",
+                  conditions: [{ parameterIndex: 0, operator: "==", value: true }]
+                }
+              ],
+              anyStateTransitions: []
+            }
+          ]
+        }
+      ],
+      layers: [
+        {
+          name: "Base",
+          graphIndex: 0,
+          weight: 1,
+          blendMode: "override",
+          rootMotionMode: "none",
+          enabled: true
+        }
+      ],
+      entryGraphIndex: 0
+    });
+
+    const unsyncedAnimator = createAnimatorInstance({
+      rig,
+      graph: makeGraph(false),
+      clips: [walkClip, fastRunClip]
+    });
+    unsyncedAnimator.update(0.25);
+    unsyncedAnimator.setBool("moving", true);
+    const unsyncedResult = unsyncedAnimator.update(0.1);
+
+    const syncedAnimator = createAnimatorInstance({
+      rig,
+      graph: makeGraph(true),
+      clips: [walkClip, fastRunClip]
+    });
+    syncedAnimator.update(0.25);
+    syncedAnimator.setBool("moving", true);
+    const syncedResult = syncedAnimator.update(0.1);
+
+    expect(unsyncedResult.pose.translations[0]).toBeCloseTo(0.45);
+    expect(syncedResult.pose.translations[0]).toBeCloseTo(0.625);
+    expect(syncedResult.pose.translations[0]).toBeGreaterThan(unsyncedResult.pose.translations[0]);
   });
 
   it("can evaluate clips in place by ignoring root translation", () => {
@@ -460,6 +620,8 @@ describe("@ggez/anim-runtime", () => {
                   fromStateIndex: 0,
                   toStateIndex: 1,
                   duration: 1,
+                  blendCurve: "linear",
+                  syncNormalizedTime: false,
                   hasExitTime: false,
                   interruptionSource: "next",
                   conditions: [{ parameterIndex: 0, operator: "==", value: true }]
@@ -468,6 +630,8 @@ describe("@ggez/anim-runtime", () => {
                   fromStateIndex: 1,
                   toStateIndex: 0,
                   duration: 0.1,
+                  blendCurve: "linear",
+                  syncNormalizedTime: false,
                   hasExitTime: false,
                   interruptionSource: "none",
                   conditions: [{ parameterIndex: 0, operator: "==", value: false }]

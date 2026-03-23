@@ -20,6 +20,7 @@ export const transitionOperatorSchema = z.enum([
   "set"
 ]);
 export const interruptionSourceSchema = z.enum(["none", "current", "next", "both"]);
+export const transitionBlendCurveSchema = z.enum(["linear", "ease-in", "ease-out", "ease-in-out"]);
 
 export const vec2Schema = z.object({
   x: z.number(),
@@ -138,6 +139,8 @@ export const stateMachineTransitionSchema = z.object({
   fromStateId: z.string().optional(),
   toStateId: z.string(),
   duration: z.number().nonnegative().default(0.15),
+  blendCurve: transitionBlendCurveSchema.default("linear"),
+  syncNormalizedTime: z.boolean().default(false),
   hasExitTime: z.boolean().default(false),
   exitTime: z.number().min(0).max(1).optional(),
   interruptionSource: interruptionSourceSchema.default("none"),
@@ -245,6 +248,8 @@ export const compiledTransitionSchema = z.object({
   fromStateIndex: z.number().int().min(-1),
   toStateIndex: z.number().int().nonnegative(),
   duration: z.number().nonnegative(),
+  blendCurve: transitionBlendCurveSchema.default("linear"),
+  syncNormalizedTime: z.boolean().default(false),
   hasExitTime: z.boolean(),
   exitTime: z.number().min(0).max(1).optional(),
   interruptionSource: interruptionSourceSchema,
@@ -392,6 +397,7 @@ export type AnimationBlendMode = z.infer<typeof animationBlendModeSchema>;
 export type RootMotionMode = z.infer<typeof rootMotionModeSchema>;
 export type TransitionOperator = z.infer<typeof transitionOperatorSchema>;
 export type InterruptionSource = z.infer<typeof interruptionSourceSchema>;
+export type TransitionBlendCurve = z.infer<typeof transitionBlendCurveSchema>;
 
 export type ParameterDefinition = z.infer<typeof parameterDefinitionSchema>;
 export type ClipReference = z.infer<typeof clipReferenceSchema>;

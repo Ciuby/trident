@@ -4,7 +4,8 @@ import type {
   CompiledAnimatorGraph,
   CompiledCondition,
   CompiledGraphNode,
-  CompiledMotionGraph
+  CompiledMotionGraph,
+  CompiledTransition
 } from "@ggez/anim-schema";
 import { clamp } from "@ggez/anim-utils";
 import { createAnimatorParameterStore, type AnimatorParameterStore } from "./parameters";
@@ -17,6 +18,7 @@ interface MachineTransitionState {
   readonly fromStateIndex: number;
   readonly toStateIndex: number;
   readonly duration: number;
+  readonly blendCurve: CompiledTransition["blendCurve"];
   readonly interruptionSource: "none" | "current" | "next" | "both";
   elapsed: number;
   nextStateTime: number;
@@ -240,6 +242,22 @@ function addScaledRootMotion(target: RootMotionDelta, source: RootMotionDelta, w
   return target;
 }
 
+function applyBlendCurve(curve: CompiledTransition["blendCurve"], value: number): number {
+  const t = clamp(value, 0, 1);
+
+  switch (curve) {
+    case "ease-in":
+      return t * t;
+    case "ease-out":
+      return 1 - (1 - t) * (1 - t);
+    case "ease-in-out":
+      return t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) * (-2 * t + 2)) / 2;
+    case "linear":
+    default:
+      return t;
+  }
+}
+
 function evaluateCondition(parameters: AnimatorParameterStore, condition: CompiledCondition): boolean {
   const current = parameters.getValue(condition.parameterIndex);
 
@@ -261,6 +279,42 @@ function evaluateCondition(parameters: AnimatorParameterStore, condition: Compil
     default:
       return false;
   }
+}
+
+function getStateDuration(
+  context: EvaluationContext,
+  graphIndex: number,
+  machineNode: Extract<CompiledGraphNode, { type: "stateMachine" }>,
+  stateIndex: number
+): number {
+  const state = machineNode.states[stateIndex]!;
+  return getNodeDuration(context, graphIndex, state.motionNodeIndex);
+}
+
+function getSyncedTransitionTime(
+  context: EvaluationContext,
+  graphIndex: number,
+  machineNode: Extract<CompiledGraphNode, { type: "stateMachine" }>,
+  transition: (typeof machineNode.transitions)[number] | (typeof machineNode.anyStateTransitions)[number],
+  sourceStateIndex: number,
+  sourceStateTime: number
+): number {
+  if (!transition.syncNormalizedTime) {
+    return 0;
+  }
+
+  const sourceState = machineNode.states[sourceStateIndex]!;
+  const targetState = machineNode.states[transition.toStateIndex]!;
+  const sourceDuration = getStateDuration(context, graphIndex, machineNode, sourceStateIndex);
+  const targetDuration = getStateDuration(context, graphIndex, machineNode, transition.toStateIndex);
+
+  if (sourceDuration <= 0 || targetDuration <= 0) {
+    return 0;
+  }
+
+  const sourcePlaybackTime = sourceStateTime + sourceState.cycleOffset;
+  const targetPlaybackTime = (sourcePlaybackTime / sourceDuration) * targetDuration;
+  return targetPlaybackTime - targetState.cycleOffset;
 }
 
 function getNodeDuration(context: EvaluationContext, graphIndex: number, nodeIndex: number, visited = new Set<string>()): number {
@@ -521,7 +575,7 @@ function tryStartTransition(
 
   const candidates = [...machineNode.anyStateTransitions, ...machineNode.transitions];
   const currentState = machineNode.states[machineState.currentStateIndex]!;
-  const currentDuration = getNodeDuration(context, graphIndex, currentState.motionNodeIndex);
+  const currentDuration = getStateDuration(context, graphIndex, machineNode, machineState.currentStateIndex);
   const normalizedTime = currentDuration > 0 ? machineState.stateTime / currentDuration : 0;
 
   for (const transition of candidates) {
@@ -541,9 +595,10 @@ function tryStartTransition(
       fromStateIndex: machineState.currentStateIndex,
       toStateIndex: transition.toStateIndex,
       duration: transition.duration,
+      blendCurve: transition.blendCurve,
       interruptionSource: transition.interruptionSource,
       elapsed: 0,
-      nextStateTime: 0
+      nextStateTime: getSyncedTransitionTime(context, graphIndex, machineNode, transition, machineState.currentStateIndex, machineState.stateTime)
     };
     return;
   }
@@ -564,11 +619,11 @@ function tryInterruptTransition(
   const allowNext = activeTransition.interruptionSource === "next" || activeTransition.interruptionSource === "both";
 
   const currentState = machineNode.states[machineState.currentStateIndex]!;
-  const currentDuration = getNodeDuration(context, graphIndex, currentState.motionNodeIndex);
+  const currentDuration = getStateDuration(context, graphIndex, machineNode, machineState.currentStateIndex);
   const currentNormalizedTime = currentDuration > 0 ? machineState.stateTime / currentDuration : 0;
 
   const nextState = machineNode.states[activeTransition.toStateIndex]!;
-  const nextDuration = getNodeDuration(context, graphIndex, nextState.motionNodeIndex);
+  const nextDuration = getStateDuration(context, graphIndex, machineNode, activeTransition.toStateIndex);
   const nextNormalizedTime = nextDuration > 0 ? activeTransition.nextStateTime / nextDuration : 0;
 
   const transitionCanStart = (
@@ -594,9 +649,10 @@ function tryInterruptTransition(
       fromStateIndex: sourceStateIndex,
       toStateIndex: transition.toStateIndex,
       duration: transition.duration,
+      blendCurve: transition.blendCurve,
       interruptionSource: transition.interruptionSource,
       elapsed: 0,
-      nextStateTime: 0
+      nextStateTime: getSyncedTransitionTime(context, graphIndex, machineNode, transition, sourceStateIndex, sourceStateTime)
     };
   };
 
@@ -752,7 +808,7 @@ function evaluateStateMachine(
     );
   }
 
-  const progress = clamp(transition.elapsed / Math.max(0.0001, transition.duration), 0, 1);
+  const progress = applyBlendCurve(transition.blendCurve, transition.elapsed / Math.max(0.0001, transition.duration));
   blendPoses(outPose, nextPose, progress, outPose);
   blendRootMotion(outRootMotion, nextMotion, progress, outRootMotion);
 
