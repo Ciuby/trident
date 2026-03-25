@@ -11,6 +11,7 @@ import { useCopilot } from "./hooks/use-copilot";
 import { useGameConnection } from "./hooks/use-game-connection";
 import { AnimationPreviewPanel } from "./animation-preview-panel";
 import { ClipEditorWorkspace } from "./clip-editor-workspace";
+import { synchronizeAnimationDocument } from "./document-sync";
 import { importAnimationFiles, importCharacterFile, type ImportedCharacterAsset, type ImportedPreviewClip } from "./preview-assets";
 import { createProjectBundleJson, parseProjectBundleJson } from "./project-bundle";
 import { createRuntimeBundleSyncResult, createRuntimeBundleZip } from "./runtime-bundle";
@@ -390,7 +391,7 @@ export function AnimationEditorWorkspace(props: { store: AnimationEditorStore })
     try {
       setAssetError(null);
       setAssetStatus("Saving project bundle...");
-      const editorDocument = parseAnimationEditorDocument(store.getState().document);
+      const editorDocument = synchronizeAnimationDocument(store.getState().document, importedClips);
       const json = await createProjectBundleJson({
         document: editorDocument,
         characterFile: characterSourceFile,
