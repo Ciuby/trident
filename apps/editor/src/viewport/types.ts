@@ -199,6 +199,26 @@ export type BrushCreateState =
       startPoint: Vec3;
       stepCount: number;
       width: number;
+    }
+  | {
+      anchor: Vec3;
+      arcSegments: number;
+      basis: BrushCreateBasis;
+      currentPoint: Vec3;
+      shape: "ramp";
+      stage: "base";
+    }
+  | {
+      anchor: Vec3;
+      arcSegments: number;
+      basis: BrushCreateBasis;
+      depth: number;
+      dragPlane: Plane;
+      height: number;
+      shape: "ramp";
+      stage: "height";
+      startPoint: Vec3;
+      width: number;
     };
 
 export type BevelState = {

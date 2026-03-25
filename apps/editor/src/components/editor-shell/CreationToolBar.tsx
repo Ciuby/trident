@@ -85,6 +85,13 @@ export function CreationToolBar({
           onClick={() => onSelectBrushShape("stairs")}
         />
         <CreationButton
+          active={activeToolId === "brush" && activeBrushShape === "ramp"}
+          disabled={disabled}
+          icon={RampBrushIcon}
+          label="Ramp Brush"
+          onClick={() => onSelectBrushShape("ramp")}
+        />
+        <CreationButton
           active={activeToolId === "brush" && activeBrushShape === "cylinder"}
           disabled={disabled}
           icon={CylinderPrimitiveIcon}
@@ -250,6 +257,16 @@ function StairBrushIcon(props: { className?: string }) {
   return (
     <svg fill="none" viewBox="0 0 24 24" {...props}>
       <path d="M5.5 17.5h4v-3h4v-3h4v-3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      <path d="M5.5 17.5V8.5" opacity="0.34" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
+      <path d="M5.5 17.5h12" opacity="0.34" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+function RampBrushIcon(props: { className?: string }) {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" {...props}>
+      <path d="M5.5 17.5 Q8 17.5 17.5 8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
       <path d="M5.5 17.5V8.5" opacity="0.34" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
       <path d="M5.5 17.5h12" opacity="0.34" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
     </svg>
