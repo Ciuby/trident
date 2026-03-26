@@ -73,9 +73,9 @@ export function createViewportState(snapSize: GridSnapValue = 2): PerspectiveVie
       target: vec3(0, 1.5, 0),
       fov: 50,
       near: 0.1,
-      far: 500,
-      minDistance: 3,
-      maxDistance: 180
+      far: 10000,
+      minDistance: 1,
+      maxDistance: 5000
     },
     grid: createGridState(snapSize)
   };

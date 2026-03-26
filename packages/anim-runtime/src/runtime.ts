@@ -1,4 +1,4 @@
-import { addPoseAdditive, blendPoses, blendPosesMasked, copyPose, createPoseBufferFromRig, createRootMotionDelta, estimateClipDuration, extractRootMotionDelta, sampleClipPose, sampleClipPoseOnBase } from "@ggez/anim-core";
+import { addPoseAdditive, blendPoses, blendPosesMasked, copyPose, createPoseBufferFromRig, createRootMotionDelta, estimateClipDuration, sampleClipPose, sampleClipPoseOnBase, sampleClipRootMotionDelta } from "@ggez/anim-core";
 import type { AnimationClipAsset, BoneMask, PoseBuffer, RigDefinition, RootMotionDelta } from "@ggez/anim-core";
 import type {
   CompiledAnimatorGraph,
@@ -455,34 +455,8 @@ function evaluateNode(
         forceRootMotionChainToBindPose(context, rootBoneIndex, prevPose);
         forceRootMotionChainToBindPose(context, rootBoneIndex, nextPose);
       }
-      const prevTranslationOffset = rootBoneIndex * 3;
-      const prevRotationOffset = rootBoneIndex * 4;
       copyRootMotion(
-        extractRootMotionDelta(
-          {
-            x: prevPose.translations[prevTranslationOffset]!,
-            y: prevPose.translations[prevTranslationOffset + 1]!,
-            z: prevPose.translations[prevTranslationOffset + 2]!
-          },
-          {
-            x: prevPose.rotations[prevRotationOffset]!,
-            y: prevPose.rotations[prevRotationOffset + 1]!,
-            z: prevPose.rotations[prevRotationOffset + 2]!,
-            w: prevPose.rotations[prevRotationOffset + 3]!
-          },
-          {
-            x: nextPose.translations[prevTranslationOffset]!,
-            y: nextPose.translations[prevTranslationOffset + 1]!,
-            z: nextPose.translations[prevTranslationOffset + 2]!
-          },
-          {
-            x: nextPose.rotations[prevRotationOffset]!,
-            y: nextPose.rotations[prevRotationOffset + 1]!,
-            z: nextPose.rotations[prevRotationOffset + 2]!,
-            w: nextPose.rotations[prevRotationOffset + 3]!
-          },
-          "full"
-        ),
+        sampleClipRootMotionDelta(clip, context.rig, previousTime * node.speed, time * node.speed, "full"),
         outRootMotion
       );
       if (node.inPlace) {

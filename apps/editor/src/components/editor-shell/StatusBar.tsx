@@ -68,6 +68,10 @@ function resolveBrushInteractionHint(shape: BrushShape) {
     return "click anchor / move for base / wheel rotate / click lock / move height / wheel steps / click commit / Esc cancel";
   }
 
+  if (shape === "ramp") {
+    return "click anchor / move for base / click lock / move for height / wheel arc segments / click commit / Esc cancel";
+  }
+
   if (shape === "sphere") {
     return "click center / move for radius / click commit / Esc cancel";
   }

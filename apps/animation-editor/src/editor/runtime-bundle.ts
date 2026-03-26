@@ -1,7 +1,7 @@
 import { createAnimationArtifact, createAnimationBundle, serializeAnimationArtifact, serializeAnimationBundle } from "@ggez/anim-exporter";
 import { compileAnimationEditorDocumentOrThrow } from "@ggez/anim-compiler";
-import { parseAnimationEditorDocument } from "@ggez/anim-schema";
 import { strToU8, zipSync } from "fflate";
+import { synchronizeAnimationDocument } from "./document-sync";
 import type { ImportedPreviewClip } from "./preview-assets";
 
 type RuntimeBundleExportResult = {
@@ -64,7 +64,7 @@ async function buildZipFiles(input: {
   sourceDocument: unknown;
   title: string;
 }) {
-  const editorDocument = parseAnimationEditorDocument(input.sourceDocument);
+  const editorDocument = synchronizeAnimationDocument(input.sourceDocument, input.importedClips);
   const compiledGraph = compileAnimationEditorDocumentOrThrow(editorDocument);
   const clipsById = new Map(input.importedClips.map((clip) => [clip.id, clip]));
   const files = new Map<string, Uint8Array>();
@@ -149,7 +149,7 @@ export async function createRuntimeBundleZip(input: {
   importedClips: ImportedPreviewClip[];
   sourceDocument: unknown;
 }): Promise<RuntimeBundleExportResult> {
-  const editorDocument = parseAnimationEditorDocument(input.sourceDocument);
+  const editorDocument = synchronizeAnimationDocument(input.sourceDocument, input.importedClips);
   const folderName = slugifySegment(editorDocument.name);
   const files = await buildZipFiles({
     characterFile: input.characterFile,

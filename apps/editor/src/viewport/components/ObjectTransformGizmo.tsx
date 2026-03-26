@@ -14,6 +14,7 @@ const tempPivotCameraDirection = new Vector3();
 
 export function ObjectTransformGizmo({
   activeToolId,
+  onDragStateChange,
   onPreviewEntityTransform,
   onPreviewNodeTransform,
   onUpdateEntityTransform,
@@ -40,6 +41,7 @@ export function ObjectTransformGizmo({
   | "transformMode"
   | "viewport"
 > & {
+  onDragStateChange?: (dragging: boolean) => void;
   selectedEntityWorldTransform?: Transform;
   selectedNode?: GeometryNode;
   selectedNodeWorldTransform?: Transform;
@@ -154,10 +156,12 @@ export function ObjectTransformGizmo({
           mode="translate"
           object={pivotTargetRef.current}
           onMouseDown={() => {
+            onDragStateChange?.(true);
             baselineTransformRef.current = structuredClone(activePivotNode.transform);
           }}
           onMouseUp={() => {
             if (!baselineTransformRef.current || !pivotTargetRef.current) {
+              onDragStateChange?.(false);
               return;
             }
 
@@ -173,6 +177,7 @@ export function ObjectTransformGizmo({
               baselineTransformRef.current
             );
             baselineTransformRef.current = undefined;
+            onDragStateChange?.(false);
           }}
           onObjectChange={() => {
             if (!baselineTransformRef.current || !pivotTargetRef.current) {
@@ -200,10 +205,12 @@ export function ObjectTransformGizmo({
           mode={transformMode}
           object={selectedObject}
           onMouseDown={() => {
+            onDragStateChange?.(true);
             baselineTransformRef.current = structuredClone(selectedTarget.transform);
           }}
           onMouseUp={() => {
             if (!baselineTransformRef.current) {
+              onDragStateChange?.(false);
               return;
             }
 
@@ -220,6 +227,7 @@ export function ObjectTransformGizmo({
             }
 
             baselineTransformRef.current = undefined;
+            onDragStateChange?.(false);
           }}
           onObjectChange={() => {
             const nextWorldTransform = objectToTransform(selectedObject, pivot);
