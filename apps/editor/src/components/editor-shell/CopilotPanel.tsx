@@ -244,13 +244,25 @@ function escapeHtml(text: string): string {
 }
 
 function ThinkingIndicator({ session }: { session: CopilotSession }) {
+  const formatToolName = (name: string) => {
+    return name.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ");
+  };
+  
+  const getStatusText = () => {
+    if (session.status === "executing") {
+      const toolName = session.currentToolName ? formatToolName(session.currentToolName) : "tool";
+      return "Executing: " + toolName;
+    }
+    return "Thinking" + (session.iterationCount > 1 ? " (step " + session.iterationCount + ")" : "") + "...";
+  };
+  
+  const isExecuting = session.status === "executing";
+  
   return (
     <div className="flex items-center gap-2 py-1">
-      <Loader2 className="size-3 animate-spin text-emerald-400" />
-      <span className="text-[10px] text-foreground/48">
-        {session.status === "executing"
-          ? "Executing tools..."
-          : `Thinking${session.iterationCount > 1 ? ` (step ${session.iterationCount})` : ""}...`}
+      <Loader2 className={"size-3 animate-spin " + (isExecuting ? "text-amber-400" : "text-emerald-400")} />
+      <span className={"text-[10px] " + (isExecuting ? "text-amber-300" : "text-foreground/48")}>
+        {getStatusText()}
       </span>
     </div>
   );

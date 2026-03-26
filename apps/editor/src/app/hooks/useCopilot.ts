@@ -51,7 +51,18 @@ export function useCopilot(editor: EditorCore, toolContext: CopilotToolExecution
       abortRef.current = controller;
 
       const copilotProvider = createCopilotProvider(settings.provider);
-      const systemPrompt = buildSystemPrompt(editor);
+      
+      // Get current project path for the system prompt
+      let projectPath: string | null = null;
+      if (typeof window !== "undefined" && (window as any).electronAPI?.getCurrentProject) {
+        try {
+          projectPath = await (window as any).electronAPI.getCurrentProject();
+        } catch {
+          projectPath = null;
+        }
+      }
+      
+      const systemPrompt = buildSystemPrompt(editor, projectPath);
 
       const providerConfig = {
         apiKey: settings.provider === "gemini" ? settings.gemini.apiKey : settings.provider === "openai" ? settings.openai.apiKey : "",
@@ -76,7 +87,8 @@ export function useCopilot(editor: EditorCore, toolContext: CopilotToolExecution
           onUpdate: (updated) => {
             setSession({ ...updated, messages: [...updated.messages] });
           },
-          signal: controller.signal
+          signal: controller.signal,
+          projectPath: projectPath ?? undefined
         });
       } else {
         // Gemini path: agentic loop

@@ -1,6 +1,6 @@
 import type { EditorCore } from "@ggez/editor-core";
 
-export function buildSystemPrompt(editor: EditorCore): string {
+export function buildSystemPrompt(editor: EditorCore, projectPath: string | null = null): string {
   const materialCount = editor.scene.materials.size;
   const nodeCount = editor.scene.nodes.size;
   const entityCount = editor.scene.entities.size;
@@ -8,6 +8,10 @@ export function buildSystemPrompt(editor: EditorCore): string {
   const hookCount =
     Array.from(editor.scene.nodes.values()).reduce((count, node) => count + (node.hooks?.length ?? 0), 0) +
     Array.from(editor.scene.entities.values()).reduce((count, entity) => count + (entity.hooks?.length ?? 0), 0);
+  const projectPathInfo = projectPath
+    ? "PROJECT ROOT: " + projectPath + " - All file operations use paths relative to this project root."
+    : "WARNING: No project is currently open. File operations will fail.";
+
 
   return `You are Vibe AI, an expert Full-Stack Game Developer and Level Designer operating inside 'Trident' (a browser-based Source-2-style level editor).
 Your goal is to help the user build, edit, and code THEIR local game project. You are modifying their game, NOT the Trident editor itself.
@@ -195,6 +199,9 @@ When the user asks for "detail" or "full detail", aim high:
 - **Imports:** Rely on standard ES modules. Do not write React or Vue code unless the project explicitly uses it (default is Vanilla DOM).
 - **Asset Loading:** Textures and models imported via the editor are saved in \`src/scenes/assets/\`. Reference them using relative paths or explicit asset URLs provided by the framework.
 - When creating components, write clean, strictly-typed TypeScript. Do not break the \`requestAnimationFrame\` loop.
+
+## Working Directory
+${projectPathInfo}
 
 ## Current Document Summary
 - ${nodeCount} nodes

@@ -156,6 +156,7 @@ async function handleClientMessage(
           threadId?: string;
           tools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>;
           userMessage: string;
+          projectPath?: string;
         });
         setSession(newSession);
       } catch (error) {
@@ -208,6 +209,7 @@ async function startCodexSession(
     threadId?: string;
     tools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>;
     userMessage: string;
+          projectPath?: string;
   }
 ): Promise<CodexSession> {
   sendToClient(ws, { type: "status", status: "connecting" });
@@ -219,9 +221,14 @@ async function startCodexSession(
   const isWindows = process.platform === "win32";
   const bin = isWindows ? "codex.cmd" : "codex";
 
+  const workingDir = config.projectPath || process.cwd();
+  // Log for debugging
+  console.log(`[codex-bridge] Spawning Codex with working directory: ${workingDir}`);
+  
   const proc = spawn(bin, ["app-server"], {
     stdio: ["pipe", "pipe", "pipe"],
     env: { ...process.env, PATH: envPath },
+    cwd: workingDir,
     shell: isWindows
   });
 
@@ -355,16 +362,33 @@ function handleCodexMessage(session: CodexSession, msg: { id?: number; method?: 
   }
 
   // Handle server-to-client requests (need response)
+    // DEBUG: Log full tool call message from Codex
+    console.log(`
+<========== [FROM CODEX - RAW MSG] ==========
+${JSON.stringify(msg, null, 2)}
+===========================================`);
   if (msg.id !== undefined && msg.method === "item/tool/call") {
-    const params = msg.params as { callId: string; tool: string; arguments: Record<string, unknown> };
+    const params = msg.params as { callId: string; tool: string; arguments: Record<string, unknown> | string };
+    // Parse arguments if they are a JSON string (Codex sometimes sends them as stringified JSON)
+    let args: Record<string, unknown> = {};
+    if (params.arguments) {
+      if (typeof params.arguments === "string") {
+        try {
+          args = JSON.parse(params.arguments);
+        } catch {
+          console.error("[codex-bridge] Failed to parse tool arguments:", params.arguments);
+          args = {};
+        }
+      } else if (typeof params.arguments === "object") {
+        args = params.arguments as Record<string, unknown>;
+      }
+    }
     sendToClient(session.ws, {
       type: "tool_call",
       id: String(msg.id),
       name: params.tool,
-      args: params.arguments ?? {}
+      args
     });
-    sendToClient(session.ws, { type: "status", status: "executing" });
-
     // Store pending tool call — will be resolved when browser sends tool_result
     session.pendingToolCalls.set(msg.id, { resolve: () => {} });
     return;

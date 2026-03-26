@@ -72,6 +72,7 @@ export type CopilotSession = {
   status: CopilotSessionStatus;
   error?: string;
   iterationCount: number;
+  currentToolName?: string;
 };
 
 // ── Provider interfaces ───────────────────────────────────────
@@ -90,6 +91,7 @@ export type CopilotProvider = {
 /** Session-based provider (Codex) — manages its own tool-calling loop */
 export type SessionBasedCopilotProvider = {
   runSession(config: {
+    projectPath?: string;
     messages: CopilotMessage[];
     userPrompt: string;
     tools: CopilotToolDeclaration[];

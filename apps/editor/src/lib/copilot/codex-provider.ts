@@ -69,7 +69,8 @@ export function createCodexProvider(): SessionBasedCopilotProvider {
             systemPrompt: config.systemPrompt,
             threadId: config.threadId,
             tools: wsTools,
-            userMessage: config.userPrompt
+            userMessage: config.userPrompt,
+            projectPath: config.projectPath,
           }));
         };
 
@@ -99,6 +100,7 @@ export function createCodexProvider(): SessionBasedCopilotProvider {
             case "tool_call": {
               console.log(`  ${TAG} → ${msg.name}`, JSON.stringify(msg.args, null, 2));
               session.status = "executing";
+              session.currentToolName = msg.name;
               session.iterationCount++;
 
               const toolCall: CopilotToolCall = {
@@ -149,6 +151,7 @@ export function createCodexProvider(): SessionBasedCopilotProvider {
                 }));
 
                 session.status = "thinking";
+                session.currentToolName = undefined;
                 config.onUpdate({ ...session, messages: [...messages] });
               })();
               break;
