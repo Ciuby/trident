@@ -83,9 +83,14 @@ const electronAPI = {
 
   // ── Project Management ────────────────────────────────────────────
 
-  /** Open a native dialog to select a project folder. Returns the path or null. */
   openProject: () =>
     ipcRenderer.invoke("project:open"),
+
+  openRecentProject: (projectPath: string) =>
+    ipcRenderer.invoke("project:openRecent", projectPath),
+
+  openAnimationStudio: () =>
+    ipcRenderer.invoke("app:openAnimationStudio"),
 
   /** Open a native dialog + scaffold a new project with create-ggez. Returns the path or null. */
   createProject: () =>
@@ -99,6 +104,34 @@ const electronAPI = {
   onProjectOpened: (callback: (projectPath: string) => void) => {
     ipcRenderer.on("project:opened", (_event, projectPath: string) => callback(projectPath));
     return () => { ipcRenderer.removeAllListeners("project:opened"); };
+  },
+
+  // ── Terminal ───────────────────────────────────────────────────────
+
+  /** Run a shell command in the given directory. Returns { stdout, stderr, exitCode }. */
+  runCommand: (command: string, cwd?: string) =>
+    ipcRenderer.invoke("terminal:runCommand", command, cwd),
+
+  /** Spawn a long-running process. Returns a pid string. */
+  spawnProcess: (command: string, cwd?: string) =>
+    ipcRenderer.invoke("terminal:spawn", command, cwd),
+
+  /** Kill a process by pid. */
+  killProcess: (pid: string) =>
+    ipcRenderer.invoke("terminal:kill", pid),
+
+  /** Listen for stream chunk data from spawned processes. */
+  onProcessData: (callback: (payload: { pid: string; type: "output" | "error"; text: string }) => void) => {
+    const listener = (_event: any, payload: any) => callback(payload);
+    ipcRenderer.on("terminal:data", listener);
+    return () => { ipcRenderer.removeListener("terminal:data", listener); };
+  },
+
+  /** Listen for process termination. */
+  onProcessExit: (callback: (payload: { pid: string; exitCode: number | null }) => void) => {
+    const listener = (_event: any, payload: any) => callback(payload);
+    ipcRenderer.on("terminal:exit", listener);
+    return () => { ipcRenderer.removeListener("terminal:exit", listener); };
   },
 };
 

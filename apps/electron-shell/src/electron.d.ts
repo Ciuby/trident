@@ -57,9 +57,18 @@ export interface ElectronAPI {
 
   // ── Project Management ──
   openProject(): Promise<string | null>;
+  openRecentProject?(projectPath: string): Promise<string | null>;
+  openAnimationStudio?(): Promise<void>;
   createProject(): Promise<string | null>;
   getCurrentProject(): Promise<string | null>;
   onProjectOpened(callback: (projectPath: string) => void): () => void;
+
+  // ── Terminal Streaming ──
+  runCommand?(command: string, cwd?: string): Promise<{ stdout: string; stderr: string; exitCode: number | null }>;
+  spawnProcess?(command: string, cwd?: string): Promise<string>;
+  killProcess?(pid: string): Promise<void>;
+  onProcessData?(callback: (payload: { pid: string; type: "output" | "error"; text: string }) => void): () => void;
+  onProcessExit?(callback: (payload: { pid: string; exitCode: number | null }) => void): () => void;
 }
 
 declare global {

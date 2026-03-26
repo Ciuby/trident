@@ -16,6 +16,10 @@ export default defineConfig({
     createAnimationGameSyncPlugin(),
     createCodexBridgePlugin(),
   ],
+  server: {
+    port: 5174,
+    strictPort: true,
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),

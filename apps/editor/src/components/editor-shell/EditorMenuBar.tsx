@@ -1,4 +1,4 @@
-import { Bot, Cable, FolderOpen, Gauge, PanelLeft } from "lucide-react";
+import { Bot, Cable, FolderOpen, Gauge, PanelLeft, SquareTerminal, Film, Play, Hammer, Package } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/menubar";
 import { TridentIcon } from "@/components/editor-shell/icons";
 import type { ViewportQuality } from "@/state/ui-store";
+import { dispatchTerminalCommand } from "@/state/ui-store";
 
 type EditorMenuBarProps = {
   canRedo: boolean;
@@ -32,11 +33,14 @@ type EditorMenuBarProps = {
   onFocusSelection: () => void;
   onLoadWhmap: () => void;
   onOpenProject?: () => void;
+  onOpenAnimationStudio?: () => void;
   onRedo: () => void;
   onSaveWhmap: () => void;
   onToggleCopilot: () => void;
   onToggleFileBrowser?: () => void;
   onToggleLogicViewer: () => void;
+  onToggleTerminal?: () => void;
+  terminalOpen?: boolean;
   onToggleViewportQuality: () => void;
   onUndo: () => void;
   projectName?: string | null;
@@ -62,11 +66,14 @@ export function EditorMenuBar({
   onFocusSelection,
   onLoadWhmap,
   onOpenProject,
+  onOpenAnimationStudio,
   onRedo,
   onSaveWhmap,
   onToggleCopilot,
   onToggleFileBrowser,
   onToggleLogicViewer,
+  onToggleTerminal,
+  terminalOpen,
   onToggleViewportQuality,
   viewportQuality,
   onUndo,
@@ -75,9 +82,8 @@ export function EditorMenuBar({
   return (
     <div className="flex h-9 items-center justify-between gap-3 px-2.5">
       <div className="flex min-w-0 items-center gap-2.5">
-        <div className="flex items-center gap-2 px-2 text-[11px] font-medium tracking-[0.22em] text-foreground/92 uppercase">
-          <TridentIcon className="size-3.5 text-emerald-400" />
-          <span>Trident</span>
+        <div className="flex items-center px-2">
+          <img src="/icon.svg" alt="Logo" className="w-auto h-10 shrink-0 object-contain object-left" />
         </div>
 
         <Menubar className="h-7 rounded-xl bg-transparent p-0 text-[11px] shadow-none">
@@ -197,6 +203,64 @@ export function EditorMenuBar({
             </MenubarContent>
           </MenubarMenu>
         </Menubar>
+
+        {isElectron && (
+          <div className="flex items-center gap-1 pl-2 ml-2 border-l border-white/10">
+            <Button
+              aria-label="Install Dependencies"
+              className="size-7 rounded-lg text-foreground/65 hover:text-emerald-300"
+              onClick={() => {
+                dispatchTerminalCommand("Install", "bun install");
+              }}
+              title="Install Dependencies"
+              size="icon-sm"
+              variant="ghost"
+            >
+              <Package className="size-3.5" />
+            </Button>
+            <Button
+              aria-label="Build Project"
+              className="size-7 rounded-lg text-foreground/65 hover:text-emerald-300"
+              onClick={() => {
+                onSaveWhmap();
+                dispatchTerminalCommand("Build", "bun install && bun run build");
+              }}
+              title="Build Project"
+              size="icon-sm"
+              variant="ghost"
+            >
+              <Hammer className="size-3.5" />
+            </Button>
+            <Button
+              aria-label="Play Project"
+              className="size-7 rounded-lg text-foreground/65 hover:text-emerald-300"
+              onClick={() => {
+                onSaveWhmap();
+                dispatchTerminalCommand("Server", "bun install && bun run dev --port 3456");
+                setTimeout(() => {
+                  window.open("http://localhost:3456", "_blank");
+                }, 2000);
+              }}
+              title="Play Project (Launch Dev Server)"
+              size="icon-sm"
+              variant="ghost"
+            >
+              <Play className="size-3.5" />
+            </Button>
+            {onOpenAnimationStudio && (
+              <Button
+                aria-label="Animation Studio"
+                className="size-7 rounded-lg text-foreground/65 hover:text-emerald-300"
+                onClick={onOpenAnimationStudio}
+                title="Launch Animation Studio"
+                size="icon-sm"
+                variant="ghost"
+              >
+                <Film className="size-3.5" />
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-3 px-2">
@@ -215,6 +279,18 @@ export function EditorMenuBar({
             variant="ghost"
           >
             <PanelLeft className="size-3.5" />
+          </Button>
+        )}
+        {isElectron && onToggleTerminal && (
+          <Button
+            aria-label="Terminal"
+            className={`size-7 rounded-lg ${terminalOpen ? "text-emerald-400 hover:text-emerald-300 bg-white/5" : "text-foreground/65 hover:text-foreground"}`}
+            onClick={onToggleTerminal}
+            title="Toggle Terminal"
+            size="icon-sm"
+            variant="ghost"
+          >
+            <SquareTerminal className="size-3.5" />
           </Button>
         )}
         {gameConnectionControl}
@@ -249,6 +325,7 @@ export function EditorMenuBar({
         >
           <Bot className="size-3.5" />
         </Button>
+        {/* Electron Native tools chunk was moved to left menu block */}
       </div>
     </div>
   );

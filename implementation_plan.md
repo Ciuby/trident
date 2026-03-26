@@ -47,22 +47,33 @@ Aggiungeremo al root monorepo: `"dev:electron": "bun run --cwd apps/electron-she
 ## 4. Fasi di Implementazione (Roadmap)
 
 ### Fase 1: Setup Electron Base e Finestre
-- [ ] Creare il nuovo package `apps/electron-shell` con Vite + Electron (`electronic-vite` o manual setup).
-- [ ] Creare il main process Node con l'apertura tramite `loadURL('http://localhost:5173')` per dev.
-- [ ] Aggiungere lo script `dev:electron` globale.
-- [ ] Aggiungere Native Menus (File -> New Project, Open Project...).
+- [x] Creare il nuovo package `apps/electron-shell` con Vite + Electron (`electronic-vite` o manual setup).
+- [x] Creare il main process Node con l'apertura tramite `loadURL('http://localhost:5173')` per dev.
+- [x] Aggiungere lo script `dev:electron` globale.
+- [x] Aggiungere Native Menus (File -> New Project, Open Project...).
 
 ### Fase 2: File System Bridge (IPC) e Gestione Progetto
-- [ ] Creare `preload.ts` e le API IPC Node (`window.electronAPI.readFile`, `writeFile`, `readDir`).
-- [ ] Aggiungere il menu "Create Project" che in Node esegue npx/bun `create-ggez` su una cartella scelta dall'utente.
-- [ ] Aggiungere il protocollo locale Electron per servire file texture in modo che Three.js ci acceda come url normali (`trident://file-path`).
+- [x] Creare `preload.ts` e le API IPC Node (`window.electronAPI.readFile`, `writeFile`, `readDir`).
+- [x] Aggiungere il menu "Create Project" che in Node esegue npx/bun `create-ggez` su una cartella scelta dall'utente.
+- [x] Aggiungere il protocollo locale Electron per servire file texture in modo che Three.js ci acceda come url normali (`trident://file-path`).
 
 ### Fase 3: Rielaborazione File Browser / Monaco Editor nell'UI Trident
-- [ ] Installare `@monaco-editor/react` in `apps/editor`.
-- [ ] Modificare l'interfaccia dell'editor React (`EditorShell.tsx`) per avere un nuovo tab "Project Files" sulla sinistra/destra.
-- [ ] Aggiungere Logica File Browser (leggi cartella progetto dal path passato da Electron, pulsanti CRUD, upload).
-- [ ] Implementare l'uso di Monaco per clic/edit dei JSON/.ts scripts.
+- [x] Installare `@monaco-editor/react` in `apps/editor`.
+- [x] Modificare l'interfaccia dell'editor React (`EditorShell.tsx`) per avere un nuovo tab "Project Files" sulla sinistra/destra.
+- [x] Aggiungere Logica File Browser (leggi cartella progetto dal path passato da Electron, pulsanti CRUD, upload).
+- [x] Implementare l'uso di Monaco per clic/edit dei JSON/.ts scripts.
 
 ### Fase 4: Refactor Texture Management
-- [ ] Modificare Trident e la funzione di export e Material Import affinché salvi i file (PNG/JPG e GLB importati) nella cartella `assets/` del progetto attualmente aperto via `ipcRenderer`.
-- [ ] Aggiornare Three.js `TextureLoader`/`GLTFLoader` backend per usare gli URL protocol locali Electron.
+- [x] Modificare Trident e la funzione di export e Material Import affinché salvi i file (PNG/JPG e GLB importati) nella cartella `assets/` del progetto attualmente aperto via `ipcRenderer`.
+- [x] Aggiornare Three.js `TextureLoader`/`GLTFLoader` backend per usare gli URL protocol locali Electron.
+
+### Fase 5: Editor UX & Funzionalità Native
+- [x] **Salvataggio Nativo Scene**: Aggiornare il salvataggio dei file `.whmap` e `.runtime.json` per scriverli direttamente in `src/scenes` via `electronAPI.writeFile` invece di usare il download del browser.
+- [x] **Avvio Animation Studio**: Aggiungere pulsante in alto a destra nell'EditorMenuBar per avviare l'Animation Studio come finestra Electron separata (aggiungendo il supporto `ipcRenderer` per salvare le animazioni fisse nel progetto).
+- [x] **Welcome Widget & Cronologia**: Trasformare il messaggio di benvenuto in un widget fluttuante centrale. Implementare il salvataggio degli ultimi progetti aperti e il caricamento automatico dell'ultimo progetto all'avvio dell'editor.
+- [x] **Monaco Editor Enhancements**: Implementare il fullscreen per l'editor di codice (ingrandimento viewport intero) e aggiungere un pulsante dedicato al salvataggio rapido dello script/file.
+- [x] **Terminale Integrato**: Aggiungere un pulsante di fianco a "Toggle File Browser" chiamato "Toggle Terminal" che possa lanciare un terminale interno (es. `xterm.js` via Node-PTY backend) per eseguire comandi es. `bun run dev` o script di build.
+- [x] **Finestre Resizabili**: Migliorare l'UX permettendo di allargare o restringere liberamente le sidebar laterali (sia File Browser sia Inspector destro).
+
+### Fase 6: Native Scene Ingestion
+- [ ] **Caricamento rapido .whmap**: Aggiungere una feature di UX al File Browser che permetta, facendo doppio click su un file con estensione `.whmap`, di parsarlo istantaneamente tramite il protocollo file IPC nativo e ricaricarlo nella memoria del Trident Editor come scena attiva, rimpiazzando lo scomodo pulsante di upload legacy.

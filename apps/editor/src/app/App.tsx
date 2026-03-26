@@ -87,6 +87,7 @@ import {
   isWebHammerEngineBundle
 } from "@ggez/three-runtime";
 import { slugifyProjectName, type EditorFileMetadata } from "@ggez/dev-sync";
+import { toast } from "sonner";
 import { EditorShell } from "@/components/EditorShell";
 import { useGameConnection } from "@/app/hooks/useGameConnection";
 import { uiStore, type RightPanelId } from "@/state/ui-store";
@@ -1369,12 +1370,40 @@ export function App() {
     );
 
     if (typeof payload === "string") {
+      const electronAPI = (window as any).electronAPI;
+      if (electronAPI?.isElectron) {
+        const projectPath = await electronAPI.getCurrentProject();
+        if (projectPath) {
+          const scenesDir = `${projectPath}/src/scenes/main`;
+          await electronAPI.mkdir(scenesDir);
+          const filePath = `${scenesDir}/${resolvedProjectSlug}.whmap`;
+          await electronAPI.writeFile(filePath, payload);
+          toast.success("Scene Saved Successfully", { description: filePath });
+          console.log(`[Save] .whmap saved to ${filePath}`);
+          return;
+        }
+      }
       downloadTextFile(`${resolvedProjectSlug}.whmap`, payload, "application/json");
     }
   };
 
   const handleLoadWhmap = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleLoadWhmapFromString = async (text: string) => {
+    const payload = await runWorkerRequest(
+      {
+        kind: "whmap-load",
+        text
+      },
+      "Load .whmap"
+    );
+
+    if (typeof payload !== "string" && !isWebHammerEngineBundle(payload)) {
+      applyProjectMetadata(payload.metadata);
+      editor.importSnapshot(payload, "scene:load-whmap");
+    }
   };
 
   const handleWhmapFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1425,6 +1454,35 @@ export function App() {
     );
 
     if (isWebHammerEngineBundle(payload)) {
+      const electronAPI = (window as any).electronAPI;
+      if (electronAPI?.isElectron) {
+        const projectPath = await electronAPI.getCurrentProject();
+        if (projectPath) {
+          const scenesDir = `${projectPath}/src/scenes/main`;
+          await electronAPI.mkdir(scenesDir);
+
+          // Write the manifest
+          const manifestJson = JSON.stringify(payload.manifest, null, 2);
+          await electronAPI.writeFile(`${scenesDir}/scene.runtime.json`, manifestJson);
+
+          // Write each bundled asset file
+          for (const file of payload.files) {
+            const filePath = `${scenesDir}/${file.path}`;
+            // Ensure subdirectories exist (e.g. assets/textures/)
+            const dirPath = filePath.substring(0, filePath.lastIndexOf("/"));
+            if (dirPath !== scenesDir) {
+              await electronAPI.mkdir(dirPath);
+            }
+            // Convert Uint8Array to base64 for binary write
+            const base64 = btoa(String.fromCharCode(...file.bytes));
+            await electronAPI.writeFile(filePath, { base64 });
+          }
+
+          toast.success("Runtime Bundle Exported", { description: scenesDir });
+          console.log(`[Export] Runtime scene exported to ${scenesDir}`);
+          return;
+        }
+      }
       const zip = createWebHammerEngineBundleZip(payload);
       downloadBinaryFile(`${resolvedProjectSlug}.runtime.zip`, zip, "application/zip");
     }
@@ -1586,6 +1644,7 @@ export function App() {
         onGenerateAiModel={handleGenerateAiModel}
         onImportGlb={handleImportGlb}
         onLoadWhmap={handleLoadWhmap}
+        onLoadWhmapFromString={handleLoadWhmapFromString}
         onPausePhysics={handlePausePhysics}
         onMeshEditToolbarAction={handleMeshEditToolbarAction}
         onMirrorSelection={handleMirrorSelection}

@@ -50,6 +50,7 @@ function createWindow(): BrowserWindow {
     minWidth: 1024,
     minHeight: 600,
     title: "GGEZ — Web Hammer",
+    icon: path.join(__dirname, "..", "assets", "icon.ico"),
     backgroundColor: "#09090b",
     webPreferences: {
       nodeIntegration: false,

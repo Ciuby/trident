@@ -109,6 +109,26 @@ export function registerIpcHandlers(): void {
 
   // ── Project Management ──
 
+  ipcMain.handle("app:openAnimationStudio", async () => {
+    const ANIMATION_STUDIO_URL = "http://localhost:5174";
+    const win = new BrowserWindow({
+      width: 1400,
+      height: 900,
+      minWidth: 1024,
+      minHeight: 600,
+      title: "GGEZ — Animation Studio",
+      icon: join(__dirname, "..", "assets", "icon.ico"),
+      backgroundColor: "#09090b",
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+      },
+    });
+
+    win.setMenuBarVisibility(false);
+    win.loadURL(ANIMATION_STUDIO_URL);
+  });
+
   ipcMain.handle("project:open", async (event) => {
     console.log("[IPC] project:open called");
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -139,6 +159,24 @@ export function registerIpcHandlers(): void {
       return projectPath;
     } catch (err) {
       console.error("[IPC] project:open - ERROR:", err);
+      return null;
+    }
+  });
+
+  ipcMain.handle("project:openRecent", async (event, projectPath: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return null;
+
+    try {
+      const s = await stat(projectPath);
+      if (!s.isDirectory()) return null;
+      
+      currentProjectPath = projectPath;
+      win.webContents.send("project:opened", projectPath);
+      win.setTitle(`GGEZ — ${projectPath.split(/[\\/]/).pop()}`);
+      return projectPath;
+    } catch (err) {
+      console.error("[IPC] project:openRecent - ERROR:", err);
       return null;
     }
   });
@@ -174,7 +212,7 @@ export function registerIpcHandlers(): void {
     return new Promise<string | null>((resolvePromise) => {
       const child = spawn(
         "node",
-        [createGgezPath, parentDir, "--yes", "--package-manager", "bun", "--no-install"],
+        [createGgezPath, parentDir, "--yes", "--package-manager", "bun"],
         {
           cwd: parentDir,
           stdio: "pipe",
@@ -253,3 +291,103 @@ async function readDirTreeRecursive(dirPath: string): Promise<DirTreeEntry[]> {
 
   return result;
 }
+
+// ── Terminal Command Execution ──────────────────────────────────────
+
+const runningProcesses = new Map<string, import("node:child_process").ChildProcess>();
+
+function registerTerminalHandlers(): void {
+  ipcMain.handle("terminal:runCommand", async (_event, command: string, cwd?: string) => {
+    const workDir = cwd ?? currentProjectPath ?? process.cwd();
+    const isWindows = process.platform === "win32";
+
+    return new Promise<{ stdout: string; stderr: string; exitCode: number | null }>((resolve) => {
+      const shell = isWindows ? "cmd" : "/bin/bash";
+      const shellArgs = isWindows ? ["/c", command] : ["-c", command];
+
+      const proc = spawn(shell, shellArgs, {
+        cwd: workDir,
+        env: { ...process.env },
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      proc.stdout?.on("data", (data: Buffer) => { stdout += data.toString(); });
+      proc.stderr?.on("data", (data: Buffer) => { stderr += data.toString(); });
+
+      proc.on("close", (code) => {
+        resolve({ stdout: stdout.trimEnd(), stderr: stderr.trimEnd(), exitCode: code });
+      });
+
+      proc.on("error", (err) => {
+        resolve({ stdout: "", stderr: err.message, exitCode: 1 });
+      });
+
+      // Kill after 30 seconds timeout
+      setTimeout(() => {
+        if (!proc.killed) {
+          proc.kill("SIGTERM");
+          resolve({ stdout: stdout.trimEnd(), stderr: "Command timed out after 30 seconds", exitCode: 1 });
+        }
+      }, 30000);
+    });
+  });
+
+  ipcMain.handle("terminal:spawn", async (event, command: string, cwd?: string) => {
+    const workDir = cwd ?? currentProjectPath ?? process.cwd();
+    const isWindows = process.platform === "win32";
+    const win = BrowserWindow.fromWebContents(event.sender);
+    
+    if (!win) return null;
+
+    const shell = isWindows ? "cmd" : "/bin/bash";
+    const shellArgs = isWindows ? ["/c", command] : ["-c", command];
+
+    const proc = spawn(shell, shellArgs, {
+      cwd: workDir,
+      env: { ...process.env },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    const pid = String(proc.pid || Math.random());
+    runningProcesses.set(pid, proc);
+
+    proc.stdout?.on("data", (data: Buffer) => {
+      win.webContents.send("terminal:data", { pid, type: "output", text: data.toString() });
+    });
+
+    proc.stderr?.on("data", (data: Buffer) => {
+      win.webContents.send("terminal:data", { pid, type: "error", text: data.toString() });
+    });
+
+    proc.on("close", (code) => {
+      runningProcesses.delete(pid);
+      win.webContents.send("terminal:exit", { pid, exitCode: code });
+    });
+
+    proc.on("error", (err) => {
+      win.webContents.send("terminal:data", { pid, type: "error", text: err.message });
+    });
+
+    return pid;
+  });
+
+  ipcMain.handle("terminal:kill", (_event, pid: string) => {
+    const proc = runningProcesses.get(pid);
+    if (proc && !proc.killed) {
+      if (process.platform === "win32" && proc.pid) {
+        // Windows needs taskkill to terminate child cmd.exe trees cleanly
+        spawn("taskkill", ["/pid", proc.pid.toString(), "/f", "/t"]);
+      } else {
+        proc.kill("SIGTERM");
+      }
+    }
+    runningProcesses.delete(pid);
+  });
+}
+
+// Register terminal handlers alongside the main IPC handlers
+registerTerminalHandlers();
+

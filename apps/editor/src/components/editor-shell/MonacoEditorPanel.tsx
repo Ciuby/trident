@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import Editor from "@monaco-editor/react";
-import { X, FileJson, FileCode, FileText, File } from "lucide-react";
+import { X, FileJson, FileCode, FileText, File, Save, Maximize2, Minimize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Types ───────────────────────────────────────────────────────────
@@ -21,6 +21,8 @@ interface MonacoEditorPanelProps {
   onSaveFile: (path: string, content: string) => void;
   onContentChange: (path: string, content: string) => void;
   onCloseAll: () => void;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
 // ── Language Resolver ───────────────────────────────────────────────
@@ -68,6 +70,8 @@ export function MonacoEditorPanel({
   onSaveFile,
   onContentChange,
   onCloseAll,
+  isFullscreen,
+  onToggleFullscreen,
 }: MonacoEditorPanelProps) {
   const activeFile = files.find((f) => f.path === activeFilePath);
 
@@ -96,12 +100,23 @@ export function MonacoEditorPanel({
     [activeFile, onSaveFile]
   );
 
+  const handleSaveClick = useCallback(() => {
+    if (activeFile) {
+      onSaveFile(activeFile.path, activeFile.content);
+    }
+  }, [activeFile, onSaveFile]);
+
   if (files.length === 0) {
     return null;
   }
 
   return (
-    <div className="flex h-full flex-col bg-[#1e1e1e] border-t border-white/8">
+    <div className={cn(
+      "flex flex-col bg-[#1e1e1e] border-t border-white/8",
+      isFullscreen
+        ? "fixed inset-0 z-50"
+        : "h-full"
+    )}>
       {/* Tab Bar */}
       <div className="flex items-center bg-[#252526] border-b border-white/6 overflow-x-auto">
         <div className="flex min-w-0">
@@ -134,7 +149,39 @@ export function MonacoEditorPanel({
           ))}
         </div>
 
-        <div className="ml-auto shrink-0 px-2">
+        {/* Right-side action buttons */}
+        <div className="ml-auto flex items-center gap-1 shrink-0 px-2">
+          {/* Save button */}
+          <button
+            className={cn(
+              "flex items-center gap-1 rounded px-2 py-1 text-[10px] transition-colors",
+              activeFile?.isDirty
+                ? "text-emerald-400/80 hover:bg-emerald-400/10 hover:text-emerald-300"
+                : "text-foreground/25 cursor-default"
+            )}
+            disabled={!activeFile?.isDirty}
+            onClick={handleSaveClick}
+            title="Save (Ctrl+S)"
+          >
+            <Save className="size-3" />
+            Save
+          </button>
+
+          {/* Fullscreen toggle */}
+          {onToggleFullscreen && (
+            <button
+              className="rounded p-1 text-foreground/30 hover:bg-white/8 hover:text-foreground/60 transition-colors"
+              onClick={onToggleFullscreen}
+              title={isFullscreen ? "Exit fullscreen" : "Fullscreen editor"}
+            >
+              {isFullscreen
+                ? <Minimize2 className="size-3.5" />
+                : <Maximize2 className="size-3.5" />
+              }
+            </button>
+          )}
+
+          {/* Close All */}
           <button
             className="rounded p-1 text-[10px] text-foreground/30 hover:bg-white/8 hover:text-foreground/60"
             onClick={onCloseAll}
@@ -160,7 +207,7 @@ export function MonacoEditorPanel({
               fontSize: 12,
               fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace",
               fontLigatures: true,
-              minimap: { enabled: false },
+              minimap: { enabled: isFullscreen },
               scrollbar: {
                 verticalScrollbarSize: 8,
                 horizontalScrollbarSize: 8,

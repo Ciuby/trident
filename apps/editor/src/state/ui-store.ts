@@ -14,6 +14,8 @@ type UiStore = {
   rightPanel: RightPanelId | null;
   selectedAssetId: string;
   selectedMaterialId: string;
+  terminalOpen: boolean;
+  pendingTerminalCommands: Array<{ id: string, name: string, command: string }>;
   viewMode: ViewModeId;
   viewportQuality: ViewportQuality;
   viewports: Record<ViewportPaneId, ViewportState>;
@@ -28,8 +30,15 @@ export const uiStore = proxy<UiStore>({
   rightPanel: null,
   selectedAssetId: "asset:model:crate",
   selectedMaterialId: "material:blockout:concrete",
+  terminalOpen: false,
+  pendingTerminalCommands: [],
   viewMode: "3d-only",
   viewportQuality: 0.5,
   viewports: createEditorViewports()
 });
+
+export function dispatchTerminalCommand(name: string, command: string) {
+  uiStore.pendingTerminalCommands.push({ id: Math.random().toString(), name, command });
+  uiStore.terminalOpen = true;
+}
 

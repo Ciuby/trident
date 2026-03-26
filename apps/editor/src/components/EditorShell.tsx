@@ -26,12 +26,13 @@ import { CopilotPanel } from "@/components/editor-shell/CopilotPanel";
 import { EditorMenuBar } from "@/components/editor-shell/EditorMenuBar";
 import { FileBrowserPanel } from "@/components/editor-shell/FileBrowserPanel";
 import { MonacoEditorPanel, resolveLanguage, type OpenFile } from "@/components/editor-shell/MonacoEditorPanel";
-import { WelcomeScreen } from "@/components/editor-shell/WelcomeScreen";
+import { WelcomeScreen, addRecentProject, getRecentProjects } from "@/components/editor-shell/WelcomeScreen";
 import { InspectorSidebar } from "@/components/editor-shell/InspectorSidebar";
 import { SpatialAnalysisPanel } from "@/components/editor-shell/SpatialAnalysisPanel";
 import { StatusBar } from "@/components/editor-shell/StatusBar";
 import { ToolPalette } from "@/components/editor-shell/ToolPalette";
 import { LogicViewerSheet } from "@/components/editor-shell/logic-viewer/LogicViewerSheet";
+import { TerminalPanel } from "@/components/editor-shell/TerminalPanel";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { ViewportCanvas } from "@/viewport/ViewportCanvas";
 import type { MeshEditMode } from "@/viewport/editing";
@@ -94,6 +95,7 @@ type EditorShellProps = {
   onDeleteTexture: (textureId: string) => void;
   onCancelAiModelPlacement: () => void;
   onLoadWhmap: () => void;
+  onLoadWhmapFromString?: (text: string) => Promise<void>;
   onInvertSelectionNormals: () => void;
   onPausePhysics: () => void;
   onMeshEditToolbarAction: (action: MeshEditToolbarActionRequest["kind"]) => void;
@@ -216,6 +218,7 @@ export function EditorShell({
   onDeleteTexture,
   onCancelAiModelPlacement,
   onLoadWhmap,
+  onLoadWhmapFromString,
   onInvertSelectionNormals,
   onPausePhysics,
   onMeshEditToolbarAction,
@@ -319,6 +322,8 @@ export function EditorShell({
 
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
+  const [editorFullscreen, setEditorFullscreen] = useState(false);
+  const terminalOpen = ui.terminalOpen;
   const api = (window as any).electronAPI;
   const isElectron = !!api?.isElectron;
 
@@ -328,17 +333,28 @@ export function EditorShell({
     const unsub = api.onProjectOpened?.((projectPath: string) => {
       uiStore.projectPath = projectPath;
       uiStore.fileBrowserOpen = true;
+      addRecentProject(projectPath);
     });
     return unsub;
   }, [isElectron]);
+
+  // Auto-load last opened project on boot
+  useEffect(() => {
+    if (!isElectron || uiStore.projectPath) return;
+    const recents = getRecentProjects();
+    if (recents.length > 0 && api.openRecentProject) {
+      api.openRecentProject(recents[0].path).catch(console.error);
+    }
+  }, [isElectron, api]);
 
   // Listen for menu events to toggle file browser
   useEffect(() => {
     if (!isElectron) return;
     const unsubOpen = api.onOpenProject?.(() => api.openProject());
     const unsubCreate = api.onCreateProject?.(() => api.createProject());
-    return () => { unsubOpen?.(); unsubCreate?.(); };
-  }, [isElectron]);
+    const unsubSave = api.onSave?.(onSaveWhmap);
+    return () => { unsubOpen?.(); unsubCreate?.(); unsubSave?.(); };
+  }, [isElectron, api, onSaveWhmap]);
 
   const handleFileOpen = useCallback(async (filePath: string) => {
     // Don't open binary files in Monaco
@@ -371,6 +387,20 @@ export function EditorShell({
       console.error("Failed to open file:", err);
     }
   }, [openFiles, isElectron]);
+
+  const handleFileDoubleClick = useCallback(async (filePath: string) => {
+    if (!isElectron) return;
+    if (filePath.endsWith(".whmap")) {
+      try {
+        const content = await api.readFile(filePath, "utf8");
+        if (onLoadWhmapFromString) {
+          await onLoadWhmapFromString(content);
+        }
+      } catch (err) {
+        console.error("Failed to load .whmap via double click:", err);
+      }
+    }
+  }, [isElectron, onLoadWhmapFromString]);
 
   const handleCloseFile = useCallback((path: string) => {
     setOpenFiles((prev) => prev.filter((f) => f.path !== path));
@@ -428,6 +458,35 @@ export function EditorShell({
     }
   }, [isElectron]);
 
+  const handleOpenRecentProject = useCallback(async (projectPath: string) => {
+    if (!isElectron) return;
+    try {
+      if (api.openRecentProject) {
+        const openedPath = await api.openRecentProject(projectPath);
+        if (openedPath) {
+          uiStore.projectPath = openedPath;
+          uiStore.fileBrowserOpen = true;
+        }
+      } else {
+        uiStore.projectPath = projectPath;
+        uiStore.fileBrowserOpen = true;
+      }
+    } catch {
+      console.error("Failed to open recent project", projectPath);
+    }
+  }, [isElectron, api]);
+
+  const handleOpenAnimationStudio = useCallback(async () => {
+    if (!isElectron) return;
+    try {
+      if (api.openAnimationStudio) {
+        await api.openAnimationStudio();
+      }
+    } catch {
+      console.error("Failed to open Animation Studio");
+    }
+  }, [isElectron, api]);
+
   // Keyboard shortcuts for project management
   useEffect(() => {
     if (!isElectron) return;
@@ -477,7 +536,7 @@ export function EditorShell({
           onPreviewEntityTransform={onPreviewEntityTransform}
           onPreviewMeshData={onPreviewMeshData}
           onPreviewNodeTransform={onPreviewNodeTransform}
-          onSculptModeChange={activeViewportId === viewportId ? onSculptModeChange : () => {}}
+          onSculptModeChange={activeViewportId === viewportId ? onSculptModeChange : () => { }}
           onSelectMaterialFaces={onSelectMaterialFaces}
           onSelectScenePath={onSelectScenePath}
           onSelectNodes={onSelectNodes}
@@ -508,15 +567,8 @@ export function EditorShell({
     );
   };
 
-  // ── Electron: Show WelcomeScreen when no project is open ────────
-  if (isElectron && !ui.projectPath) {
-    return (
-      <WelcomeScreen
-        onOpenProject={handleOpenProject}
-        onCreateProject={handleCreateProject}
-      />
-    );
-  }
+  // ── Electron: Show WelcomeScreen overlay when no project is open ────────
+
 
   return (
     <div className="flex h-screen flex-col bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.08),transparent_24%),linear-gradient(180deg,#08100d_0%,#050807_100%)] text-foreground">
@@ -544,11 +596,14 @@ export function EditorShell({
           }}
           onLoadWhmap={onLoadWhmap}
           onOpenProject={handleOpenProject}
+          onOpenAnimationStudio={handleOpenAnimationStudio}
           onRedo={onRedo}
           onSaveWhmap={onSaveWhmap}
           onToggleCopilot={onToggleCopilot}
-          onToggleFileBrowser={handleToggleFileBrowser}
-          onToggleLogicViewer={onToggleLogicViewer}
+          onToggleFileBrowser={() => { uiStore.fileBrowserOpen = !uiStore.fileBrowserOpen; }}
+          onToggleLogicViewer={() => { uiStore.logicViewerOpen = !uiStore.logicViewerOpen; }}
+          onToggleTerminal={() => { uiStore.terminalOpen = !uiStore.terminalOpen; }}
+          terminalOpen={terminalOpen}
           onToggleViewportQuality={onToggleViewportQuality}
           onUndo={onUndo}
           projectName={ui.projectPath?.split(/[\\/]/).pop() ?? null}
@@ -556,192 +611,236 @@ export function EditorShell({
         />
       </header>
 
-      <main className="relative min-h-0 flex-1 flex">
-        {/* Left: File Browser Panel */}
-        {ui.fileBrowserOpen && (
-          <div className="w-56 shrink-0">
-            <FileBrowserPanel
-              projectPath={ui.projectPath}
-              onFileOpen={handleFileOpen}
-              onClose={handleToggleFileBrowser}
-            />
-          </div>
-        )}
-
-        {/* Center: Viewport + Overlays + Monaco */}
-        <div className="relative min-w-0 flex-1 flex flex-col">
-          {/* Viewport + Overlays */}
-          <div className={cn("relative flex-1 min-h-0", openFiles.length > 0 && "flex-[3]")}>
-            <div className="absolute inset-0">
-              <ViewportLayout renderViewportPane={renderViewportPane} viewMode={viewMode} />
-            </div>
-
-        <ToolPalette
-          activeBrushShape={activeBrushShape}
-          aiModelPlacementActive={aiModelPlacementActive || aiModelPlacementArmed}
-          activeToolId={activeToolId}
-          currentSnapSize={activeViewport.grid.snapSize}
-          gridSnapValues={gridSnapValues}
-          meshEditMode={meshEditMode}
-          onInvertSelectionNormals={onInvertSelectionNormals}
-          onLowerTop={() => onExtrudeSelection("y", -1)}
-          onPausePhysics={onPausePhysics}
-          onMeshEditToolbarAction={onMeshEditToolbarAction}
-          onImportGlb={onImportGlb}
-          onPlaceEntity={onPlaceEntity}
-          onPlaceLight={onPlaceLight}
-          onPlaceBlockoutOpenRoom={onPlaceBlockoutOpenRoom}
-          onPlaceBlockoutPlatform={onPlaceBlockoutPlatform}
-          onPlaceBlockoutRoom={onPlaceBlockoutRoom}
-          onPlaceBlockoutStairs={onPlaceBlockoutStairs}
-          onPlaceProp={onPlaceProp}
-          onPlayPhysics={onPlayPhysics}
-          onRaiseTop={() => onExtrudeSelection("y", 1)}
-          onSetSculptBrushRadius={onSetSculptBrushRadius}
-          onSetSculptBrushStrength={onSetSculptBrushStrength}
-          onStartAiModelPlacement={onStartAiModelPlacement}
-          onSelectBrushShape={(shape) => {
-            onSetActiveBrushShape(shape);
-            onSetToolId("brush");
-          }}
-          onSetMeshEditMode={onSetMeshEditMode}
-          onSetSnapEnabled={onSetSnapEnabled}
-          onSetSnapSize={onSetSnapSize}
-          onStopPhysics={onStopPhysics}
-          onSetTransformMode={onSetTransformMode}
-          onSetToolId={onSetToolId}
-          onSetViewMode={onSetViewMode}
-          physicsPlayback={physicsPlayback}
-          sculptMode={sculptMode}
-          sculptBrushRadius={sculptBrushRadius}
-          sculptBrushStrength={sculptBrushStrength}
-          selectedGeometry={selectedIsGeometry}
-          selectedMesh={selectedIsMesh}
-          snapEnabled={activeViewport.grid.enabled}
-          tools={tools}
-          transformMode={transformMode}
-          viewMode={viewMode}
-        />
-
-        <AiModelPromptBar
-          active={aiModelPlacementActive}
-          armed={aiModelPlacementArmed}
-          busy={aiModelPromptBusy}
-          error={aiModelPromptError}
-          onCancel={onCancelAiModelPlacement}
-          onChangePrompt={onUpdateAiModelPrompt}
-          onSubmit={onGenerateAiModel}
-          prompt={aiModelPrompt}
-        />
-
-        {/* <SpatialAnalysisPanel analysis={analysis} /> */}
-
-        <StatusBar
-          activeBrushShape={activeBrushShape}
-          activeToolLabel={activeToolLabel}
-          activeViewportId={activeViewportId}
-          gridSnapValues={gridSnapValues}
-          jobs={jobs}
-          meshEditMode={meshEditMode}
-          selectedNode={selectedNode}
-          viewModeLabel={getViewModePreset(viewMode).shortLabel}
-          viewport={activeViewport}
-        />
-
-        {logicViewerOpen && (
-          <LogicViewerSheet
-            entities={entities}
-            nodes={nodes}
-            onClose={onToggleLogicViewer}
-            onNodeClick={(objectId) => {
-              onSelectNodes([objectId]);
-              if (editor.scene.getNode(objectId)) {
-                onFocusNode(objectId);
-              }
-            }}
-            onUpdateEntityHooks={onUpdateEntityHooks}
-            onUpdateNodeHooks={onUpdateNodeHooks}
-          />
-        )}
-          </div>
-
-          {/* Monaco Editor (bottom split) */}
-          {openFiles.length > 0 && (
-            <div className="flex-[2] min-h-[200px] max-h-[50%]">
-              <MonacoEditorPanel
-                files={openFiles}
-                activeFilePath={activeFilePath}
-                onSelectFile={setActiveFilePath}
-                onCloseFile={handleCloseFile}
-                onSaveFile={handleSaveFile}
-                onContentChange={handleContentChange}
-                onCloseAll={handleCloseAllFiles}
-              />
-            </div>
+      <main className="relative min-h-0 flex-1">
+        <ResizablePanelGroup orientation="horizontal">
+          {/* Left: Left Sidebar (File Browser) */}
+          {ui.fileBrowserOpen && (
+            <>
+              <ResizablePanel defaultSize={300} minSize={300} className="relative flex flex-col h-full w-full">
+                <div className="flex-1 min-h-0">
+                  <FileBrowserPanel
+                    projectPath={ui.projectPath}
+                    onFileOpen={handleFileOpen}
+                    onFileDoubleClick={handleFileDoubleClick}
+                    onClose={handleToggleFileBrowser}
+                  />
+                </div>
+              </ResizablePanel>
+              <ResizableHandle withHandle className="bg-white/5 hover:bg-emerald-400/50 transition-colors" />
+            </>
           )}
-        </div>
 
-        <InspectorSidebar
-          activeRightPanel={activeRightPanel}
-          activeToolId={activeToolId}
-          assets={assets}
-          entities={entities}
-          materials={materials}
-          meshEditMode={meshEditMode}
-          nodes={nodes}
-          onApplyMaterial={onApplyMaterial}
-          onChangeRightPanel={onSetRightPanel}
-          onClipSelection={onClipSelection}
-          onDeleteMaterial={onDeleteMaterial}
-          onDeleteTexture={onDeleteTexture}
-          onExtrudeSelection={onExtrudeSelection}
-          onFocusNode={onFocusNode}
-          onMeshEditToolbarAction={onMeshEditToolbarAction}
-          onMirrorSelection={onMirrorSelection}
-          onPlaceAsset={onPlaceAsset}
-          onSelectAsset={onSelectAsset}
-          onSelectMaterial={onSelectMaterial}
-          onSelectScenePath={onSelectScenePath}
-          onSelectNodes={onSelectNodes}
-          onSetToolId={onSetToolId}
-          onSetUvOffset={onSetUvOffset}
-          onSetUvScale={onSetUvScale}
-          onTranslateSelection={onTranslateSelection}
-          onUpsertMaterial={onUpsertMaterial}
-          onUpsertTexture={onUpsertTexture}
-          onUpdateEntityProperties={onUpdateEntityProperties}
-          onUpdateEntityHooks={onUpdateEntityHooks}
-          onUpdateEntityTransform={onUpdateEntityTransform}
-          onUpdateMeshData={onUpdateMeshData}
-          onUpdateNodeData={onUpdateNodeData}
-          onUpdateNodeHooks={onUpdateNodeHooks}
-          onUpdateSceneSettings={onUpdateSceneSettings}
-          onUpdateNodeTransform={onUpdateNodeTransform}
-          sceneSettings={sceneSettings}
-          selectedScenePathId={selectedScenePathId}
-          selectionEnabled={selectionEnabled}
-          selectedEntity={selectedEntity}
-          selectedAssetId={selectedAssetId}
-          selectedFaceIds={selectedFaceIds}
-          selectedMaterialId={selectedMaterialId}
-          selectedNode={selectedNode}
-          selectedNodeIds={selectedNodeIds}
-          textures={textures}
-          viewportTarget={activeViewport.camera.target}
-        />
+          {/* Center: Viewport + Bottom Docks */}
+          <ResizablePanel
+            className="relative flex flex-col h-full w-full min-w-0"
+          >
+            <ResizablePanelGroup orientation="vertical">
+              {/* Viewport + Overlays */}
+              <ResizablePanel defaultSize={openFiles.length > 0 || (isElectron && terminalOpen) ? 70 : 100} className="relative z-0 flex flex-col h-full w-full min-h-[300px]">
+                <div className="absolute inset-0">
+                  <ViewportLayout renderViewportPane={renderViewportPane} viewMode={viewMode} />
+                </div>
 
-        {copilotPanelOpen && (
-          <div className="w-80 shrink-0">
-            <CopilotPanel
-              isConfigured={copilot.isConfigured}
-              onAbort={copilot.abort}
-              onClearHistory={copilot.clearHistory}
-              onClose={onToggleCopilot}
-              onSendMessage={copilot.sendMessage}
-              onSettingsChanged={copilot.refreshConfigured}
-              session={copilot.session}
-            />
-          </div>
+                <ToolPalette
+                  activeBrushShape={activeBrushShape}
+                  aiModelPlacementActive={aiModelPlacementActive || aiModelPlacementArmed}
+                  activeToolId={activeToolId}
+                  currentSnapSize={activeViewport.grid.snapSize}
+                  gridSnapValues={gridSnapValues}
+                  meshEditMode={meshEditMode}
+                  onInvertSelectionNormals={onInvertSelectionNormals}
+                  onLowerTop={() => onExtrudeSelection("y", -1)}
+                  onPausePhysics={onPausePhysics}
+                  onMeshEditToolbarAction={onMeshEditToolbarAction}
+                  onImportGlb={onImportGlb}
+                  onPlaceEntity={onPlaceEntity}
+                  onPlaceLight={onPlaceLight}
+                  onPlaceBlockoutOpenRoom={onPlaceBlockoutOpenRoom}
+                  onPlaceBlockoutPlatform={onPlaceBlockoutPlatform}
+                  onPlaceBlockoutRoom={onPlaceBlockoutRoom}
+                  onPlaceBlockoutStairs={onPlaceBlockoutStairs}
+                  onPlaceProp={onPlaceProp}
+                  onPlayPhysics={onPlayPhysics}
+                  onRaiseTop={() => onExtrudeSelection("y", 1)}
+                  onSetSculptBrushRadius={onSetSculptBrushRadius}
+                  onSetSculptBrushStrength={onSetSculptBrushStrength}
+                  onStartAiModelPlacement={onStartAiModelPlacement}
+                  onSelectBrushShape={(shape) => {
+                    onSetActiveBrushShape(shape);
+                    onSetToolId("brush");
+                  }}
+                  onSetMeshEditMode={onSetMeshEditMode}
+                  onSetSnapEnabled={onSetSnapEnabled}
+                  onSetSnapSize={onSetSnapSize}
+                  onStopPhysics={onStopPhysics}
+                  onSetTransformMode={onSetTransformMode}
+                  onSetToolId={onSetToolId}
+                  onSetViewMode={onSetViewMode}
+                  physicsPlayback={physicsPlayback}
+                  sculptMode={sculptMode}
+                  sculptBrushRadius={sculptBrushRadius}
+                  sculptBrushStrength={sculptBrushStrength}
+                  selectedGeometry={selectedIsGeometry}
+                  selectedMesh={selectedIsMesh}
+                  snapEnabled={activeViewport.grid.enabled}
+                  tools={tools}
+                  transformMode={transformMode}
+                  viewMode={viewMode}
+                />
+
+                <AiModelPromptBar
+                  active={aiModelPlacementActive}
+                  armed={aiModelPlacementArmed}
+                  busy={aiModelPromptBusy}
+                  error={aiModelPromptError}
+                  onCancel={onCancelAiModelPlacement}
+                  onChangePrompt={onUpdateAiModelPrompt}
+                  onSubmit={onGenerateAiModel}
+                  prompt={aiModelPrompt}
+                />
+
+                {/* <SpatialAnalysisPanel analysis={analysis} /> */}
+
+                <StatusBar
+                  activeBrushShape={activeBrushShape}
+                  activeToolLabel={activeToolLabel}
+                  activeViewportId={activeViewportId}
+                  gridSnapValues={gridSnapValues}
+                  jobs={jobs}
+                  meshEditMode={meshEditMode}
+                  selectedNode={selectedNode}
+                  viewModeLabel={getViewModePreset(viewMode).shortLabel}
+                  viewport={activeViewport}
+                />
+
+                {logicViewerOpen && (
+                  <LogicViewerSheet
+                    entities={entities}
+                    nodes={nodes}
+                    onClose={onToggleLogicViewer}
+                    onNodeClick={(objectId) => {
+                      onSelectNodes([objectId]);
+                      if (editor.scene.getNode(objectId)) {
+                        onFocusNode(objectId);
+                      }
+                    }}
+                    onUpdateEntityHooks={onUpdateEntityHooks}
+                    onUpdateNodeHooks={onUpdateNodeHooks}
+                  />
+                )}
+
+                <InspectorSidebar
+                  activeRightPanel={activeRightPanel}
+                  activeToolId={activeToolId}
+                  assets={assets}
+                  entities={entities}
+                  materials={materials}
+                  meshEditMode={meshEditMode}
+                  nodes={nodes}
+                  onApplyMaterial={onApplyMaterial}
+                  onChangeRightPanel={onSetRightPanel}
+                  onClipSelection={onClipSelection}
+                  onDeleteMaterial={onDeleteMaterial}
+                  onDeleteTexture={onDeleteTexture}
+                  onExtrudeSelection={onExtrudeSelection}
+                  onFocusNode={onFocusNode}
+                  onMeshEditToolbarAction={onMeshEditToolbarAction}
+                  onMirrorSelection={onMirrorSelection}
+                  onPlaceAsset={onPlaceAsset}
+                  onSelectAsset={onSelectAsset}
+                  onSelectMaterial={onSelectMaterial}
+                  onSelectScenePath={onSelectScenePath}
+                  onSelectNodes={onSelectNodes}
+                  onSetToolId={onSetToolId}
+                  onSetUvOffset={onSetUvOffset}
+                  onSetUvScale={onSetUvScale}
+                  onTranslateSelection={onTranslateSelection}
+                  onUpsertMaterial={onUpsertMaterial}
+                  onUpsertTexture={onUpsertTexture}
+                  onUpdateEntityProperties={onUpdateEntityProperties}
+                  onUpdateEntityHooks={onUpdateEntityHooks}
+                  onUpdateEntityTransform={onUpdateEntityTransform}
+                  onUpdateMeshData={onUpdateMeshData}
+                  onUpdateNodeData={onUpdateNodeData}
+                  onUpdateNodeHooks={onUpdateNodeHooks}
+                  onUpdateSceneSettings={onUpdateSceneSettings}
+                  onUpdateNodeTransform={onUpdateNodeTransform}
+                  sceneSettings={sceneSettings}
+                  selectedScenePathId={selectedScenePathId}
+                  selectionEnabled={selectionEnabled}
+                  selectedEntity={selectedEntity}
+                  selectedAssetId={selectedAssetId}
+                  selectedFaceIds={selectedFaceIds}
+                  selectedMaterialId={selectedMaterialId}
+                  selectedNode={selectedNode}
+                  selectedNodeIds={selectedNodeIds}
+                  textures={textures}
+                  viewportTarget={activeViewport.camera.target}
+                />
+              </ResizablePanel>
+
+              {/* Bottom Panels (Monaco / Terminal) */}
+              {(openFiles.length > 0 || (isElectron && terminalOpen)) && (
+                <>
+                  <ResizableHandle withHandle className="bg-white/5 hover:bg-emerald-400/50 transition-colors relative z-50" />
+                  <ResizablePanel defaultSize="30%" minSize="10%" className="relative z-10 flex flex-col h-full w-full bg-[#1e1e1e] shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
+                    <ResizablePanelGroup orientation="horizontal">
+                      {openFiles.length > 0 && (
+                        <ResizablePanel defaultSize={isElectron && terminalOpen ? "60%" : "100%"} minSize="20%" className="relative flex flex-col h-full w-full">
+                          <MonacoEditorPanel
+                            files={openFiles}
+                            activeFilePath={activeFilePath}
+                            onSelectFile={setActiveFilePath}
+                            onCloseFile={handleCloseFile}
+                            onSaveFile={handleSaveFile}
+                            onContentChange={handleContentChange}
+                            onCloseAll={handleCloseAllFiles}
+                            isFullscreen={editorFullscreen}
+                            onToggleFullscreen={() => setEditorFullscreen((v) => !v)}
+                          />
+                        </ResizablePanel>
+                      )}
+                      {isElectron && terminalOpen && openFiles.length > 0 && (
+                        <ResizableHandle withHandle className="bg-white/5 hover:bg-emerald-400/50 transition-colors" />
+                      )}
+                      {isElectron && terminalOpen && (
+                        <ResizablePanel defaultSize={openFiles.length > 0 ? "40%" : "100%"} minSize="20%" className="relative flex flex-col h-full w-full">
+                          <TerminalPanel projectPath={ui.projectPath} />
+                        </ResizablePanel>
+                      )}
+                    </ResizablePanelGroup>
+                  </ResizablePanel>
+                </>
+              )}
+            </ResizablePanelGroup>
+          </ResizablePanel>
+
+          {/* Right Sidebar (Copilot) */}
+          {copilotPanelOpen && (
+            <>
+              <ResizableHandle withHandle className="bg-white/5 hover:bg-emerald-400/50 transition-colors" />
+              <ResizablePanel defaultSize={450} minSize={300} className="relative flex flex-col h-full w-full">
+                <CopilotPanel
+                  onAbort={copilot.abort}
+                  onClearHistory={copilot.clearHistory}
+                  isConfigured={copilot.isConfigured}
+                  onClose={onToggleCopilot}
+                  onSettingsChanged={copilot.refreshConfigured}
+                  onSendMessage={copilot.sendMessage}
+                  session={copilot.session}
+                />
+              </ResizablePanel>
+            </>
+          )}
+        </ResizablePanelGroup>
+        
+        {/* Welcome Screen Overlay */}
+        {isElectron && !ui.projectPath && (
+          <WelcomeScreen
+            onCreateProject={handleCreateProject}
+            onOpenProject={handleOpenProject}
+            onOpenRecentProject={handleOpenRecentProject}
+          />
         )}
       </main>
     </div>

@@ -30,6 +30,7 @@ interface DirTreeEntry {
 interface FileBrowserPanelProps {
   projectPath: string | null;
   onFileOpen: (filePath: string) => void;
+  onFileDoubleClick?: (filePath: string) => void;
   onClose: () => void;
 }
 
@@ -60,12 +61,14 @@ function TreeNode({
   expandedPaths,
   onToggle,
   onFileClick,
+  onFileDoubleClick,
 }: {
   entry: DirTreeEntry;
   depth: number;
   expandedPaths: Set<string>;
   onToggle: (path: string) => void;
   onFileClick: (path: string) => void;
+  onFileDoubleClick?: (path: string) => void;
 }) {
   const isExpanded = expandedPaths.has(entry.path);
   const paddingLeft = 8 + depth * 14;
@@ -99,17 +102,27 @@ function TreeNode({
               expandedPaths={expandedPaths}
               onToggle={onToggle}
               onFileClick={onFileClick}
+              onFileDoubleClick={onFileDoubleClick}
             />
           ))}
       </>
     );
   }
 
+  const isWhmap = entry.name.endsWith(".whmap");
+
   return (
     <button
       className="group flex w-full items-center gap-1.5 py-[3px] text-[11px] text-foreground/50 hover:bg-white/6 hover:text-foreground/80 transition-colors"
       style={{ paddingLeft: paddingLeft + 14 }}
-      onClick={() => onFileClick(entry.path)}
+      onClick={() => {
+        if (isWhmap && onFileDoubleClick) {
+          onFileDoubleClick(entry.path);
+        } else {
+          onFileClick(entry.path);
+        }
+      }}
+      onDoubleClick={() => onFileDoubleClick?.(entry.path)}
     >
       {getFileIcon(entry.name)}
       <span className="truncate">{entry.name}</span>
@@ -119,7 +132,7 @@ function TreeNode({
 
 // ── Main Component ──────────────────────────────────────────────────
 
-export function FileBrowserPanel({ projectPath, onFileOpen, onClose }: FileBrowserPanelProps) {
+export function FileBrowserPanel({ projectPath, onFileOpen, onFileDoubleClick, onClose }: FileBrowserPanelProps) {
   const [tree, setTree] = useState<DirTreeEntry[]>([]);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -238,6 +251,7 @@ export function FileBrowserPanel({ projectPath, onFileOpen, onClose }: FileBrows
             expandedPaths={expandedPaths}
             onToggle={toggleExpanded}
             onFileClick={onFileOpen}
+            onFileDoubleClick={onFileDoubleClick}
           />
         ))}
       </div>
