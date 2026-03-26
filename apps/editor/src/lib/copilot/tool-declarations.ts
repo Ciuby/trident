@@ -381,12 +381,12 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
   {
     name: "clear_selection",
     description: "Clears the current editor selection.",
-    parameters: { type: "object" }
+    parameters: { type: "object", properties: {} }
   },
   {
     name: "undo",
     description: "Undoes the last editor command.",
-    parameters: { type: "object" }
+    parameters: { type: "object", properties: {} }
   },
   {
     name: "set_scene_settings",
@@ -441,32 +441,32 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
   {
     name: "list_nodes",
     description: "Lists the scene node outline as a lightweight hierarchy. Returns IDs, names, kinds, child nodes, and attached entities, but not full node data.",
-    parameters: { type: "object" }
+    parameters: { type: "object", properties: {} }
   },
   {
     name: "list_entities",
     description: "Lists entities in a lightweight form with ID, name, type, and parentId. Use get_entity_details for full data.",
-    parameters: { type: "object" }
+    parameters: { type: "object", properties: {} }
   },
   {
     name: "list_materials",
     description: "Lists all materials in the scene with their ID, name, color, and category.",
-    parameters: { type: "object" }
+    parameters: { type: "object", properties: {} }
   },
   {
     name: "list_scene_paths",
     description: "Lists all scene-level waypoint paths with ids, names, loop state, and points.",
-    parameters: { type: "object" }
+    parameters: { type: "object", properties: {} }
   },
   {
     name: "list_scene_events",
     description: "Lists the standard and custom gameplay events available in the scene.",
-    parameters: { type: "object" }
+    parameters: { type: "object", properties: {} }
   },
   {
     name: "list_hook_types",
     description: "Lists all supported gameplay hook types, including field paths, defaults, emitted events, and listened events.",
-    parameters: { type: "object" }
+    parameters: { type: "object", properties: {} }
   },
   {
     name: "get_node_details",
@@ -493,7 +493,7 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
   {
     name: "get_scene_settings",
     description: "Gets current scene settings. This is the canonical source for player scale, jump height, movement, camera mode, physics, fog, and ambient lighting.",
-    parameters: { type: "object" }
+    parameters: { type: "object", properties: {} }
   },
   {
     name: "create_scene_path",
@@ -840,7 +840,7 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
   {
     name: "list_project_files",
     description: "Lists the directory tree of the current project. Returns a recursive listing of files and folders.",
-    parameters: { type: "object" }
+    parameters: { type: "object", properties: {} }
   },
   {
     name: "read_file",

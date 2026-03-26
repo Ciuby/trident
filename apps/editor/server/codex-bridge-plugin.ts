@@ -308,7 +308,10 @@ async function startCodexSession(
       ...(config.model ? { model: config.model } : {}),
       baseInstructions: config.systemPrompt,
       dynamicTools,
-      serviceName: "trident-editor"
+      serviceName: "trident-editor",
+      // Undocumented / experimental attempts to override proxy loop limits
+      maxIterations: 100,
+      options: { maxIterations: 100, max_iterations: 100 }
     }
   ) as { thread?: { id?: string } };
 
@@ -326,7 +329,10 @@ async function startCodexSession(
     id: ++session.requestId,
     params: {
       threadId: session.threadId,
-      input: [{ type: "text", text: config.userMessage }]
+      input: [{ type: "text", text: config.userMessage }],
+      // Undocumented / experimental attempts to override proxy loop limits
+      maxIterations: 100,
+      options: { maxIterations: 100, max_iterations: 100 }
     }
   });
 

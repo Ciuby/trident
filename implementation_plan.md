@@ -76,4 +76,4 @@ Aggiungeremo al root monorepo: `"dev:electron": "bun run --cwd apps/electron-she
 - [x] **Finestre Resizabili**: Migliorare l'UX permettendo di allargare o restringere liberamente le sidebar laterali (sia File Browser sia Inspector destro).
 
 ### Fase 6: Native Scene Ingestion
-- [ ] **Caricamento rapido .whmap**: Aggiungere una feature di UX al File Browser che permetta, facendo doppio click su un file con estensione `.whmap`, di parsarlo istantaneamente tramite il protocollo file IPC nativo e ricaricarlo nella memoria del Trident Editor come scena attiva, rimpiazzando lo scomodo pulsante di upload legacy.
+- [x] **Caricamento rapido .whmap**: Aggiungere una feature di UX al File Browser che permetta, facendo doppio click su un file con estensione `.whmap`, di parsarlo istantaneamente tramite il protocollo file IPC nativo e ricaricarlo nella memoria del Trident Editor come scena attiva, rimpiazzando lo scomodo pulsante di upload legacy.

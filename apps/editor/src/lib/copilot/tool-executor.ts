@@ -1094,7 +1094,18 @@ function getElectronFS(): { api: any; getProject: () => Promise<string | null> }
 
 function resolvePath(projectPath: string, relPath: string): string {
   const sep = projectPath.includes("\\") ? "\\" : "/";
-  return `${projectPath}${sep}${relPath.replace(/[\\/]/g, sep)}`;
+  // Strip leading slashes to prevent absolute path jumping
+  const cleanPath = relPath.replace(/^[\\\/]+/, "");
+  return `${projectPath}${sep}${cleanPath.replace(/[\\/]/g, sep)}`;
+}
+
+function isSafePath(relPath: string): boolean {
+  if (!relPath) return true;
+  // Prevent directory traversal
+  if (relPath.includes("../") || relPath.includes("..\\")) return false;
+  // Prevent absolute paths natively (e.g. C:\ or /User)
+  if (/^[a-zA-Z]:/.test(relPath)) return false;
+  return true;
 }
 
 async function executeFileSystemTool(name: string, args: Args): Promise<string> {
@@ -1115,6 +1126,7 @@ async function executeFileSystemTool(name: string, args: Args): Promise<string> 
     case "read_file": {
       const relPath = str(args, "filePath");
       if (!relPath) return fail("filePath is required");
+      if (!isSafePath(relPath)) return fail("Access denied: invalid path traversal");
       const content = await api.readFile(resolvePath(projectPath, relPath), "utf8");
       return ok({ filePath: relPath, content });
     }
@@ -1123,6 +1135,7 @@ async function executeFileSystemTool(name: string, args: Args): Promise<string> 
       const relPath = str(args, "filePath");
       const content = str(args, "content");
       if (!relPath) return fail("filePath is required");
+      if (!isSafePath(relPath)) return fail("Access denied: invalid path traversal");
       await api.writeFile(resolvePath(projectPath, relPath), content);
       return ok({ filePath: relPath, written: true });
     }
@@ -1133,6 +1146,7 @@ async function executeFileSystemTool(name: string, args: Args): Promise<string> 
       const newText = str(args, "newText");
       if (!relPath) return fail("filePath is required");
       if (!oldText) return fail("oldText is required");
+      if (!isSafePath(relPath)) return fail("Access denied: invalid path traversal");
       const fullPath = resolvePath(projectPath, relPath);
       const current = await api.readFile(fullPath, "utf8");
       if (!current.includes(oldText)) return fail("oldText not found in file");
@@ -1144,6 +1158,7 @@ async function executeFileSystemTool(name: string, args: Args): Promise<string> 
     case "create_folder": {
       const relPath = str(args, "folderPath");
       if (!relPath) return fail("folderPath is required");
+      if (!isSafePath(relPath)) return fail("Access denied: invalid path traversal");
       await api.mkdir(resolvePath(projectPath, relPath));
       return ok({ folderPath: relPath, created: true });
     }
@@ -1151,6 +1166,7 @@ async function executeFileSystemTool(name: string, args: Args): Promise<string> 
     case "delete_file": {
       const relPath = str(args, "filePath");
       if (!relPath) return fail("filePath is required");
+      if (!isSafePath(relPath)) return fail("Access denied: invalid path traversal");
       await api.deleteFile(resolvePath(projectPath, relPath));
       return ok({ filePath: relPath, deleted: true });
     }
@@ -1159,6 +1175,7 @@ async function executeFileSystemTool(name: string, args: Args): Promise<string> 
       const oldRel = str(args, "oldPath");
       const newRel = str(args, "newPath");
       if (!oldRel || !newRel) return fail("oldPath and newPath are required");
+      if (!isSafePath(oldRel) || !isSafePath(newRel)) return fail("Access denied: invalid path traversal");
       await api.rename(resolvePath(projectPath, oldRel), resolvePath(projectPath, newRel));
       return ok({ oldPath: oldRel, newPath: newRel, renamed: true });
     }
