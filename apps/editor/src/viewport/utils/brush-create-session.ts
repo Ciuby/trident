@@ -79,6 +79,17 @@ export function startBrushCreateState(shape: BrushShape, anchor: Vec3, basis: Br
     };
   }
 
+  if (shape === "ramp") {
+    return {
+      anchor,
+      arcSegments: 0,
+      basis,
+      currentPoint: anchor,
+      shape,
+      stage: "base"
+    };
+  }
+
   return {
     anchor,
     basis,
@@ -134,6 +145,19 @@ export function updateBrushCreateState(
   }
 
   if (state.shape === "stairs" && state.stage === "base") {
+    const point = projectPointerToPlane(clientX!, clientY!, bounds, camera, raycaster, state.anchor, state.basis.normal);
+
+    if (!point) {
+      return undefined;
+    }
+
+    return {
+      ...state,
+      currentPoint: point
+    };
+  }
+
+  if (state.shape === "ramp" && state.stage === "base") {
     const point = projectPointerToPlane(clientX!, clientY!, bounds, camera, raycaster, state.anchor, state.basis.normal);
 
     if (!point) {
@@ -305,6 +329,48 @@ export function advanceBrushCreateState(
     return placement ? { placement } : {};
   }
 
+  if (state.shape === "ramp") {
+    if (state.stage === "base") {
+      const point = projectPointerToPlane(clientX!, clientY!, bounds, camera, raycaster, state.anchor, state.basis.normal) ?? state.currentPoint;
+      const { depth, width } = measureBrushCreateBase(state.anchor, state.basis, point, snapSize);
+
+      if (Math.abs(width) <= snapSize * 0.5 || Math.abs(depth) <= snapSize * 0.5) {
+        return {};
+      }
+
+      const center = computeBrushCreateCenter(state.anchor, state.basis, width, depth, 0);
+      const dragPlane = createBrushCreateDragPlane(camera, state.basis.normal, center);
+      const startPoint =
+        projectPointerToThreePlane(clientX!, clientY!, bounds, camera, raycaster, dragPlane) ??
+        new Vector3(center.x, center.y, center.z);
+
+      return {
+        nextState: {
+          anchor: state.anchor,
+          arcSegments: state.arcSegments,
+          basis: state.basis,
+          depth,
+          dragPlane,
+          height: 0,
+          shape: "ramp",
+          stage: "height",
+          startPoint: vec3(startPoint.x, startPoint.y, startPoint.z),
+          width
+        }
+      };
+    }
+
+    const point =
+      projectPointerToThreePlane(clientX!, clientY!, bounds, camera, raycaster, state.dragPlane) ??
+      new Vector3(state.startPoint.x, state.startPoint.y, state.startPoint.z);
+    const rampPlacement = buildBrushCreatePlacement({
+      ...state,
+      height: resolveExtrusionHeight(state.startPoint, state.basis.normal, point, snapSize)
+    });
+
+    return rampPlacement ? { placement: rampPlacement } : {};
+  }
+
   if (state.stage === "base") {
     const point = projectPointerToPlane(clientX!, clientY!, bounds, camera, raycaster, state.anchor, state.basis.normal) ?? state.currentPoint;
     const radius = measureRadialRadius(state.anchor, state.basis, point, snapSize);
@@ -397,6 +463,13 @@ export function adjustBrushCreateStateWithWheel(state: BrushCreateState, deltaY:
     };
   }
 
+  if (state.shape === "ramp") {
+    return {
+      ...state,
+      arcSegments: Math.max(0, state.arcSegments + step)
+    };
+  }
+
   return state;
 }
 
@@ -462,6 +535,25 @@ export function buildBrushCreatePlacement(state: BrushCreateState): BrushCreateP
         "material:blockout:orange"
       ),
       "Blockout Stairs"
+    );
+  }
+
+  if (state.shape === "ramp") {
+    if (state.stage !== "height" || Math.abs(state.width) <= 0.0001 || Math.abs(state.depth) <= 0.0001 || Math.abs(state.height) <= 0.0001) {
+      return undefined;
+    }
+
+    return buildMeshPlacementFromPolygons(
+      buildRampPolygons(
+        state.anchor,
+        state.basis,
+        state.width,
+        state.depth,
+        state.height,
+        state.arcSegments,
+        "material:blockout:orange"
+      ),
+      "Blockout Ramp"
     );
   }
 
@@ -557,6 +649,18 @@ export function buildBrushCreatePreviewPositions(state: BrushCreateState, snapSi
 
     return buildPreviewPositionsFromPolygons(
       buildStairPolygons(state.anchor, state.basis, state.width, state.depth, state.height, state.stepCount)
+    );
+  }
+
+  if (state.shape === "ramp") {
+    if (state.stage === "base") {
+      const { depth, width } = measureBrushCreateBase(state.anchor, state.basis, state.currentPoint, snapSize);
+      pushLoopSegments(positions, buildBoxCorners(state.anchor, state.basis, width, depth, 0));
+      return positions;
+    }
+
+    return buildPreviewPositionsFromPolygons(
+      buildRampPolygons(state.anchor, state.basis, state.width, state.depth, state.height, state.arcSegments)
     );
   }
 
@@ -783,6 +887,62 @@ function buildExtrudedPolygonPolygons(points: Vec3[], normal: Vec3, height: numb
     );
   }
 
+  return polygons;
+}
+
+function buildRampPolygons(
+  anchor: Vec3,
+  basis: BrushCreateBasis,
+  width: number,
+  depth: number,
+  height: number,
+  arcSegments: number,
+  materialId?: string
+) {
+  const clampedSegs = Math.max(0, arcSegments);
+  const baseThickness = Math.max(0.2, Math.abs(height) * 0.15);
+  const totalPoints = clampedSegs + 2;
+  const topProfile: Array<{ run: number; rise: number }> =
+    clampedSegs === 0 || Math.abs(depth) < 0.0001 || Math.abs(height) < 0.0001
+      ? [{ run: 0, rise: 0 }, { run: depth, rise: height }]
+      : Array.from({ length: totalPoints }, (_, index) => {
+          const t = index / (totalPoints - 1);
+          const angle = t * (Math.PI * 0.5);
+
+          return {
+            // Keep the bottom and top edges fixed and bend only the in-between samples.
+            run: depth * Math.sin(angle),
+            rise: height * (1 - Math.cos(angle))
+          };
+        });
+
+  const profile: Array<{ run: number; rise: number }> = [
+    { run: 0, rise: -baseThickness },
+    ...topProfile,
+    { run: depth, rise: -baseThickness }
+  ];
+  const acrossDirection = normalizeVec3(width >= 0 ? basis.u : scaleVec3(basis.u, -1));
+  const front = profile.map((p) => projectStairPoint(anchor, basis, p.run, p.rise, 0));
+  const back = profile.map((p) => projectStairPoint(anchor, basis, p.run, p.rise, width));
+  const polygons: EditableMeshPolygon[] = [
+    createOrientedPolygon("face:ramp:front", front, scaleVec3(acrossDirection, -1), materialId),
+    createOrientedPolygon("face:ramp:back", back, acrossDirection, materialId)
+  ];
+  for (let index = 0; index < profile.length - 1; index++) {
+    const currentFront = front[index];
+    const nextFront = front[index + 1];
+    const currentBack = back[index];
+    const nextBack = back[index + 1];
+    const edgeWorld = subVec3(nextFront, currentFront);
+    polygons.push(
+      createOrientedPolygon(
+        `face:ramp:side:${index}`,
+        [currentFront, nextFront, nextBack, currentBack],
+        normalizeVec3(crossVec3(acrossDirection, edgeWorld)),
+        materialId
+      )
+    );
+  }
   return polygons;
 }
 

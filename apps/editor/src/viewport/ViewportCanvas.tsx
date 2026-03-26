@@ -248,10 +248,34 @@ export function ViewportCanvas({
   } | null>(null);
   const lastMeshEditActionRef = useRef<LastMeshEditAction | null>(null);
   const previewBrushDataRef = useRef(onPreviewBrushData);
+  const transformDraggingRef = useRef(false);
+  const suppressSelectionAfterTransformRef = useRef(false);
   extrudeStateRef.current = extrudeState;
   pathPreviewPathsRef.current = pathPreviewPaths;
   sculptStateRef.current = sculptState;
   previewBrushDataRef.current = onPreviewBrushData;
+
+  const handleTransformDragStateChange = (dragging: boolean) => {
+    transformDraggingRef.current = dragging;
+    suppressSelectionAfterTransformRef.current = true;
+    selectionClickOriginRef.current = null;
+    marqueeOriginRef.current = null;
+    setTransformDragging(dragging);
+
+    if (!dragging && typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        suppressSelectionAfterTransformRef.current = false;
+      });
+    }
+  };
+
+  const handleSceneSelectNodes = (nodeIds: string[]) => {
+    if (transformDraggingRef.current || suppressSelectionAfterTransformRef.current) {
+      return;
+    }
+
+    onSelectNodes(nodeIds);
+  };
 
   useEffect(() => {
     return () => {
@@ -477,7 +501,7 @@ export function ViewportCanvas({
 
   useEffect(() => {
     const handleWheel = (event: WheelEvent) => {
-      if (!brushCreateState || brushCreateState.shape !== "stairs") {
+      if (!brushCreateState || (brushCreateState.shape !== "stairs" && brushCreateState.shape !== "ramp")) {
         return;
       }
 
@@ -2683,6 +2707,12 @@ export function ViewportCanvas({
       return;
     }
 
+    if (transformDraggingRef.current || suppressSelectionAfterTransformRef.current) {
+      selectionClickOriginRef.current = null;
+      marqueeOriginRef.current = null;
+      return;
+    }
+
     const bounds = event.currentTarget.getBoundingClientRect();
     const point = new Vector2(event.clientX - bounds.left, event.clientY - bounds.top);
     pointerPositionRef.current = point;
@@ -2969,7 +2999,7 @@ export function ViewportCanvas({
           interactive={activeToolId !== "brush" && activeToolId !== "mesh-edit" && activeToolId !== "path-add" && activeToolId !== "path-edit" && viewport.projection === "perspective" && editorInteractionEnabled}
           onFocusNode={onFocusNode}
           onMeshObjectChange={handleMeshObjectChange}
-          onSelectNode={onSelectNodes}
+          onSelectNode={handleSceneSelectNodes}
           pathDefinitions={pathDefinitions}
           physicsPlayback={physicsPlayback}
           physicsRevision={physicsRevision}
@@ -3096,6 +3126,7 @@ export function ViewportCanvas({
         {editorInteractionEnabled && isActiveViewport ? (
           <ObjectTransformGizmo
             activeToolId={activeToolId}
+            onDragStateChange={handleTransformDragStateChange}
             onPreviewEntityTransform={onPreviewEntityTransform}
             onPreviewNodeTransform={onPreviewNodeTransform}
             onUpdateEntityTransform={onUpdateEntityTransform}

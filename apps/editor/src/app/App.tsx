@@ -1028,7 +1028,7 @@ export function App() {
   };
 
   const handleCreateBrush = () => {
-    if (activeBrushShape === "custom-polygon" || activeBrushShape === "stairs") {
+    if (activeBrushShape === "custom-polygon" || activeBrushShape === "stairs" || activeBrushShape === "ramp") {
       setActiveToolId("brush");
       return;
     }
