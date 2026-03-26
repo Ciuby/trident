@@ -1549,33 +1549,10 @@ export function App() {
     });
   };
 
-  const electronAPI = (window as any).electronAPI;
-  const copilotFsContext = electronAPI?.isElectron ? {
-    projectPath: electronAPI.getCurrentProject ? null : null,
-    fs: {
-      readDirTree: (path: string) => electronAPI.readDirTree(path),
-      readFile: (path: string, encoding?: string) => electronAPI.readFile(path, encoding),
-      writeFile: (path: string, content: string) => electronAPI.writeFile(path, content),
-      mkdir: (path: string) => electronAPI.mkdir(path),
-      deleteFile: (path: string) => electronAPI.deleteFile(path),
-      rename: (oldPath: string, newPath: string) => electronAPI.rename(oldPath, newPath),
-    }
-  } : {};
-
-  // Resolve projectPath asynchronously on first use — store it eagerly
-  const [copilotProjectPath, setCopilotProjectPath] = useState<string | null>(null);
-  useEffect(() => {
-    if (electronAPI?.isElectron && electronAPI.getCurrentProject) {
-      electronAPI.getCurrentProject().then((p: string | null) => setCopilotProjectPath(p));
-    }
-  }, []);
-
   const copilot = useCopilot(editor, {
     requestScenePush: (options) => {
       void handlePushSceneToGame(options).catch(() => {});
-    },
-    projectPath: copilotProjectPath,
-    ...copilotFsContext,
+    }
   });
 
   const handleToggleCopilot = () => {

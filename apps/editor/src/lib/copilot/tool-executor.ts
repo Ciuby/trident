@@ -62,21 +62,12 @@ import type { CopilotToolCall, CopilotToolResult } from "./types";
 type Args = Record<string, unknown>;
 
 export type CopilotToolExecutionContext = {
-  projectPath?: string | null;
   requestScenePush?: (options: {
     forceSwitch?: boolean;
     gameId?: string;
     projectName?: string;
     projectSlug?: string;
   }) => void;
-  fs?: {
-    readDirTree: (path: string) => Promise<unknown>;
-    readFile: (path: string, encoding?: string) => Promise<string>;
-    writeFile: (path: string, content: string) => Promise<void>;
-    mkdir: (path: string) => Promise<void>;
-    deleteFile: (path: string) => Promise<void>;
-    rename: (oldPath: string, newPath: string) => Promise<void>;
-  };
 };
 
 function num(args: Args, key: string, fallback = 0): number {
@@ -1052,79 +1043,14 @@ async function executeToolInner(editor: EditorCore, name: string, args: Args, co
     }
 
     // ── Filesystem & Coding ───────────────────────────────────
-    case "list_project_files": {
-      if (!context.fs || !context.projectPath) return fail("Filesystem unavailable (not in Electron)");
-      const tree = await context.fs.readDirTree(context.projectPath);
-      return ok({ tree });
-    }
-
-    case "read_file": {
-      if (!context.fs || !context.projectPath) return fail("Filesystem unavailable");
-      const relPath = str(args, "filePath");
-      if (!relPath) return fail("filePath is required");
-      const sep = context.projectPath.includes("\\") ? "\\" : "/";
-      const fullPath = `${context.projectPath}${sep}${relPath.replace(/[\\/]/g, sep)}`;
-      const content = await context.fs.readFile(fullPath, "utf8");
-      return ok({ filePath: relPath, content });
-    }
-
-    case "write_file": {
-      if (!context.fs || !context.projectPath) return fail("Filesystem unavailable");
-      const relPath = str(args, "filePath");
-      const content = str(args, "content");
-      if (!relPath) return fail("filePath is required");
-      const sep = context.projectPath.includes("\\") ? "\\" : "/";
-      const fullPath = `${context.projectPath}${sep}${relPath.replace(/[\\/]/g, sep)}`;
-      await context.fs.writeFile(fullPath, content);
-      return ok({ filePath: relPath, written: true });
-    }
-
-    case "edit_file": {
-      if (!context.fs || !context.projectPath) return fail("Filesystem unavailable");
-      const relPath = str(args, "filePath");
-      const oldText = str(args, "oldText");
-      const newText = str(args, "newText");
-      if (!relPath) return fail("filePath is required");
-      if (!oldText) return fail("oldText is required");
-      const sep = context.projectPath.includes("\\") ? "\\" : "/";
-      const fullPath = `${context.projectPath}${sep}${relPath.replace(/[\\/]/g, sep)}`;
-      const current = await context.fs.readFile(fullPath, "utf8");
-      if (!current.includes(oldText)) return fail("oldText not found in file");
-      const updated = current.replace(oldText, newText);
-      await context.fs.writeFile(fullPath, updated);
-      return ok({ filePath: relPath, edited: true });
-    }
-
-    case "create_folder": {
-      if (!context.fs || !context.projectPath) return fail("Filesystem unavailable");
-      const relPath = str(args, "folderPath");
-      if (!relPath) return fail("folderPath is required");
-      const sep = context.projectPath.includes("\\") ? "\\" : "/";
-      const fullPath = `${context.projectPath}${sep}${relPath.replace(/[\\/]/g, sep)}`;
-      await context.fs.mkdir(fullPath);
-      return ok({ folderPath: relPath, created: true });
-    }
-
-    case "delete_file": {
-      if (!context.fs || !context.projectPath) return fail("Filesystem unavailable");
-      const relPath = str(args, "filePath");
-      if (!relPath) return fail("filePath is required");
-      const sep = context.projectPath.includes("\\") ? "\\" : "/";
-      const fullPath = `${context.projectPath}${sep}${relPath.replace(/[\\/]/g, sep)}`;
-      await context.fs.deleteFile(fullPath);
-      return ok({ filePath: relPath, deleted: true });
-    }
-
+    case "list_project_files":
+    case "read_file":
+    case "write_file":
+    case "edit_file":
+    case "create_folder":
+    case "delete_file":
     case "rename_file": {
-      if (!context.fs || !context.projectPath) return fail("Filesystem unavailable");
-      const oldRel = str(args, "oldPath");
-      const newRel = str(args, "newPath");
-      if (!oldRel || !newRel) return fail("oldPath and newPath are required");
-      const sep = context.projectPath.includes("\\") ? "\\" : "/";
-      const oldFull = `${context.projectPath}${sep}${oldRel.replace(/[\\/]/g, sep)}`;
-      const newFull = `${context.projectPath}${sep}${newRel.replace(/[\\/]/g, sep)}`;
-      await context.fs.rename(oldFull, newFull);
-      return ok({ oldPath: oldRel, newPath: newRel, renamed: true });
+      return await executeFileSystemTool(name, args);
     }
 
     default:
@@ -1156,4 +1082,88 @@ function executeMeshOp(
 
   editor.execute(createSetMeshDataCommand(editor.scene, nodeId, result, node.data));
   return ok({});
+}
+
+// ── Filesystem tool execution (self-contained via window.electronAPI) ────
+
+function getElectronFS(): { api: any; getProject: () => Promise<string | null> } | null {
+  const api = typeof window !== "undefined" ? (window as any).electronAPI : null;
+  if (!api?.isElectron) return null;
+  return { api, getProject: () => api.getCurrentProject() as Promise<string | null> };
+}
+
+function resolvePath(projectPath: string, relPath: string): string {
+  const sep = projectPath.includes("\\") ? "\\" : "/";
+  return `${projectPath}${sep}${relPath.replace(/[\\/]/g, sep)}`;
+}
+
+async function executeFileSystemTool(name: string, args: Args): Promise<string> {
+  const electron = getElectronFS();
+  if (!electron) return fail("Filesystem unavailable (not in Electron)");
+
+  const projectPath = await electron.getProject();
+  if (!projectPath) return fail("No project is currently open");
+
+  const { api } = electron;
+
+  switch (name) {
+    case "list_project_files": {
+      const tree = await api.readDirTree(projectPath);
+      return ok({ tree });
+    }
+
+    case "read_file": {
+      const relPath = str(args, "filePath");
+      if (!relPath) return fail("filePath is required");
+      const content = await api.readFile(resolvePath(projectPath, relPath), "utf8");
+      return ok({ filePath: relPath, content });
+    }
+
+    case "write_file": {
+      const relPath = str(args, "filePath");
+      const content = str(args, "content");
+      if (!relPath) return fail("filePath is required");
+      await api.writeFile(resolvePath(projectPath, relPath), content);
+      return ok({ filePath: relPath, written: true });
+    }
+
+    case "edit_file": {
+      const relPath = str(args, "filePath");
+      const oldText = str(args, "oldText");
+      const newText = str(args, "newText");
+      if (!relPath) return fail("filePath is required");
+      if (!oldText) return fail("oldText is required");
+      const fullPath = resolvePath(projectPath, relPath);
+      const current = await api.readFile(fullPath, "utf8");
+      if (!current.includes(oldText)) return fail("oldText not found in file");
+      const updated = current.replace(oldText, newText);
+      await api.writeFile(fullPath, updated);
+      return ok({ filePath: relPath, edited: true });
+    }
+
+    case "create_folder": {
+      const relPath = str(args, "folderPath");
+      if (!relPath) return fail("folderPath is required");
+      await api.mkdir(resolvePath(projectPath, relPath));
+      return ok({ folderPath: relPath, created: true });
+    }
+
+    case "delete_file": {
+      const relPath = str(args, "filePath");
+      if (!relPath) return fail("filePath is required");
+      await api.deleteFile(resolvePath(projectPath, relPath));
+      return ok({ filePath: relPath, deleted: true });
+    }
+
+    case "rename_file": {
+      const oldRel = str(args, "oldPath");
+      const newRel = str(args, "newPath");
+      if (!oldRel || !newRel) return fail("oldPath and newPath are required");
+      await api.rename(resolvePath(projectPath, oldRel), resolvePath(projectPath, newRel));
+      return ok({ oldPath: oldRel, newPath: newRel, renamed: true });
+    }
+
+    default:
+      return fail(`Unknown FS tool: ${name}`);
+  }
 }

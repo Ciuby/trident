@@ -61,7 +61,7 @@ function createWindow(): BrowserWindow {
 
   if (isDev) {
     win.loadURL(VITE_DEV_URL);
-    // win.webContents.openDevTools();
+    win.webContents.openDevTools();
   } else {
     win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
   }

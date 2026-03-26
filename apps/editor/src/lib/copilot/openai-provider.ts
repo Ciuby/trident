@@ -85,6 +85,12 @@ export function createOpenAiProvider(): CopilotProvider {
         requestBody.tool_choice = "auto";
       }
 
+      console.group("[AI-VIBE:OPENAI] API Request");
+      console.log("Endpoint:", endpoint);
+      console.log("Model:", config.model);
+      console.log("Payload:", JSON.stringify(requestBody, null, 2));
+      console.groupEnd();
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -97,10 +103,13 @@ export function createOpenAiProvider(): CopilotProvider {
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error("[AI-VIBE:OPENAI] API Error Response:", errorText);
         throw new Error(`OpenAI API Error (${response.status}): ${errorText}`);
       }
 
       const data = await response.json();
+      console.log("[AI-VIBE:OPENAI] API Response Body:", data);
+      
       const choice = data.choices?.[0];
       
       if (!choice) {

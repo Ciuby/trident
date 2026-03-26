@@ -220,7 +220,7 @@ async function startCodexSession(
   const bin = isWindows ? "codex.cmd" : "codex";
 
   const proc = spawn(bin, ["app-server"], {
-    stdio: ["pipe", "pipe", "inherit"],
+    stdio: ["pipe", "pipe", "pipe"],
     env: { ...process.env, PATH: envPath },
     shell: isWindows
   });
@@ -247,15 +247,36 @@ async function startCodexSession(
 
   // Set up stdio message handling
   readline.on("line", (line) => {
+    console.log(`\n<========== [FROM CODEX] ==========\n${line.slice(0, 500)}${line.length > 500 ? '...' : ''}\n=================================\n`);
     try {
       const msg = JSON.parse(line);
       handleCodexMessage(session, msg);
     } catch {
-      // Ignore non-JSON lines (e.g. log output)
+      // It's not a JSON-RPC message, could be a log or an error from Codex
+      console.log(`[codex app-server] ${line}`);
     }
   });
 
+  if (proc.stderr) {
+    proc.stderr.on("data", (data: Buffer | string) => {
+      console.error(`[codex app-server error] ${data.toString()}`);
+    });
+  }
+
   proc.on("exit", (code) => {
+    console.log(`[codex app-server] Process exited with code ${code}`);
+    
+    // Reject any pending JSON-RPC requests so startCodexSession doesn't hang forever
+    for (const pending of session.pendingRequests.values()) {
+      pending.reject(new Error(`Codex process exited with code ${code}`));
+    }
+    session.pendingRequests.clear();
+
+    for (const pending of session.pendingToolCalls.values()) {
+      pending.resolve(null);
+    }
+    session.pendingToolCalls.clear();
+
     if (ws.readyState === ws.OPEN) {
       sendToClient(ws, {
         type: "error",
@@ -284,7 +305,7 @@ async function startCodexSession(
     config.threadId ? "thread/resume" : "thread/start",
     {
       ...(config.threadId ? { threadId: config.threadId } : {}),
-      model: config.model,
+      ...(config.model ? { model: config.model } : {}),
       baseInstructions: config.systemPrompt,
       dynamicTools,
       serviceName: "trident-editor"
@@ -395,6 +416,41 @@ function handleCodexMessage(session: CodexSession, msg: { id?: number; method?: 
       break;
     }
 
+    case "codex/event/agent_message": {
+      const message = (params as { msg?: { message?: string } })?.msg?.message;
+      if (message) {
+        // If this CLI proxy sends the full message at once instead of streaming deltas
+        session.agentText = message;
+      }
+      break;
+    }
+
+    case "codex/event/task_complete": {
+      const lastMsg = (params as { msg?: { last_agent_message?: string } })?.msg?.last_agent_message;
+      if (lastMsg) {
+        session.agentText = lastMsg;
+      }
+      sendToClient(session.ws, {
+        type: "turn_complete",
+        text: session.agentText
+      });
+      cleanupSession(session);
+      break;
+    }
+
+    case "codex/event/error": {
+      const errorMsg = (params as { msg?: { message?: string } })?.msg?.message;
+      if (errorMsg) {
+        sendToClient(session.ws, {
+          type: "error",
+          message: `Codex Error: ${errorMsg}`,
+          fatal: true
+        });
+        cleanupSession(session);
+      }
+      break;
+    }
+
     case "turn/failed": {
       const turn = params?.turn as { error?: { message?: string } } | undefined;
       sendToClient(session.ws, {
@@ -410,16 +466,25 @@ function handleCodexMessage(session: CodexSession, msg: { id?: number; method?: 
 
 // ── Helpers ───────────────────────────────────────────────────
 
-function sendToCodex(session: CodexSession, msg: Record<string, unknown>) {
+function sendToCodex(session: CodexSession, msg: unknown) {
+  const line = JSON.stringify(msg);
+  console.log(`\n==========> [TO CODEX] ==========\n${line}\n=================================\n`);
   if (session.process.stdin?.writable) {
-    session.process.stdin.write(JSON.stringify(msg) + "\n");
+    session.process.stdin.write(line + "\n");
   }
 }
 
 function sendCodexRequest(session: CodexSession, method: string, params: Record<string, unknown>): Promise<unknown> {
   const id = ++session.requestId;
   return new Promise((resolve, reject) => {
-    session.pendingRequests.set(id, { resolve, reject });
+    console.log(`[BRIDGE] Starting request id=${id} method=${method}`);
+    session.pendingRequests.set(id, { resolve: (val) => {
+      console.log(`[BRIDGE] Resolved request id=${id} method=${method}`);
+      resolve(val);
+    }, reject: (err) => {
+      console.log(`[BRIDGE] Rejected request id=${id} method=${method} error=${err}`);
+      reject(err);
+    } });
     sendToCodex(session, { method, id, params });
 
     // Timeout after 30 seconds
