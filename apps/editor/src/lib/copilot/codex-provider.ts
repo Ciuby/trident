@@ -118,37 +118,39 @@ export function createCodexProvider(): SessionBasedCopilotProvider {
               });
               config.onUpdate({ ...session, messages: [...messages] });
 
-              // Execute the tool browser-side
-              const t0 = performance.now();
-              const result = config.executeTool(toolCall);
-              const elapsed = Math.round(performance.now() - t0);
+              // Execute the tool browser-side (async for FS tools)
+              (async () => {
+                const t0 = performance.now();
+                const result = await config.executeTool(toolCall);
+                const elapsed = Math.round(performance.now() - t0);
 
-              const parsed = JSON.parse(result.result);
-              if (parsed.success === false) {
-                console.warn(`  ${TAG} ✗ ${msg.name} FAILED (${elapsed}ms):`, parsed.error);
-              } else {
-                console.log(`  ${TAG} ✓ ${msg.name} (${elapsed}ms):`, result.result);
-              }
+                const parsed = JSON.parse(result.result);
+                if (parsed.success === false) {
+                  console.warn(`  ${TAG} ✗ ${msg.name} FAILED (${elapsed}ms):`, parsed.error);
+                } else {
+                  console.log(`  ${TAG} ✓ ${msg.name} (${elapsed}ms):`, result.result);
+                }
 
-              // Push tool result message
-              messages.push({
-                id: uid(),
-                role: "tool",
-                content: "",
-                toolResults: [result],
-                timestamp: Date.now()
-              });
+                // Push tool result message
+                messages.push({
+                  id: uid(),
+                  role: "tool",
+                  content: "",
+                  toolResults: [result],
+                  timestamp: Date.now()
+                });
 
-              // Send result back to server
-              ws.send(JSON.stringify({
-                type: "tool_result",
-                id: msg.id,
-                result: result.result,
-                success: parsed.success !== false
-              }));
+                // Send result back to server
+                ws.send(JSON.stringify({
+                  type: "tool_result",
+                  id: msg.id,
+                  result: result.result,
+                  success: parsed.success !== false
+                }));
 
-              session.status = "thinking";
-              config.onUpdate({ ...session, messages: [...messages] });
+                session.status = "thinking";
+                config.onUpdate({ ...session, messages: [...messages] });
+              })();
               break;
             }
 

@@ -14,7 +14,7 @@ export type AgenticLoopConfig = {
   providerConfig: CopilotProviderConfig;
   systemPrompt: string;
   tools: CopilotToolDeclaration[];
-  executeTool: (call: CopilotToolCall) => CopilotToolResult;
+  executeTool: (call: CopilotToolCall) => CopilotToolResult | Promise<CopilotToolResult>;
   onUpdate: (session: CopilotSession) => void;
 };
 
@@ -149,7 +149,7 @@ export async function runAgenticLoop(
       }
 
       const t0 = performance.now();
-      const result = config.executeTool(toolCall);
+      const result = await config.executeTool(toolCall);
       const elapsed = Math.round(performance.now() - t0);
 
       const parsed = JSON.parse(result.result);

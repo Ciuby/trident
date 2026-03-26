@@ -834,5 +834,82 @@ export const COPILOT_TOOL_DECLARATIONS: CopilotToolDeclaration[] = [
       },
       required: ["nodeId", "axis", "coordinate"]
     }
+  },
+
+  // ── Filesystem & Coding ────────────────────────────────────
+  {
+    name: "list_project_files",
+    description: "Lists the directory tree of the current project. Returns a recursive listing of files and folders.",
+    parameters: { type: "object", properties: {} }
+  },
+  {
+    name: "read_file",
+    description: "Reads the contents of a project file as UTF-8 text. Use a path relative to the project root.",
+    parameters: {
+      type: "object",
+      properties: {
+        filePath: { type: "string", description: "Relative path within the project (e.g. 'src/main.tsx')" }
+      },
+      required: ["filePath"]
+    }
+  },
+  {
+    name: "write_file",
+    description: "Creates or overwrites a file with the provided content. Parent directories are created automatically.",
+    parameters: {
+      type: "object",
+      properties: {
+        filePath: { type: "string", description: "Relative path within the project" },
+        content: { type: "string", description: "Full file content to write" }
+      },
+      required: ["filePath", "content"]
+    }
+  },
+  {
+    name: "edit_file",
+    description: "Applies a targeted search-and-replace to a file. Finds the first occurrence of 'oldText' and replaces it with 'newText'. Use read_file first to inspect the current content.",
+    parameters: {
+      type: "object",
+      properties: {
+        filePath: { type: "string", description: "Relative path within the project" },
+        oldText: { type: "string", description: "Exact text to find (must match verbatim)" },
+        newText: { type: "string", description: "Replacement text" }
+      },
+      required: ["filePath", "oldText", "newText"]
+    }
+  },
+  {
+    name: "create_folder",
+    description: "Creates a new directory (and any necessary parent directories).",
+    parameters: {
+      type: "object",
+      properties: {
+        folderPath: { type: "string", description: "Relative path within the project" }
+      },
+      required: ["folderPath"]
+    }
+  },
+  {
+    name: "delete_file",
+    description: "Deletes a file or directory from the project.",
+    parameters: {
+      type: "object",
+      properties: {
+        filePath: { type: "string", description: "Relative path within the project" }
+      },
+      required: ["filePath"]
+    }
+  },
+  {
+    name: "rename_file",
+    description: "Renames or moves a file or directory within the project.",
+    parameters: {
+      type: "object",
+      properties: {
+        oldPath: { type: "string", description: "Current relative path" },
+        newPath: { type: "string", description: "New relative path" }
+      },
+      required: ["oldPath", "newPath"]
+    }
   }
 ];
